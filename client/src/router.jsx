@@ -4,9 +4,10 @@ import RootLayout from './layouts/RootLayout.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 
 // Route-level code splitting: each page is its own lazily-loaded chunk.
+const LandingPage = lazy(() => import('./pages/LandingPage.jsx'));
 const Login = lazy(() => import('./pages/Login.jsx'));
 const Register = lazy(() => import('./pages/Register.jsx'));
-const Home = lazy(() => import('./pages/Home.jsx'));
+const Dashboard = lazy(() => import('./pages/Dashboard.jsx'));
 const SubmitCode = lazy(() => import('./pages/SubmitCode.jsx'));
 const DoubtBoard = lazy(() => import('./pages/DoubtBoard.jsx'));
 const AskDoubt = lazy(() => import('./pages/AskDoubt.jsx'));
@@ -19,13 +20,16 @@ const Profile = lazy(() => import('./pages/Profile.jsx'));
 // Route table lives here, separate from the shell (RootLayout) and the
 // per-route auth gate (ProtectedRoute), so adding a page is a one-line diff.
 const routes = [
+  // Public marketing landing page. Redirects to /dashboard itself once the
+  // visitor turns out to already be authenticated (see LandingPage.jsx).
+  { path: '/', element: <LandingPage /> },
   { path: '/login', element: <Login /> },
   { path: '/register', element: <Register /> },
   {
-    path: '/',
+    path: '/dashboard',
     element: (
       <ProtectedRoute>
-        <Home />
+        <Dashboard />
       </ProtectedRoute>
     ),
   },

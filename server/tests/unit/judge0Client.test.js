@@ -38,13 +38,32 @@ describe('assertRunnable (input validation before execution)', () => {
 });
 
 describe('runOnce', () => {
-  it('returns normalized output on an accepted run', async () => {
+  it('returns normalized (base64-decoded) output on an accepted run', async () => {
     post.mockResolvedValue({
-      data: { stdout: '42\n', stderr: null, status: { id: 3, description: 'Accepted' } },
+      data: {
+        stdout: Buffer.from('42\n', 'utf8').toString('base64'),
+        stderr: null,
+        status: { id: 3, description: 'Accepted' },
+      },
     });
     const res = await runOnce({ language: 'python', code: 'print(42)', stdin: '' });
     expect(res.stdout).toBe('42\n');
     expect(res.statusId).toBe(3);
+  });
+
+  it('base64-encodes source_code/stdin and requests base64_encoded=true, so unicode in student code never trips Judge0\'s UTF-8-in-JSON 400', async () => {
+    post.mockResolvedValue({
+      data: { stdout: '', stderr: null, status: { id: 3, description: 'Accepted' } },
+    });
+    await runOnce({ language: 'python', code: 'print("héllo 你好")', stdin: 'ünïcödé' });
+
+    expect(post).toHaveBeenCalledWith(
+      expect.stringContaining('base64_encoded=true'),
+      expect.objectContaining({
+        source_code: Buffer.from('print("héllo 你好")', 'utf8').toString('base64'),
+        stdin: Buffer.from('ünïcödé', 'utf8').toString('base64'),
+      })
+    );
   });
 
   it('maps a request timeout to a 504 Judge0Error', async () => {

@@ -6,6 +6,7 @@ import { useCachedQuery, invalidate } from '../api/useCachedQuery.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import TopicFilter from '../components/TopicFilter.jsx';
+import LoadingSpinner from '../components/LoadingSpinner.jsx';
 
 export default function ProblemList() {
   const { user } = useAuth();
@@ -63,7 +64,7 @@ export default function ProblemList() {
         counts={stats?.byTopic}
       />
 
-      {loading && <p className="text-slate-400 dark:text-slate-500">Loading…</p>}
+      {loading && <LoadingSpinner />}
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       {!loading && problems.length === 0 && (
         <p className="text-sm text-slate-400 dark:text-slate-500">

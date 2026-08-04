@@ -3,10 +3,11 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AnimatePresence, motion } from 'framer-motion';
 import NavBar from '../components/NavBar.jsx';
+import LoadingSpinner from '../components/LoadingSpinner.jsx';
 import { useTheme } from '../theme/ThemeContext.jsx';
 
 function Fallback() {
-  return <div className="p-10 text-center text-slate-400 dark:text-slate-500">Loading…</div>;
+  return <LoadingSpinner full />;
 }
 
 export default function RootLayout() {

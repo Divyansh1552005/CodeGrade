@@ -4,6 +4,7 @@ import { api } from '../api/client.js';
 import { useCachedQuery, invalidate } from '../api/useCachedQuery.js';
 import Markdown from '../components/Markdown.jsx';
 import MarkdownEditor from '../components/MarkdownEditor.jsx';
+import LoadingSpinner from '../components/LoadingSpinner.jsx';
 
 export default function TeacherReview() {
   const pending = useCachedQuery('/answers?state=pending', { key: 'answers:pending' });
@@ -27,7 +28,7 @@ export default function TeacherReview() {
   return (
     <div>
       <h1 className="mb-4 text-xl font-semibold">Review Queue</h1>
-      {loading && <p className="text-slate-400 dark:text-slate-500">Loading…</p>}
+      {loading && <LoadingSpinner />}
 
       {/* AI drafts awaiting approval */}
       <section className="mb-8">

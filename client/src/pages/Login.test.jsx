@@ -49,6 +49,6 @@ describe('Login page', () => {
     fireEvent.click(screen.getByRole('button', { name: /log in/i }));
 
     await waitFor(() => expect(login).toHaveBeenCalledWith('a@b.com', 'password123'));
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/'));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/dashboard'));
   });
 });

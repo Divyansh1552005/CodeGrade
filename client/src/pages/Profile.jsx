@@ -3,6 +3,7 @@ import { useAuth } from '../auth/AuthContext.jsx';
 import { useCachedQuery } from '../api/useCachedQuery.js';
 import { LANGUAGE_LABELS } from '../data/starterTemplates.js';
 import { TOPICS } from '../data/topics.js';
+import LoadingSpinner from '../components/LoadingSpinner.jsx';
 
 const statusFor = (doubt) => {
   if (doubt.hasApprovedAnswer)
@@ -99,7 +100,7 @@ export default function Profile() {
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
             My Submissions
           </h2>
-          {subLoading && <p className="text-slate-400 dark:text-slate-500">Loading…</p>}
+          {subLoading && <LoadingSpinner />}
           {!subLoading && submissions.length === 0 && (
             <p className="text-sm text-slate-400 dark:text-slate-500">
               No submissions yet.{' '}
@@ -146,7 +147,7 @@ export default function Profile() {
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
             My Doubts
           </h2>
-          {doubtLoading && <p className="text-slate-400 dark:text-slate-500">Loading…</p>}
+          {doubtLoading && <LoadingSpinner />}
           {!doubtLoading && doubts.length === 0 && (
             <p className="text-sm text-slate-400 dark:text-slate-500">
               No doubts posted yet.{' '}

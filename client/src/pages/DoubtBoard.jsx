@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { Link } from 'react-router-dom';
 import { useCachedQuery } from '../api/useCachedQuery.js';
 import { useAuth } from '../auth/AuthContext.jsx';
+import LoadingSpinner from '../components/LoadingSpinner.jsx';
 
 // Plain-text excerpt of a markdown body, truncated for the list view.
 function excerpt(body, max = 100) {
@@ -43,7 +44,7 @@ export default function DoubtBoard() {
         )}
       </div>
 
-      {loading && <p className="text-slate-400 dark:text-slate-500">Loading…</p>}
+      {loading && <LoadingSpinner />}
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       {!loading && doubts.length === 0 && (
         <p className="text-sm text-slate-400 dark:text-slate-500">No doubts yet.</p>

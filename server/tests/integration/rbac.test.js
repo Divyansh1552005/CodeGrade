@@ -28,6 +28,9 @@ const Problem = (await import('../../models/Problem.js')).default;
 
 const app = createApp();
 
+// judge0Client sends/receives base64 now (see services/judge0Client.js).
+const b64 = (s) => Buffer.from(s, 'utf8').toString('base64');
+
 async function register(role) {
   const res = await request(app).post('/auth/register').send({
     name: role,
@@ -85,7 +88,7 @@ describe('RBAC: POST /submissions is student-only', () => {
       title: 'Echo',
       testCases: [{ input: '2', expectedOutput: '4' }],
     });
-    post.mockResolvedValueOnce({ data: { stdout: '4\n', status: { id: 3 } } });
+    post.mockResolvedValueOnce({ data: { stdout: b64('4\n'), status: { id: 3 } } });
 
     const res = await request(app)
       .post('/submissions')

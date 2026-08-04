@@ -5,6 +5,8 @@ import { useCachedQuery, invalidate } from '../api/useCachedQuery.js';
 import Markdown from '../components/Markdown.jsx';
 import CodeEditor from '../components/CodeEditor.jsx';
 import ProblemStatement from '../components/ProblemStatement.jsx';
+import LoadingSpinner from '../components/LoadingSpinner.jsx';
+import { Spinner } from '../components/FormMotion.jsx';
 import { LANGUAGE_LABELS } from '../data/starterTemplates.js';
 
 // Student-selectable languages, in the order shown in the dropdown.
@@ -114,7 +116,7 @@ export default function SubmitCode() {
       <h1 className="mb-4 text-xl font-semibold">
         {locked && selected ? selected.title : 'Submit Code'}
       </h1>
-      {loading && <p className="text-slate-400 dark:text-slate-500">Loading problems…</p>}
+      {loading && <LoadingSpinner label="Loading problems…" />}
       {(error || loadError) && (
         <p className="mb-3 text-sm text-red-600 dark:text-red-400">{error || loadError}</p>
       )}
@@ -171,7 +173,8 @@ export default function SubmitCode() {
           <CodeEditor language={language} value={code} onChange={setCode} height="400px" />
         </div>
 
-        <button className="btn" disabled={busy || !problemId}>
+        <button className="btn flex items-center gap-2" disabled={busy || !problemId}>
+          {busy && <Spinner />}
           {busy ? 'Running…' : 'Run & Grade'}
         </button>
       </form>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import Markdown from '../components/Markdown.jsx';
+import LoadingSpinner from '../components/LoadingSpinner.jsx';
 
 export default function DoubtDetail() {
   const { id } = useParams();
@@ -33,7 +34,7 @@ export default function DoubtDetail() {
     };
   }, [id]);
 
-  if (loading) return <p className="text-slate-400 dark:text-slate-500">Loading…</p>;
+  if (loading) return <LoadingSpinner full />;
   if (error) return <p className="text-sm text-red-600 dark:text-red-400">{error}</p>;
   if (!doubt) return null;
 

@@ -26,6 +26,10 @@ const Problem = (await import('../../models/Problem.js')).default;
 
 const app = createApp();
 
+// judge0Client sends/receives base64 now, so mocked Judge0 responses must be
+// base64-encoded too (see services/judge0Client.js).
+const b64 = (s) => Buffer.from(s, 'utf8').toString('base64');
+
 async function registerStudent() {
   const res = await request(app).post('/auth/register').send({
     name: 'Stu',
@@ -54,8 +58,8 @@ describe('POST /submissions', () => {
 
     // Judge0 returns the expected output for each case -> both pass.
     post
-      .mockResolvedValueOnce({ data: { stdout: '4\n', status: { id: 3 } } })
-      .mockResolvedValueOnce({ data: { stdout: '6\n', status: { id: 3 } } });
+      .mockResolvedValueOnce({ data: { stdout: b64('4\n'), status: { id: 3 } } })
+      .mockResolvedValueOnce({ data: { stdout: b64('6\n'), status: { id: 3 } } });
 
     // Language is chosen by the student at submit time.
     const res = await request(app)
@@ -77,7 +81,7 @@ describe('POST /submissions', () => {
       title: 'Echo2',
       testCases: [{ input: '2', expectedOutput: '4' }],
     });
-    post.mockResolvedValueOnce({ data: { stdout: '4\n', status: { id: 3 } } });
+    post.mockResolvedValueOnce({ data: { stdout: b64('4\n'), status: { id: 3 } } });
 
     await request(app)
       .post('/submissions')
@@ -108,8 +112,8 @@ describe('POST /submissions', () => {
     });
     // First case passes, second fails.
     post
-      .mockResolvedValueOnce({ data: { stdout: '4\n', status: { id: 3 } } })
-      .mockResolvedValueOnce({ data: { stdout: '99\n', status: { id: 3 } } });
+      .mockResolvedValueOnce({ data: { stdout: b64('4\n'), status: { id: 3 } } })
+      .mockResolvedValueOnce({ data: { stdout: b64('99\n'), status: { id: 3 } } });
 
     await request(app)
       .post('/submissions')

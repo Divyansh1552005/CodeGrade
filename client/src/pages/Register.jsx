@@ -20,7 +20,7 @@ export default function Register() {
     setBusy(true);
     try {
       await register(form);
-      navigate('/');
+      navigate('/dashboard');
     } catch (err) {
       setError(err.response?.data?.error || 'Registration failed');
     } finally {

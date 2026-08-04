@@ -30,17 +30,21 @@ function NavBar() {
   }, [logout, navigate]);
 
   return (
-    <nav className="sticky top-0 z-10 border-b border-slate-200 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 dark:border-slate-800 dark:bg-slate-950/80 dark:supports-[backdrop-filter]:bg-slate-950/60">
+    <nav className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/75 dark:border-slate-800 dark:bg-slate-950/90 dark:supports-[backdrop-filter]:bg-slate-950/75">
       <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-4 py-3">
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
           <Link
-            to="/"
-            className="mr-2 text-base font-bold tracking-tight text-slate-900 dark:text-white"
+            to={isAuthed ? '/dashboard' : '/'}
+            className="mr-2 flex items-center gap-2 text-base font-bold tracking-tight text-slate-900 dark:text-white"
           >
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900">
+              <BracketIcon />
+            </span>
             CodeGrade
           </Link>
           {isAuthed && (
             <>
+              <span className="mx-1 hidden h-5 w-px bg-slate-200 sm:block dark:bg-slate-800" />
               <NavLink className={navLinkClass} to="/problems">
                 Problems
               </NavLink>
@@ -64,9 +68,14 @@ function NavBar() {
             <>
               <Link
                 to="/profile"
-                className="pill hidden transition hover:bg-slate-200 sm:inline-flex dark:hover:bg-slate-700"
+                className="hidden items-center gap-2 rounded-full py-0.5 pl-0.5 pr-3 transition hover:bg-slate-100 sm:flex dark:hover:bg-slate-800"
               >
-                {user.name} · {user.role}
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white dark:bg-slate-100 dark:text-slate-900">
+                  {user.name?.[0]?.toUpperCase() || '?'}
+                </span>
+                <span className="text-slate-600 dark:text-slate-300">
+                  {user.name} <span className="text-slate-400 dark:text-slate-500">· {user.role}</span>
+                </span>
               </Link>
               <motion.button
                 whileTap={{ scale: 0.95 }}
@@ -94,6 +103,23 @@ function NavBar() {
         </div>
       </div>
     </nav>
+  );
+}
+
+function BracketIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-4 w-4"
+    >
+      <path d="M9 18 3 12l6-6M15 6l6 6-6 6" />
+    </svg>
   );
 }
 

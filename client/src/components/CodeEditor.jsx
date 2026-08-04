@@ -1,5 +1,6 @@
 import Editor from '@monaco-editor/react';
 import { useTheme } from '../theme/ThemeContext.jsx';
+import LoadingSpinner from './LoadingSpinner.jsx';
 
 // Map our language keys to Monaco language ids.
 const MONACO_LANG = {
@@ -34,9 +35,7 @@ export default function CodeEditor({
         theme={theme === 'dark' ? 'vs-dark' : 'light'}
         value={value}
         onChange={(v) => onChange(v ?? '')}
-        loading={
-          <div className="p-4 text-sm text-slate-400 dark:text-slate-500">Loading editor…</div>
-        }
+        loading={<LoadingSpinner label="Loading editor…" />}
         options={{
           automaticLayout: true, // responsive: relayout on container resize
           minimap: { enabled: false },

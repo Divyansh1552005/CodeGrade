@@ -14,7 +14,7 @@ const item = {
   show: { opacity: 1, y: 0, transition: { duration: 0.3 } },
 };
 
-export default function Home() {
+export default function Dashboard() {
   const { user } = useAuth();
   return (
     <div>

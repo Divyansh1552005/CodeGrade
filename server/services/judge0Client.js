@@ -63,6 +63,13 @@ export function assertRunnable(language, code) {
  * Run a single piece of code against one stdin input. Uses the synchronous
  * `wait=true` endpoint but still guards with our own request timeout.
  *
+ * Source/stdin travel base64-encoded (`base64_encoded=true`) rather than as
+ * raw JSON strings: Judge0's non-base64 mode 400s on ANY non-ASCII byte
+ * anywhere in the submission (accented letters, CJK, smart quotes pasted
+ * from a doc, emoji, ...) — exactly the kind of thing untrusted student code
+ * can contain. Base64 sidesteps that entirely, at the cost of decoding the
+ * response fields ourselves (see normalize()).
+ *
  * @returns {{ stdout: string, stderr: string, statusId: number, statusDescription: string }}
  */
 export async function runOnce({ language, code, stdin = '' }) {
@@ -72,11 +79,11 @@ export async function runOnce({ language, code, stdin = '' }) {
   let res;
   try {
     res = await http.post(
-      '/submissions?base64_encoded=false&wait=true',
+      '/submissions?base64_encoded=true&wait=true',
       {
         language_id: languageId(language),
-        source_code: code,
-        stdin,
+        source_code: toBase64(code),
+        stdin: toBase64(stdin),
       }
     );
   } catch (err) {
@@ -84,8 +91,9 @@ export async function runOnce({ language, code, stdin = '' }) {
       throw new Judge0Error('Judge0 request timed out', 504);
     }
     const status = err.response?.status;
+    const detail = err.response?.data?.error;
     throw new Judge0Error(
-      `Judge0 request failed${status ? ` (HTTP ${status})` : ''}`,
+      `Judge0 request failed${status ? ` (HTTP ${status})` : ''}${detail ? `: ${detail}` : ''}`,
       502
     );
   }
@@ -106,7 +114,7 @@ async function pollToken(http, token, attempts = 10, intervalMs = 800) {
     let res;
     try {
       res = await http.get(
-        `/submissions/${token}?base64_encoded=false`
+        `/submissions/${token}?base64_encoded=true`
       );
     } catch (err) {
       if (err.code === 'ECONNABORTED') {
@@ -125,12 +133,21 @@ async function pollToken(http, token, attempts = 10, intervalMs = 800) {
 
 function normalize(data) {
   return {
-    stdout: data.stdout ?? '',
-    stderr: data.stderr ?? '',
-    compileOutput: data.compile_output ?? '',
+    stdout: fromBase64(data.stdout),
+    stderr: fromBase64(data.stderr),
+    compileOutput: fromBase64(data.compile_output),
     statusId: data.status?.id,
     statusDescription: data.status?.description ?? 'Unknown',
   };
+}
+
+function toBase64(str) {
+  return Buffer.from(str ?? '', 'utf8').toString('base64');
+}
+
+function fromBase64(str) {
+  if (!str) return '';
+  return Buffer.from(str, 'base64').toString('utf8');
 }
 
 function sleep(ms) {
