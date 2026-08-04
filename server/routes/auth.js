@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import User from '../models/User.js';
 import { requireAuth } from '../middleware/auth.js';
+import { validate } from '../middleware/validate.js';
 import { httpError } from '../middleware/errorHandler.js';
 import {
   issueTokenPair,
@@ -8,24 +9,16 @@ import {
   revokeRefreshToken,
 } from '../services/tokenService.js';
 import { setRefreshCookie, clearRefreshCookie, REFRESH_COOKIE } from '../utils/cookies.js';
+import { registerSchema, loginSchema } from '../validation/schemas.js';
 
 const router = Router();
 
 const findUserById = (id) => User.findById(id);
 
 // POST /auth/register  { name, email, password, role }
-router.post('/register', async (req, res, next) => {
+router.post('/register', validate(registerSchema), async (req, res, next) => {
   try {
-    const { name, email, password, role } = req.body || {};
-    if (!name || !email || !password || !role) {
-      throw httpError(400, 'name, email, password and role are required');
-    }
-    if (!['student', 'teacher'].includes(role)) {
-      throw httpError(400, 'role must be "student" or "teacher"');
-    }
-    if (String(password).length < 6) {
-      throw httpError(400, 'password must be at least 6 characters');
-    }
+    const { name, email, password, role } = req.body;
 
     const passwordHash = await User.hashPassword(password);
     const user = await User.create({ name, email, passwordHash, role });
@@ -38,12 +31,9 @@ router.post('/register', async (req, res, next) => {
 });
 
 // POST /auth/login  { email, password }
-router.post('/login', async (req, res, next) => {
+router.post('/login', validate(loginSchema), async (req, res, next) => {
   try {
-    const { email, password } = req.body || {};
-    if (!email || !password) {
-      throw httpError(400, 'email and password are required');
-    }
+    const { email, password } = req.body;
     const user = await User.findOne({ email: String(email).toLowerCase() });
     if (!user || !(await user.comparePassword(password))) {
       throw httpError(401, 'Invalid credentials');

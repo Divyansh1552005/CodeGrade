@@ -22,6 +22,7 @@ const validBody = () => ({
   inputFormat: 'A single integer n.',
   outputFormat: 'A single integer 2n.',
   constraints: '-10^9 <= n <= 10^9',
+  topics: ['Math'],
   sampleCases: [{ input: '2', output: '4', explanation: '2 doubled is 4.' }],
   starterCode: { python: 'n = int(input())', java: '' },
   testCases: [
@@ -165,7 +166,99 @@ describe('POST /problems', () => {
       .set('Authorization', `Bearer ${teacher.token}`)
       .send(body);
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/title and description/i);
+    expect(res.body.error).toMatch(/description is required/i);
+  });
+
+  it('persists topics', async () => {
+    const res = await request(app)
+      .post('/problems')
+      .set('Authorization', `Bearer ${teacher.token}`)
+      .send({ ...validBody(), topics: ['Trees', 'Graphs'] });
+    expect(res.status).toBe(201);
+    expect(res.body.problem.topics).toEqual(['Trees', 'Graphs']);
+  });
+
+  it('rejects a missing topics array (400)', async () => {
+    const body = validBody();
+    delete body.topics;
+    const res = await request(app)
+      .post('/problems')
+      .set('Authorization', `Bearer ${teacher.token}`)
+      .send(body);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/topics/i);
+  });
+
+  it('rejects an unknown topic (400)', async () => {
+    const res = await request(app)
+      .post('/problems')
+      .set('Authorization', `Bearer ${teacher.token}`)
+      .send({ ...validBody(), topics: ['Not A Real Topic'] });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('GET /problems?topics=', () => {
+  it('filters by topic (OR match across multiple)', async () => {
+    await request(app)
+      .post('/problems')
+      .set('Authorization', `Bearer ${teacher.token}`)
+      .send({ ...validBody(), title: 'Tree Q', topics: ['Trees'] });
+    await request(app)
+      .post('/problems')
+      .set('Authorization', `Bearer ${teacher.token}`)
+      .send({ ...validBody(), title: 'Graph Q', topics: ['Graphs'] });
+    await request(app)
+      .post('/problems')
+      .set('Authorization', `Bearer ${teacher.token}`)
+      .send({ ...validBody(), title: 'Math Q', topics: ['Math'] });
+
+    const res = await request(app)
+      .get('/problems?topics=Trees,Graphs')
+      .set('Authorization', `Bearer ${student.token}`);
+    expect(res.status).toBe(200);
+    const titles = res.body.problems.map((p) => p.title).sort();
+    expect(titles).toEqual(['Graph Q', 'Tree Q']);
+  });
+
+  it("assigns each problem a stable number, unaffected by the filter", async () => {
+    const first = await request(app)
+      .post('/problems')
+      .set('Authorization', `Bearer ${teacher.token}`)
+      .send({ ...validBody(), title: 'First Q', topics: ['Trees'] });
+    await request(app)
+      .post('/problems')
+      .set('Authorization', `Bearer ${teacher.token}`)
+      .send({ ...validBody(), title: 'Second Q', topics: ['Math'] });
+
+    const unfiltered = await request(app)
+      .get('/problems')
+      .set('Authorization', `Bearer ${student.token}`);
+    const firstNumber = unfiltered.body.problems.find((p) => p._id === first.body.problem._id)
+      .number;
+
+    const filtered = await request(app)
+      .get('/problems?topics=Trees')
+      .set('Authorization', `Bearer ${student.token}`);
+    const firstInFiltered = filtered.body.problems.find((p) => p._id === first.body.problem._id);
+    expect(firstInFiltered.number).toBe(firstNumber);
+  });
+});
+
+describe('GET /problems/stats/counts', () => {
+  it('returns a global total and a per-topic breakdown', async () => {
+    await request(app)
+      .post('/problems')
+      .set('Authorization', `Bearer ${teacher.token}`)
+      .send({ ...validBody(), title: 'Tree Q', topics: ['Trees'] });
+
+    const res = await request(app)
+      .get('/problems/stats/counts')
+      .set('Authorization', `Bearer ${student.token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBeGreaterThanOrEqual(1);
+    expect(res.body.byTopic.Trees).toBeGreaterThanOrEqual(1);
+    expect(res.body.byTopic).toHaveProperty('SQL', expect.any(Number));
   });
 });
 

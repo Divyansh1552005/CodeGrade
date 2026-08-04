@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { useAuth } from '../auth/AuthContext.jsx';
+import AuthCard from '../components/AuthCard.jsx';
+import { formContainer, formItem, ErrorBanner, Spinner } from '../components/FormMotion.jsx';
 
 export default function Register() {
   const { register } = useAuth();
@@ -26,18 +29,23 @@ export default function Register() {
   }
 
   return (
-    <div className="card mx-auto max-w-sm">
-      <h1 className="mb-4 text-xl font-semibold">Create account</h1>
-      <form onSubmit={onSubmit}>
-        <label className="field">
+    <AuthCard title="Create account" subtitle="Join to start solving or teaching">
+      <motion.form variants={formContainer} initial="hidden" animate="show" onSubmit={onSubmit}>
+        <motion.label variants={formItem} className="field">
           Name
           <input className="input" value={form.name} onChange={set('name')} required />
-        </label>
-        <label className="field">
+        </motion.label>
+        <motion.label variants={formItem} className="field">
           Email
-          <input className="input" value={form.email} onChange={set('email')} type="email" required />
-        </label>
-        <label className="field">
+          <input
+            className="input"
+            value={form.email}
+            onChange={set('email')}
+            type="email"
+            required
+          />
+        </motion.label>
+        <motion.label variants={formItem} className="field">
           Password
           <input
             className="input"
@@ -47,25 +55,41 @@ export default function Register() {
             minLength={6}
             required
           />
-        </label>
-        <label className="field">
+        </motion.label>
+        <motion.label variants={formItem} className="field">
           Role
           <select className="input" value={form.role} onChange={set('role')}>
             <option value="student">Student</option>
             <option value="teacher">Teacher</option>
           </select>
-        </label>
-        {error && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
-        <button className="btn w-full" disabled={busy}>
-          {busy ? 'Creating…' : 'Register'}
-        </button>
-      </form>
-      <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
+        </motion.label>
+
+        <ErrorBanner>{error}</ErrorBanner>
+
+        <motion.div variants={formItem}>
+          <motion.button
+            whileTap={{ scale: 0.98 }}
+            className="btn flex w-full items-center justify-center gap-2"
+            disabled={busy}
+          >
+            {busy && <Spinner />}
+            {busy ? 'Creating…' : 'Register'}
+          </motion.button>
+        </motion.div>
+      </motion.form>
+
+      <motion.p
+        variants={formItem}
+        initial="hidden"
+        animate="show"
+        transition={{ delay: 0.4 }}
+        className="mt-4 text-center text-sm text-slate-500 dark:text-slate-400"
+      >
         Have an account?{' '}
         <Link className="font-medium text-slate-900 dark:text-slate-100" to="/login">
           Log in
         </Link>
-      </p>
-    </div>
+      </motion.p>
+    </AuthCard>
   );
 }

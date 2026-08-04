@@ -13,6 +13,16 @@ export default function ProblemStatement({ problem }) {
 
   return (
     <div className="mb-5 space-y-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4 dark:border-slate-800 dark:bg-slate-900/40">
+      {problem.topics?.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {problem.topics.map((topic) => (
+            <span key={topic} className="pill">
+              {topic}
+            </span>
+          ))}
+        </div>
+      )}
+
       {problem.description && (
         <Section title="Problem">
           <Markdown>{problem.description}</Markdown>

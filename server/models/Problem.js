@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { TOPICS } from '../constants/topics.js';
 
 const testCaseSchema = new mongoose.Schema(
   {
@@ -41,6 +42,9 @@ const problemSchema = new mongoose.Schema(
     outputFormat: { type: String, default: '' },
     constraints: { type: String, default: '' },
     sampleCases: { type: [sampleCaseSchema], default: [] },
+    // Fixed, LeetCode-style categorization — a problem can carry several.
+    // Mandatory for teacher-authored problems (enforced in routes/problems.js).
+    topics: { type: [{ type: String, enum: TOPICS }], default: [] },
     starterCode: { type: starterCodeSchema, default: () => ({}) },
     testCases: { type: [testCaseSchema], default: [] },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

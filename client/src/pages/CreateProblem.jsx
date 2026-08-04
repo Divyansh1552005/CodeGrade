@@ -5,6 +5,7 @@ import { api } from '../api/client.js';
 import { invalidate } from '../api/useCachedQuery.js';
 import { STARTER_TEMPLATES, LANGUAGE_LABELS } from '../data/starterTemplates.js';
 import CodeEditor from '../components/CodeEditor.jsx';
+import TopicSelect from '../components/TopicSelect.jsx';
 
 const emptyCase = () => ({ input: '', expectedOutput: '' });
 const emptySample = () => ({ input: '', output: '', explanation: '' });
@@ -29,6 +30,8 @@ export default function CreateProblem() {
   });
   // Public worked examples — at least one is required.
   const [sampleCases, setSampleCases] = useState([emptySample()]);
+  // Fixed, LeetCode-style categorization — at least one is required.
+  const [topics, setTopics] = useState([]);
   // starterCode is language-agnostic on the Problem: optional boilerplate per language.
   const [starterCode, setStarterCode] = useState(emptyStarter());
   const [activeLang, setActiveLang] = useState('javascript');
@@ -52,6 +55,7 @@ export default function CreateProblem() {
         });
         setStarterCode({ ...emptyStarter(), ...(p.starterCode || {}) });
         setTestCases(p.testCases?.length ? p.testCases : [emptyCase()]);
+        setTopics(p.topics || []);
         setSampleCases(
           p.sampleCases?.length
             ? p.sampleCases.map((s) => ({ ...emptySample(), ...s }))
@@ -94,10 +98,14 @@ export default function CreateProblem() {
 
   async function onSubmit(e) {
     e.preventDefault();
+    if (topics.length === 0) {
+      setError('Select at least one topic.');
+      return;
+    }
     setError('');
     setBusy(true);
     try {
-      const payload = { ...form, sampleCases, starterCode, testCases };
+      const payload = { ...form, topics, sampleCases, starterCode, testCases };
       if (isEdit) {
         await api.patch(`/problems/${id}`, payload);
       } else {
@@ -134,6 +142,13 @@ export default function CreateProblem() {
             required
           />
         </label>
+
+        <div className="field">
+          <span>
+            Topics <span className="text-slate-400 dark:text-slate-500">(select at least one)</span>
+          </span>
+          <TopicSelect selected={topics} onChange={setTopics} />
+        </div>
 
         {/* Statement sections students rely on — all mandatory. */}
         <label className="field">

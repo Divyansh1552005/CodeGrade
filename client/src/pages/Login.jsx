@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { useAuth } from '../auth/AuthContext.jsx';
+import AuthCard from '../components/AuthCard.jsx';
+import { formContainer, formItem, ErrorBanner, Spinner } from '../components/FormMotion.jsx';
 
 export default function Login() {
   const { login } = useAuth();
@@ -25,10 +28,9 @@ export default function Login() {
   }
 
   return (
-    <div className="card mx-auto max-w-sm">
-      <h1 className="mb-4 text-xl font-semibold">Log in</h1>
-      <form onSubmit={onSubmit}>
-        <label className="field">
+    <AuthCard title="Welcome back" subtitle="Log in to continue">
+      <motion.form variants={formContainer} initial="hidden" animate="show" onSubmit={onSubmit}>
+        <motion.label variants={formItem} className="field">
           Email
           <input
             className="input"
@@ -37,8 +39,8 @@ export default function Login() {
             type="email"
             required
           />
-        </label>
-        <label className="field">
+        </motion.label>
+        <motion.label variants={formItem} className="field">
           Password
           <input
             className="input"
@@ -47,21 +49,37 @@ export default function Login() {
             type="password"
             required
           />
-        </label>
-        {error && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
-        <button className="btn w-full" disabled={busy}>
-          {busy ? 'Logging in…' : 'Log in'}
-        </button>
-      </form>
-      <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
+        </motion.label>
+
+        <ErrorBanner>{error}</ErrorBanner>
+
+        <motion.div variants={formItem}>
+          <motion.button
+            whileTap={{ scale: 0.98 }}
+            className="btn flex w-full items-center justify-center gap-2"
+            disabled={busy}
+          >
+            {busy && <Spinner />}
+            {busy ? 'Logging in…' : 'Log in'}
+          </motion.button>
+        </motion.div>
+      </motion.form>
+
+      <motion.p
+        variants={formItem}
+        initial="hidden"
+        animate="show"
+        transition={{ delay: 0.35 }}
+        className="mt-4 text-center text-sm text-slate-500 dark:text-slate-400"
+      >
         No account?{' '}
         <Link className="font-medium text-slate-900 dark:text-slate-100" to="/register">
           Register
         </Link>
-      </p>
-      <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
+      </motion.p>
+      <p className="mt-2 text-center text-xs text-slate-400 dark:text-slate-500">
         Demo: teacher@demo.com / student@demo.com · password123
       </p>
-    </div>
+    </AuthCard>
   );
 }

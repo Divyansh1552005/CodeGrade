@@ -43,6 +43,20 @@ beforeEach(async () => {
   teacherToken = await register('teacher');
 });
 
+describe('GET /doubts?mine=1', () => {
+  it("returns only the requesting student's own doubts", async () => {
+    await createDoubt(studentToken);
+    const otherStudentToken = await register('student');
+    await createDoubt(otherStudentToken);
+
+    const res = await request(app)
+      .get('/doubts?mine=1')
+      .set('Authorization', `Bearer ${otherStudentToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.doubts.length).toBe(1);
+  });
+});
+
 describe('Doubt -> AI draft -> approval workflow', () => {
   it('creates an AI draft in pending state, invisible to students until approved', async () => {
     const doubt = await createDoubt(studentToken);

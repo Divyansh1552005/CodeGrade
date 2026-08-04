@@ -14,6 +14,7 @@ const DoubtDetail = lazy(() => import('./pages/DoubtDetail.jsx'));
 const TeacherReview = lazy(() => import('./pages/TeacherReview.jsx'));
 const ProblemList = lazy(() => import('./pages/ProblemList.jsx'));
 const CreateProblem = lazy(() => import('./pages/CreateProblem.jsx'));
+const Profile = lazy(() => import('./pages/Profile.jsx'));
 
 // Route table lives here, separate from the shell (RootLayout) and the
 // per-route auth gate (ProtectedRoute), so adding a page is a one-line diff.
@@ -81,6 +82,14 @@ const routes = [
     element: (
       <ProtectedRoute>
         <DoubtDetail />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/profile',
+    element: (
+      <ProtectedRoute>
+        <Profile />
       </ProtectedRoute>
     ),
   },

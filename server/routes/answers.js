@@ -3,8 +3,10 @@ import Answer from '../models/Answer.js';
 import Doubt from '../models/Doubt.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roleGuard.js';
+import { validate } from '../middleware/validate.js';
 import { httpError } from '../middleware/errorHandler.js';
 import { InvalidStateTransitionError } from '../models/Answer.js';
+import { createAnswerSchema, reviewAnswerSchema } from '../validation/schemas.js';
 
 const router = Router();
 
@@ -26,32 +28,37 @@ router.get('/', requireAuth, requireRole('teacher'), async (req, res, next) => {
 // A human wrote it, so there is no AI content to review: it is created and
 // immediately approved (no pending step). The Answer state machine still governs
 // the transition (created 'pending' -> 'approved').
-router.post('/', requireAuth, requireRole('teacher'), async (req, res, next) => {
-  try {
-    const { doubtId, content } = req.body || {};
-    if (!doubtId || !content) throw httpError(400, 'doubtId and content are required');
-    const doubt = await Doubt.findById(doubtId);
-    if (!doubt) throw httpError(404, 'Doubt not found');
+router.post(
+  '/',
+  requireAuth,
+  requireRole('teacher'),
+  validate(createAnswerSchema),
+  async (req, res, next) => {
+    try {
+      const { doubtId, content } = req.body;
+      const doubt = await Doubt.findById(doubtId);
+      if (!doubt) throw httpError(404, 'Doubt not found');
 
-    const answer = new Answer({
-      doubtId,
-      content,
-      source: 'teacher',
-      state: 'pending',
-    });
-    await answer.save();
+      const answer = new Answer({
+        doubtId,
+        content,
+        source: 'teacher',
+        state: 'pending',
+      });
+      await answer.save();
 
-    // Auto-approve: the teacher authored it directly.
-    answer.state = 'approved';
-    answer.reviewedBy = req.user._id;
-    answer.reviewedAt = new Date();
-    await answer.save();
+      // Auto-approve: the teacher authored it directly.
+      answer.state = 'approved';
+      answer.reviewedBy = req.user._id;
+      answer.reviewedAt = new Date();
+      await answer.save();
 
-    res.status(201).json({ answer });
-  } catch (err) {
-    next(err);
+      res.status(201).json({ answer });
+    } catch (err) {
+      next(err);
+    }
   }
-});
+);
 
 /**
  * Shared handler for approve/reject. The actual transition legality is enforced
@@ -92,9 +99,21 @@ function review(targetState) {
 }
 
 // PATCH /answers/:id/approve  — teacher only, pending -> approved
-router.patch('/:id/approve', requireAuth, requireRole('teacher'), review('approved'));
+router.patch(
+  '/:id/approve',
+  requireAuth,
+  requireRole('teacher'),
+  validate(reviewAnswerSchema),
+  review('approved')
+);
 
 // PATCH /answers/:id/reject   — teacher only, pending -> rejected
-router.patch('/:id/reject', requireAuth, requireRole('teacher'), review('rejected'));
+router.patch(
+  '/:id/reject',
+  requireAuth,
+  requireRole('teacher'),
+  validate(reviewAnswerSchema),
+  review('rejected')
+);
 
 export default router;

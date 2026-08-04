@@ -156,7 +156,6 @@ export default function SubmitCode() {
               {LANGUAGES.map((lang) => (
                 <option key={lang} value={lang}>
                   {LANGUAGE_LABELS[lang]}
-                  {selected?.starterCode?.[lang] ? ' — starter available' : ''}
                 </option>
               ))}
             </select>
@@ -286,7 +285,7 @@ const Results = memo(function Results({ submission }) {
 
       {aiFeedback ? (
         <div className="mt-5 overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex items-center gap-2 border-b border-slate-100 bg-gradient-to-r from-indigo-50 to-slate-50 px-4 py-3 dark:border-slate-800 dark:from-indigo-950/40 dark:to-slate-900">
+          <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-800/60">
             <h3 className="font-semibold text-slate-800 dark:text-slate-100">AI Feedback</h3>
           </div>
 

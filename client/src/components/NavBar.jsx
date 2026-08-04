@@ -1,8 +1,10 @@
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
+import toast from 'react-hot-toast';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { useTheme } from '../theme/ThemeContext.jsx';
+import { Spinner } from './FormMotion.jsx';
 
 const navLinkClass = ({ isActive }) =>
   `rounded-md px-3 py-1.5 text-sm font-medium transition ${
@@ -14,10 +16,17 @@ const navLinkClass = ({ isActive }) =>
 function NavBar() {
   const { user, isAuthed, logout } = useAuth();
   const navigate = useNavigate();
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const handleLogout = useCallback(async () => {
-    await logout();
-    navigate('/login');
+    setLoggingOut(true);
+    try {
+      await logout();
+      toast.success('Logged out.');
+      navigate('/login');
+    } finally {
+      setLoggingOut(false);
+    }
   }, [logout, navigate]);
 
   return (
@@ -43,6 +52,9 @@ function NavBar() {
                   Review
                 </NavLink>
               )}
+              <NavLink className={(state) => `${navLinkClass(state)} sm:hidden`} to="/profile">
+                Profile
+              </NavLink>
             </>
           )}
         </div>
@@ -50,12 +62,21 @@ function NavBar() {
           <ThemeToggle />
           {isAuthed ? (
             <>
-              <span className="pill hidden sm:inline-flex">
+              <Link
+                to="/profile"
+                className="pill hidden transition hover:bg-slate-200 sm:inline-flex dark:hover:bg-slate-700"
+              >
                 {user.name} · {user.role}
-              </span>
-              <button className="btn-ghost btn-sm" onClick={handleLogout}>
-                Logout
-              </button>
+              </Link>
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                className="btn-ghost btn-sm flex items-center gap-1.5"
+                onClick={handleLogout}
+                disabled={loggingOut}
+              >
+                {loggingOut && <Spinner className="h-3.5 w-3.5" />}
+                {loggingOut ? 'Logging out…' : 'Logout'}
+              </motion.button>
             </>
           ) : (
             <>

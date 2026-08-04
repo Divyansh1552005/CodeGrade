@@ -1,22 +1,22 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { api } from '../api/client.js';
 import { useCachedQuery, invalidate } from '../api/useCachedQuery.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
-
-// Languages that have non-empty starter code for a problem.
-const startersFor = (p) =>
-  Object.entries(p.starterCode || {})
-    .filter(([, code]) => code && code.trim())
-    .map(([lang]) => lang);
+import TopicFilter from '../components/TopicFilter.jsx';
 
 export default function ProblemList() {
   const { user } = useAuth();
   const isTeacher = user.role === 'teacher';
-  const { data, loading, error, refetch } = useCachedQuery('/problems');
-  const problems = data?.problems ?? [];
+  const [selectedTopics, setSelectedTopics] = useState([]);
+  const query = selectedTopics.length
+    ? `/problems?topics=${selectedTopics.map(encodeURIComponent).join(',')}`
+    : '/problems';
+  const { data, loading, error, refetch } = useCachedQuery(query);
+  const { data: stats } = useCachedQuery('/problems/stats/counts');
+  const problems = useMemo(() => data?.problems ?? [], [data]);
 
   const [pendingDelete, setPendingDelete] = useState(null); // problem being confirmed
   const [deleting, setDeleting] = useState(false);
@@ -42,7 +42,14 @@ export default function ProblemList() {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Problems</h1>
+        <h1 className="flex items-baseline gap-2 text-xl font-semibold">
+          Problems
+          {typeof stats?.total === 'number' && (
+            <span className="text-sm font-normal text-slate-400 dark:text-slate-500">
+              {stats.total} total
+            </span>
+          )}
+        </h1>
         {isTeacher && (
           <Link className="btn btn-sm" to="/problems/new">
             + Create Problem
@@ -50,11 +57,19 @@ export default function ProblemList() {
         )}
       </div>
 
+      <TopicFilter
+        selected={selectedTopics}
+        onChange={setSelectedTopics}
+        counts={stats?.byTopic}
+      />
+
       {loading && <p className="text-slate-400 dark:text-slate-500">Loading…</p>}
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       {!loading && problems.length === 0 && (
         <p className="text-sm text-slate-400 dark:text-slate-500">
-          No problems yet.{isTeacher && ' Create one to get started.'}
+          {selectedTopics.length
+            ? 'No problems match the selected topics.'
+            : `No problems yet.${isTeacher ? ' Create one to get started.' : ''}`}
         </p>
       )}
 
@@ -72,6 +87,11 @@ export default function ProblemList() {
             >
               <div>
                 <h3 className="flex items-center gap-2 font-semibold">
+                  {typeof p.number === 'number' && (
+                    <span className="text-slate-400 dark:text-slate-500">
+                      Problem {p.number}:
+                    </span>
+                  )}
                   {p.title}
                   {p.solved && (
                     <span className="badge bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400">
@@ -80,18 +100,16 @@ export default function ProblemList() {
                   )}
                 </h3>
                 <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{p.description}</p>
-                <p className="mt-1 flex flex-wrap items-center gap-1 text-xs text-slate-400 dark:text-slate-500">
-                  <span>{p.testCases?.length || 0} test case(s)</span>
-                  {startersFor(p).length > 0 && (
-                    <>
-                      <span>·</span>
-                      <span>starters:</span>
-                      {startersFor(p).map((lang) => (
-                        <span key={lang} className="pill">{lang}</span>
-                      ))}
-                    </>
-                  )}
-                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-1">
+                  <span className="text-xs text-slate-400 dark:text-slate-500">
+                    {p.testCases?.length || 0} test case(s)
+                  </span>
+                  {(p.topics || []).map((topic) => (
+                    <span key={topic} className="pill">
+                      {topic}
+                    </span>
+                  ))}
+                </div>
               </div>
               <div className="flex shrink-0 gap-2">
                 {user.role === 'student' && (

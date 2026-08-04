@@ -3,9 +3,10 @@ import Doubt from '../models/Doubt.js';
 import Answer from '../models/Answer.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roleGuard.js';
+import { validate } from '../middleware/validate.js';
 import { httpError } from '../middleware/errorHandler.js';
 import { generateDraftAnswer } from '../services/doubtDraftChain.js';
-import { assertWithinLimit, LIMITS } from '../utils/sanitize.js';
+import { createDoubtSchema } from '../validation/schemas.js';
 
 const router = Router();
 
@@ -44,39 +45,44 @@ export async function processDoubtDraft(doubtId, { title, body }) {
 
 // POST /doubts  { title, body }  — students only. Posts immediately; the AI
 // draft is generated in the background and the doubt's aiDraftStatus updates.
-router.post('/', requireAuth, requireRole('student'), async (req, res, next) => {
-  try {
-    const { title, body } = req.body || {};
-    if (!title || !body) {
-      throw httpError(400, 'title and body are required');
+// Zod enforces both presence and the length caps that used to guard the LLM
+// call (injection/DoS mitigation) — see validation/schemas.js.
+router.post(
+  '/',
+  requireAuth,
+  requireRole('student'),
+  validate(createDoubtSchema),
+  async (req, res, next) => {
+    try {
+      const { title, body } = req.body;
+
+      const doubt = await Doubt.create({
+        studentId: req.user._id,
+        title,
+        body,
+        aiDraftStatus: 'pending',
+      });
+
+      // Fire-and-forget: don't block the response on the LLM. processDoubtDraft
+      // never throws, but attach a catch for safety against unhandled rejections.
+      processDoubtDraft(doubt._id, { title, body }).catch(() => {});
+
+      // Respond right away; the draft is still 'pending' at this point.
+      res.status(201).json({ doubt });
+    } catch (err) {
+      next(err);
     }
-    // Length caps BEFORE anything reaches the LLM (injection/DoS mitigation).
-    assertWithinLimit('title', title, LIMITS.doubtTitle);
-    assertWithinLimit('body', body, LIMITS.doubtBody);
-
-    const doubt = await Doubt.create({
-      studentId: req.user._id,
-      title,
-      body,
-      aiDraftStatus: 'pending',
-    });
-
-    // Fire-and-forget: don't block the response on the LLM. processDoubtDraft
-    // never throws, but attach a catch for safety against unhandled rejections.
-    processDoubtDraft(doubt._id, { title, body }).catch(() => {});
-
-    // Respond right away; the draft is still 'pending' at this point.
-    res.status(201).json({ doubt });
-  } catch (err) {
-    next(err);
   }
-});
+);
 
-// GET /doubts  — shared board (list). Each doubt is annotated with
-// `hasApprovedAnswer` so the list can render a status badge without N+1 calls.
-router.get('/', requireAuth, async (_req, res, next) => {
+// GET /doubts[?mine=1]  — shared board (list), or (with `mine`) just the
+// requesting user's own doubts — used by the profile page. Each doubt is
+// annotated with `hasApprovedAnswer` so the list can render a status badge
+// without N+1 calls.
+router.get('/', requireAuth, async (req, res, next) => {
   try {
-    const doubts = await Doubt.find()
+    const filter = req.query.mine ? { studentId: req.user._id } : {};
+    const doubts = await Doubt.find(filter)
       .sort({ createdAt: -1 })
       .populate('studentId', 'name')
       .lean();
