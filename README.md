@@ -407,3 +407,104 @@ rejected before Judge0).
 Frontend: form rendering + happy-path login submit.
 
 ---
+
+## My tradeoffs
+
+Decisions made deliberately, under a limited build window, that a
+larger/longer-running project would probably revisit:
+
+- **Judge0 (hosted, via RapidAPI) instead of a self-hosted Docker sandbox.**
+  The safety properties I actually need — process isolation, timeouts,
+  resource limits — Judge0 already provides server-side. Building and
+  operating a Docker-based runner (container lifecycle, resource caps,
+  network isolation, queueing) is a real project on its own, and that time
+  was better spent on the AI pipeline and the approval workflow, which were
+  weighted equally. The cost: I depend on a third-party service's uptime and
+  a shared RapidAPI rate limit/key, and student code never runs in
+  infrastructure I fully control.
+- **MongoDB/Mongoose over a relational database.** The assignment allowed
+  either; documents fit this domain well (a `Problem`'s shape — sample
+  cases, per-language starter code, topics — evolved a lot during
+  development, and schema-flexible documents absorbed that without
+  migrations). The cost is weaker cross-document guarantees than a real
+  foreign-key/transaction model would give (e.g. an orphaned `Submission` if
+  a `Problem` were ever hard-deleted incorrectly — mitigated by the
+  archive-instead-of-delete rule, not by the database itself).
+- **AI feedback is best-effort, never blocking.** If the LLM call fails,
+  grading still succeeds and the student just doesn't get a written
+  comment. I chose "the core feature always works" over "every submission
+  always has AI commentary."
+- **Fail-open rate limiting.** If Redis is unreachable, the limiters fall
+  back to an in-memory approximation rather than rejecting every request.
+  Availability was prioritized over perfectly accurate quotas — a determined
+  abuser could get a few extra submissions through during a Redis outage,
+  which is an acceptable trade for not taking the whole API down over a
+  secondary dependency.
+- **Cross-site cookies (`SameSite=None`) instead of a single-domain
+  deployment.** Splitting the frontend (Vercel) and backend (Render) across
+  two free-tier platforms is fast to deploy but structurally weaker than
+  serving both from one domain with `SameSite=Lax/Strict`. Mitigated as far
+  as it reasonably can be short of collapsing to one domain (httpOnly,
+  Secure, explicit `CLIENT_ORIGIN` allowlist — see the Deployment section
+  above) — a real production deployment would put both behind one domain
+  instead.
+- **A fixed, hand-duplicated topic list** (`server/constants/topics.js` /
+  `client/src/data/topics.js`) instead of a teacher-managed collection in
+  the database. Simple and fast to ship; the cost is that adding a topic
+  means editing two files by hand instead of an admin UI, and the two lists
+  can drift if one is edited without the other.
+- **Backend test depth over frontend test depth.** 88 backend tests vs. 2
+  frontend tests, deliberately — the assignment explicitly weights backend
+  correctness (safe execution, approval-state correctness,
+  prompt-injection resistance) at least as heavily as feature completeness,
+  so that's where the testing time went. The frontend was instead verified
+  by actually clicking through the running app rather than by an automated
+  suite.
+- **Render's free tier over a paid always-on instance.** Free to run, at
+  the cost of a cold-start delay (~30–60s) on the first request after
+  idling — mitigated in the UI with the cold-start notice on first visit,
+  not eliminated.
+
+---
+
+## Future improvements
+
+Things I'd do next, roughly in the order I'd prioritize them:
+
+1. **Address the currently-open Dependabot alerts properly** (React
+   Router v8 + the React 19 bump it requires, a Vite/Vitest major-version
+   upgrade, and a LangChain v1 migration on the backend) — deliberately
+   deferred rather than rushed, since each is a real breaking-change
+   migration that deserves its own careful pass and full regression testing,
+   not a same-turn bolt-on to unrelated feature work.
+2. **Move to a self-hosted, Docker-based code runner** for full control over
+   resource limits, data residency, and to stop depending on a shared
+   RapidAPI rate limit — the tradeoff noted above, revisited once there's
+   time to build and operate it properly.
+3. **Real frontend test coverage** — component/page tests for the pages that
+   currently have none (`ProblemList`, `SubmitCode`, `TeacherReview`), and
+   an end-to-end test (Playwright/Cypress) walking the full doubt → AI draft
+   → teacher approval → student-sees-it flow, since that's the app's central
+   safety guarantee and currently only backend-tested.
+4. **Teacher-managed topics** — move the fixed topic list from hardcoded
+   constants into a database collection teachers can add to, removing the
+   manual client/server duplication.
+5. **Pagination** on the problems list and doubt board — both currently do
+   an unbounded `find()`, fine at demo scale, not at real class-roster scale.
+6. **Push updates instead of polling** — a doubt's AI draft finishing, or a
+   teacher approving an answer, currently only shows up on the next fetch;
+   WebSockets/SSE would make that live.
+7. **Move to a single-domain deployment** (both frontend and backend behind
+   one reverse-proxied domain) to drop `SameSite=None` in favor of
+   `SameSite=Lax`, once this is more than a demo deployment.
+8. **Partial-credit / richer grading** — test cases are currently binary
+   pass/fail per case with a simple count; weighted or partial-credit
+   scoring would be a natural extension given `testResults` already stores
+   a per-case result.
+9. **Per-teacher analytics** — class-wide solve rates and common failure
+   patterns, feasible without new data collection since `Submission`
+   already captures every per-test-case result.
+10. **Password reset / email verification** — registration and login work,
+    but there's no email delivery integration yet for account recovery.
+
+---
