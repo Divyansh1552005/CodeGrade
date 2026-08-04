@@ -101,7 +101,7 @@ const ReviewCard = memo(function ReviewCard({ answer, onReviewed }) {
 
       <div className="field mt-3">
         <span>Draft answer (editable, markdown)</span>
-        <MarkdownEditor value={content} onChange={setContent} minH="min-h-28" />
+        <MarkdownEditor value={content} onChange={setContent} minH="min-h-28" autoGrow />
       </div>
       <label className="field">
         Review notes (optional)
@@ -168,7 +168,7 @@ const FailedDoubtCard = memo(function FailedDoubtCard({ doubt, onAnswered }) {
 
       <div className="field mt-2">
         <span>Your answer (markdown)</span>
-        <MarkdownEditor value={content} onChange={setContent} minH="min-h-28" />
+        <MarkdownEditor value={content} onChange={setContent} minH="min-h-28" autoGrow />
       </div>
 
       {err && <p className="mb-2 text-sm text-red-600">{err}</p>}

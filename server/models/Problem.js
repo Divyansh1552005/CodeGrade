@@ -8,6 +8,17 @@ const testCaseSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// A worked example shown to students: what goes in, what must come out, and
+// (optionally) why. Unlike testCases these are always public.
+const sampleCaseSchema = new mongoose.Schema(
+  {
+    input: { type: String, default: '' },
+    output: { type: String, default: '' },
+    explanation: { type: String, default: '' },
+  },
+  { _id: false }
+);
+
 // A problem is language-AGNOSTIC: its test cases are just stdin/stdout pairs.
 // starterCode is optional boilerplate per language; any/all keys may be empty.
 const starterCodeSchema = new mongoose.Schema(
@@ -24,6 +35,12 @@ const problemSchema = new mongoose.Schema(
   {
     title: { type: String, required: true, trim: true },
     description: { type: String, default: '' },
+    // Statement sections. Mandatory for teacher-authored problems — enforced in
+    // routes/problems.js so existing/fixture docs can still be saved directly.
+    inputFormat: { type: String, default: '' },
+    outputFormat: { type: String, default: '' },
+    constraints: { type: String, default: '' },
+    sampleCases: { type: [sampleCaseSchema], default: [] },
     starterCode: { type: starterCodeSchema, default: () => ({}) },
     testCases: { type: [testCaseSchema], default: [] },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

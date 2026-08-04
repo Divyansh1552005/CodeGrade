@@ -19,6 +19,10 @@ async function register(role) {
 const validBody = () => ({
   title: 'Double it',
   description: 'Read n, print 2n.',
+  inputFormat: 'A single integer n.',
+  outputFormat: 'A single integer 2n.',
+  constraints: '-10^9 <= n <= 10^9',
+  sampleCases: [{ input: '2', output: '4', explanation: '2 doubled is 4.' }],
   starterCode: { python: 'n = int(input())', java: '' },
   testCases: [
     { input: '2', expectedOutput: '4' },
@@ -93,6 +97,66 @@ describe('POST /problems', () => {
     expect(res.body.error).toMatch(/input.*expectedOutput|expectedOutput/i);
   });
 
+  it('persists the statement sections', async () => {
+    const res = await request(app)
+      .post('/problems')
+      .set('Authorization', `Bearer ${teacher.token}`)
+      .send(validBody());
+    expect(res.status).toBe(201);
+    expect(res.body.problem.inputFormat).toBe('A single integer n.');
+    expect(res.body.problem.outputFormat).toBe('A single integer 2n.');
+    expect(res.body.problem.constraints).toBe('-10^9 <= n <= 10^9');
+    expect(res.body.problem.sampleCases).toEqual([
+      { input: '2', output: '4', explanation: '2 doubled is 4.' },
+    ]);
+  });
+
+  it.each(['inputFormat', 'outputFormat', 'constraints'])(
+    'rejects a missing %s (400)',
+    async (field) => {
+      const body = validBody();
+      delete body[field];
+      const res = await request(app)
+        .post('/problems')
+        .set('Authorization', `Bearer ${teacher.token}`)
+        .send(body);
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(new RegExp(`${field} is required`, 'i'));
+    }
+  );
+
+  it.each(['inputFormat', 'outputFormat', 'constraints'])(
+    'rejects a whitespace-only %s (400)',
+    async (field) => {
+      const res = await request(app)
+        .post('/problems')
+        .set('Authorization', `Bearer ${teacher.token}`)
+        .send({ ...validBody(), [field]: '   ' });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(new RegExp(`${field} is required`, 'i'));
+    }
+  );
+
+  it('rejects missing sampleCases (400)', async () => {
+    const body = validBody();
+    delete body.sampleCases;
+    const res = await request(app)
+      .post('/problems')
+      .set('Authorization', `Bearer ${teacher.token}`)
+      .send(body);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/sampleCases must be a non-empty array/i);
+  });
+
+  it('rejects a sample case without an output (400)', async () => {
+    const res = await request(app)
+      .post('/problems')
+      .set('Authorization', `Bearer ${teacher.token}`)
+      .send({ ...validBody(), sampleCases: [{ input: '2', output: '  ' }] });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/sampleCases\[0\].*output/i);
+  });
+
   it('rejects missing description (400)', async () => {
     const body = validBody();
     delete body.description;
@@ -122,6 +186,32 @@ describe('PATCH /problems/:id (teacher-only, creator-only)', () => {
       .send({ title: 'Renamed' });
     expect(res.status).toBe(200);
     expect(res.body.problem.title).toBe('Renamed');
+  });
+
+  it('updates the statement sections', async () => {
+    const problem = await createProblem(teacher.token);
+    const res = await request(app)
+      .patch(`/problems/${problem._id}`)
+      .set('Authorization', `Bearer ${teacher.token}`)
+      .send({
+        constraints: '1 <= n <= 10',
+        sampleCases: [{ input: '3', output: '6' }],
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.problem.constraints).toBe('1 <= n <= 10');
+    expect(res.body.problem.sampleCases).toEqual([
+      { input: '3', output: '6', explanation: '' },
+    ]);
+  });
+
+  it('refuses to blank out a mandatory section (400)', async () => {
+    const problem = await createProblem(teacher.token);
+    const res = await request(app)
+      .patch(`/problems/${problem._id}`)
+      .set('Authorization', `Bearer ${teacher.token}`)
+      .send({ inputFormat: '' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/inputFormat is required/i);
   });
 
   it('forbids a different teacher from editing (403)', async () => {

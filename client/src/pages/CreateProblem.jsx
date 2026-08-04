@@ -6,6 +6,7 @@ import { STARTER_TEMPLATES, LANGUAGE_LABELS } from '../data/starterTemplates.js'
 import CodeEditor from '../components/CodeEditor.jsx';
 
 const emptyCase = () => ({ input: '', expectedOutput: '' });
+const emptySample = () => ({ input: '', output: '', explanation: '' });
 const LANGUAGES = ['javascript', 'python', 'java', 'cpp'];
 const emptyStarter = () => ({ javascript: '', python: '', java: '', cpp: '' });
 
@@ -18,7 +19,15 @@ export default function CreateProblem() {
   const isEdit = Boolean(id);
   const navigate = useNavigate();
 
-  const [form, setForm] = useState({ title: '', description: '' });
+  const [form, setForm] = useState({
+    title: '',
+    description: '',
+    inputFormat: '',
+    outputFormat: '',
+    constraints: '',
+  });
+  // Public worked examples — at least one is required.
+  const [sampleCases, setSampleCases] = useState([emptySample()]);
   // starterCode is language-agnostic on the Problem: optional boilerplate per language.
   const [starterCode, setStarterCode] = useState(emptyStarter());
   const [activeLang, setActiveLang] = useState('javascript');
@@ -33,9 +42,20 @@ export default function CreateProblem() {
       .get(`/problems/${id}`)
       .then(({ data }) => {
         const p = data.problem;
-        setForm({ title: p.title || '', description: p.description || '' });
+        setForm({
+          title: p.title || '',
+          description: p.description || '',
+          inputFormat: p.inputFormat || '',
+          outputFormat: p.outputFormat || '',
+          constraints: p.constraints || '',
+        });
         setStarterCode({ ...emptyStarter(), ...(p.starterCode || {}) });
         setTestCases(p.testCases?.length ? p.testCases : [emptyCase()]);
+        setSampleCases(
+          p.sampleCases?.length
+            ? p.sampleCases.map((s) => ({ ...emptySample(), ...s }))
+            : [emptySample()]
+        );
       })
       .catch((err) => setError(err.response?.data?.error || 'Failed to load problem'));
   }, [id, isEdit]);
@@ -49,6 +69,16 @@ export default function CreateProblem() {
   // Insert a boilerplate template into the active language field (create only).
   function insertTemplate() {
     setLangCode(activeLang, STARTER_TEMPLATES[activeLang] || '');
+  }
+
+  function updateSample(i, key, value) {
+    setSampleCases((sc) => sc.map((s, idx) => (idx === i ? { ...s, [key]: value } : s)));
+  }
+  function addSample() {
+    setSampleCases((sc) => [...sc, emptySample()]);
+  }
+  function removeSample(i) {
+    setSampleCases((sc) => (sc.length === 1 ? sc : sc.filter((_, idx) => idx !== i)));
   }
 
   function updateCase(i, key, value) {
@@ -66,7 +96,7 @@ export default function CreateProblem() {
     setError('');
     setBusy(true);
     try {
-      const payload = { ...form, starterCode, testCases };
+      const payload = { ...form, sampleCases, starterCode, testCases };
       if (isEdit) {
         await api.patch(`/problems/${id}`, payload);
       } else {
@@ -100,6 +130,94 @@ export default function CreateProblem() {
             required
           />
         </label>
+
+        {/* Statement sections students rely on — all mandatory. */}
+        <label className="field">
+          Input format
+          <textarea
+            className="input min-h-20"
+            value={form.inputFormat}
+            onChange={setField('inputFormat')}
+            placeholder="e.g. Line 1: n — the number of elements. Line 2: n space-separated integers."
+            required
+          />
+        </label>
+        <label className="field">
+          Output format
+          <textarea
+            className="input min-h-20"
+            value={form.outputFormat}
+            onChange={setField('outputFormat')}
+            placeholder="e.g. A single integer — the sum of the elements."
+            required
+          />
+        </label>
+        <label className="field">
+          Constraints
+          <textarea
+            className="input min-h-20"
+            value={form.constraints}
+            onChange={setField('constraints')}
+            placeholder={'e.g. 1 <= n <= 1000\n-10^9 <= a[i] <= 10^9'}
+            required
+          />
+        </label>
+
+        <div className="mb-4">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-sm font-medium text-slate-700">
+              Sample examples <span className="text-slate-400">(shown to students)</span>
+            </span>
+            <button type="button" className="btn-ghost btn-sm" onClick={addSample}>
+              + Add example
+            </button>
+          </div>
+          <div className="space-y-3">
+            {sampleCases.map((s, i) => (
+              <div key={i} className="rounded-lg border border-slate-200 p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Example {i + 1}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn-ghost btn-sm text-red-600"
+                    onClick={() => removeSample(i)}
+                    disabled={sampleCases.length === 1}
+                    title="Remove"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="flex items-start gap-2">
+                  <textarea
+                    className="input flex-1 font-mono text-sm"
+                    placeholder="sample input"
+                    value={s.input}
+                    onChange={(e) => updateSample(i, 'input', e.target.value)}
+                    rows={2}
+                    required
+                  />
+                  <textarea
+                    className="input flex-1 font-mono text-sm"
+                    placeholder="sample output"
+                    value={s.output}
+                    onChange={(e) => updateSample(i, 'output', e.target.value)}
+                    rows={2}
+                    required
+                  />
+                </div>
+                <textarea
+                  className="input mt-2 w-full text-sm"
+                  placeholder="explanation (optional)"
+                  value={s.explanation}
+                  onChange={(e) => updateSample(i, 'explanation', e.target.value)}
+                  rows={2}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
 
         {/* Optional starter code per language. Test cases are language-agnostic;
             starter code is just convenience boilerplate students can start from. */}

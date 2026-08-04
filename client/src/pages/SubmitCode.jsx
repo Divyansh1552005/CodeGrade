@@ -4,6 +4,7 @@ import { api } from '../api/client.js';
 import { useCachedQuery, invalidate } from '../api/useCachedQuery.js';
 import Markdown from '../components/Markdown.jsx';
 import CodeEditor from '../components/CodeEditor.jsx';
+import ProblemStatement from '../components/ProblemStatement.jsx';
 import { LANGUAGE_LABELS } from '../data/starterTemplates.js';
 
 // Student-selectable languages, in the order shown in the dropdown.
@@ -159,11 +160,7 @@ export default function SubmitCode() {
           </label>
         </div>
 
-        {selected && (
-          <div className="mb-3 text-sm text-slate-500">
-            <Markdown>{selected.description}</Markdown>
-          </div>
-        )}
+        {selected && <ProblemStatement problem={selected} />}
 
         <div className="field">
           <span>

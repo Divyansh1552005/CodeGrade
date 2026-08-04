@@ -53,10 +53,63 @@ async function seed() {
     console.log(`Migrated legacy problem: ${doc.title}`);
   }
 
+  // --- Backfill the statement sections (input/output format, constraints,
+  // sample examples) on problems created before they became mandatory. The
+  // sample is derived from the problem's first test case so students see a real
+  // worked example; the prose is a clearly-marked placeholder the teacher can
+  // edit. Only missing fields are filled — nothing authored is overwritten.
+  const needsBackfill = await coll
+    .find({
+      $or: [
+        { inputFormat: { $in: [null, ''] } },
+        { outputFormat: { $in: [null, ''] } },
+        { constraints: { $in: [null, ''] } },
+        { sampleCases: { $in: [null, []] } }, // also matches a missing field
+      ],
+    })
+    .toArray();
+
+  for (const doc of needsBackfill) {
+    const firstCase = doc.testCases?.[0];
+    const $set = {};
+    if (!doc.inputFormat) {
+      $set.inputFormat =
+        'See the problem description above — the input is read from stdin. ' +
+        '_(Teacher: please describe the exact input format.)_';
+    }
+    if (!doc.outputFormat) {
+      $set.outputFormat =
+        'Print the answer to stdout. ' +
+        '_(Teacher: please describe the exact output format.)_';
+    }
+    if (!doc.constraints) {
+      $set.constraints = 'Not specified yet.';
+    }
+    if (!doc.sampleCases?.length && firstCase) {
+      $set.sampleCases = [
+        {
+          input: firstCase.input || '',
+          output: firstCase.expectedOutput || '',
+          explanation: '',
+        },
+      ];
+    }
+    if (Object.keys($set).length === 0) continue;
+    await coll.updateOne({ _id: doc._id }, { $set });
+    console.log(`Backfilled statement sections: ${doc.title}`);
+  }
+
   const problems = [
     {
       title: 'Double the number',
       description: 'Read an integer from stdin and print it doubled.',
+      inputFormat: 'A single line containing one integer `n`.',
+      outputFormat: 'A single line containing `2 * n`.',
+      constraints: '-10^9 <= n <= 10^9',
+      sampleCases: [
+        { input: '2', output: '4', explanation: '2 doubled is 4.' },
+        { input: '-3', output: '-6', explanation: 'Negative inputs are doubled too.' },
+      ],
       starterCode: {
         python: 'n = int(input())\n# print your answer\n',
         javascript:
@@ -72,6 +125,13 @@ async function seed() {
     {
       title: 'Sum two numbers',
       description: 'Read two space-separated integers from stdin and print their sum.',
+      inputFormat: 'A single line containing two space-separated integers `a` and `b`.',
+      outputFormat: 'A single line containing `a + b`.',
+      constraints: '-10^9 <= a, b <= 10^9',
+      sampleCases: [
+        { input: '2 3', output: '5', explanation: '2 + 3 = 5.' },
+        { input: '100 -1', output: '99', explanation: '100 + (-1) = 99.' },
+      ],
       starterCode: {
         javascript:
           "const [a, b] = require('fs').readFileSync(0, 'utf8').trim().split(' ').map(Number);\n// console.log your answer\n",
@@ -90,6 +150,26 @@ async function seed() {
         'Line 1: "n target". Line 2: n space-separated integers. Print the two ' +
         '0-based indices i j (i<j, space-separated) of the elements that sum to ' +
         'target. Exactly one solution is guaranteed.',
+      inputFormat:
+        'Line 1: two space-separated integers `n` and `target`.\n' +
+        'Line 2: `n` space-separated integers — the array.',
+      outputFormat:
+        'A single line with the two 0-based indices `i j` (i < j, space-separated) ' +
+        'of the elements that sum to `target`.',
+      constraints:
+        '2 <= n <= 10^4\n-10^9 <= a[i] <= 10^9\n-10^9 <= target <= 10^9\nExactly one valid answer exists.',
+      sampleCases: [
+        {
+          input: '4 9\n2 7 11 15',
+          output: '0 1',
+          explanation: 'a[0] + a[1] = 2 + 7 = 9, so the indices are 0 and 1.',
+        },
+        {
+          input: '3 6\n3 2 4',
+          output: '1 2',
+          explanation: 'a[1] + a[2] = 2 + 4 = 6.',
+        },
+      ],
       starterCode: {
         java: [
           'import java.util.*;',

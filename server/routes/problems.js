@@ -34,6 +34,43 @@ function validateTestCases(testCases) {
   });
 }
 
+// Statement sections every teacher-authored problem must fill in.
+const REQUIRED_TEXT_FIELDS = ['inputFormat', 'outputFormat', 'constraints'];
+
+// A required free-text field: present, a string, and not just whitespace.
+function validateRequiredText(field, value) {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw httpError(400, `${field} is required`);
+  }
+}
+
+// Validate sampleCases: non-empty, each entry with non-empty input + output.
+// `explanation` is optional but must be a string when present.
+function validateSampleCases(sampleCases) {
+  if (!Array.isArray(sampleCases) || sampleCases.length === 0) {
+    throw httpError(400, 'sampleCases must be a non-empty array');
+  }
+  sampleCases.forEach((sc, i) => {
+    if (typeof sc?.input !== 'string' || !sc.input.trim()) {
+      throw httpError(400, `sampleCases[${i}] must have a non-empty "input"`);
+    }
+    if (typeof sc?.output !== 'string' || !sc.output.trim()) {
+      throw httpError(400, `sampleCases[${i}] must have a non-empty "output"`);
+    }
+    if (sc.explanation !== undefined && typeof sc.explanation !== 'string') {
+      throw httpError(400, `sampleCases[${i}].explanation must be a string`);
+    }
+  });
+}
+
+// Keep only the fields we store, so clients can't inject extras.
+const pickSampleCases = (sampleCases) =>
+  sampleCases.map((sc) => ({
+    input: sc.input,
+    output: sc.output,
+    explanation: sc.explanation || '',
+  }));
+
 // Load a problem and assert the requester created it (creator-only edit rule).
 async function loadOwnedProblem(req) {
   const problem = await Problem.findById(req.params.id);
@@ -88,16 +125,24 @@ router.get('/:id', requireAuth, async (req, res, next) => {
 // POST /problems  — teachers only
 router.post('/', requireAuth, requireRole('teacher'), async (req, res, next) => {
   try {
-    const { title, description, starterCode, testCases } = req.body || {};
+    const { title, description, starterCode, testCases, sampleCases } = req.body || {};
 
     if (!title || !description) {
       throw httpError(400, 'title and description are required');
     }
+    for (const field of REQUIRED_TEXT_FIELDS) {
+      validateRequiredText(field, req.body?.[field]);
+    }
+    validateSampleCases(sampleCases);
     validateTestCases(testCases);
 
     const problem = await Problem.create({
       title,
       description,
+      inputFormat: req.body.inputFormat,
+      outputFormat: req.body.outputFormat,
+      constraints: req.body.constraints,
+      sampleCases: pickSampleCases(sampleCases),
       starterCode: sanitizeStarterCode(starterCode),
       testCases,
       createdBy: req.user._id,
@@ -112,7 +157,7 @@ router.post('/', requireAuth, requireRole('teacher'), async (req, res, next) => 
 router.patch('/:id', requireAuth, requireRole('teacher'), async (req, res, next) => {
   try {
     const problem = await loadOwnedProblem(req);
-    const { title, description, starterCode, testCases } = req.body || {};
+    const { title, description, starterCode, testCases, sampleCases } = req.body || {};
 
     if (title !== undefined) {
       if (!title) throw httpError(400, 'title cannot be empty');
@@ -121,6 +166,18 @@ router.patch('/:id', requireAuth, requireRole('teacher'), async (req, res, next)
     if (description !== undefined) {
       if (!description) throw httpError(400, 'description cannot be empty');
       problem.description = description;
+    }
+    // These sections are mandatory, so a partial update may change them but
+    // never blank them out.
+    for (const field of REQUIRED_TEXT_FIELDS) {
+      if (req.body?.[field] !== undefined) {
+        validateRequiredText(field, req.body[field]);
+        problem[field] = req.body[field];
+      }
+    }
+    if (sampleCases !== undefined) {
+      validateSampleCases(sampleCases);
+      problem.sampleCases = pickSampleCases(sampleCases);
     }
     if (starterCode !== undefined) problem.starterCode = sanitizeStarterCode(starterCode);
     if (testCases !== undefined) {
