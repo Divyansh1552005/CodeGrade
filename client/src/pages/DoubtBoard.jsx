@@ -13,10 +13,17 @@ function excerpt(body, max = 100) {
 }
 
 function statusFor(doubt) {
-  if (doubt.hasApprovedAnswer) return { label: 'approved', cls: 'bg-green-100 text-green-700' };
+  if (doubt.hasApprovedAnswer)
+    return {
+      label: 'approved',
+      cls: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400',
+    };
   if (doubt.aiDraftStatus === 'failed')
-    return { label: 'awaiting teacher response', cls: 'bg-amber-100 text-amber-700' };
-  return { label: 'awaiting review', cls: 'bg-slate-100 text-slate-600' };
+    return {
+      label: 'awaiting teacher response',
+      cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400',
+    };
+  return { label: 'awaiting review', cls: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400' };
 }
 
 export default function DoubtBoard() {
@@ -36,10 +43,10 @@ export default function DoubtBoard() {
         )}
       </div>
 
-      {loading && <p className="text-slate-400">Loading…</p>}
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {loading && <p className="text-slate-400 dark:text-slate-500">Loading…</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       {!loading && doubts.length === 0 && (
-        <p className="text-sm text-slate-400">No doubts yet.</p>
+        <p className="text-sm text-slate-400 dark:text-slate-500">No doubts yet.</p>
       )}
 
       <div className="space-y-3">
@@ -56,16 +63,18 @@ const DoubtRow = memo(function DoubtRow({ doubt }) {
   return (
     <Link
       to={`/doubts/${doubt._id}`}
-      className="block rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-400 hover:shadow"
+      className="block rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-400 hover:shadow dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-600"
     >
       <div className="flex items-start justify-between gap-3">
-        <h3 className="font-semibold text-slate-800">{doubt.title}</h3>
+        <h3 className="font-semibold text-slate-800 dark:text-slate-100">{doubt.title}</h3>
         <span className={`badge shrink-0 ${status.cls}`}>{status.label}</span>
       </div>
-      <p className="mt-1 text-sm text-slate-500">{excerpt(doubt.body)}</p>
+      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{excerpt(doubt.body)}</p>
       <div className="mt-2 flex items-center justify-between">
-        <span className="text-xs text-slate-400">by {doubt.studentId?.name || 'student'}</span>
-        <span className="text-xs font-medium text-slate-500">View →</span>
+        <span className="text-xs text-slate-400 dark:text-slate-500">
+          by {doubt.studentId?.name || 'student'}
+        </span>
+        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">View →</span>
       </div>
     </Link>
   );

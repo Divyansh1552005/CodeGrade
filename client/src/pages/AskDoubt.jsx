@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { api } from '../api/client.js';
 import { invalidate } from '../api/useCachedQuery.js';
 import MarkdownEditor from '../components/MarkdownEditor.jsx';
@@ -21,10 +22,13 @@ export default function AskDoubt() {
     try {
       const { data } = await api.post('/doubts', form);
       invalidate('/doubts');
+      toast.success('Doubt posted — an AI draft is being prepared.');
       // Go to the new doubt's detail page (the AI draft is being prepared).
       navigate(`/doubts/${data.doubt._id}`);
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to post doubt');
+      const msg = err.response?.data?.error || 'Failed to post doubt';
+      setError(msg);
+      toast.error(msg);
     } finally {
       setBusy(false);
     }
@@ -33,7 +37,10 @@ export default function AskDoubt() {
   return (
     <div className="mx-auto max-w-2xl">
       <div className="mb-3">
-        <Link to="/doubts" className="text-sm text-slate-500 hover:text-slate-900">
+        <Link
+          to="/doubts"
+          className="text-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+        >
           ← Back to board
         </Link>
       </div>
@@ -59,7 +66,7 @@ export default function AskDoubt() {
               minH="min-h-48"
             />
           </div>
-          {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+          {error && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
           <button className="btn" disabled={busy}>
             {busy ? 'Posting…' : 'Post Doubt'}
           </button>

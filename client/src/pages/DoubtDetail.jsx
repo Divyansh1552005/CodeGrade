@@ -33,8 +33,8 @@ export default function DoubtDetail() {
     };
   }, [id]);
 
-  if (loading) return <p className="text-slate-400">Loading…</p>;
-  if (error) return <p className="text-sm text-red-600">{error}</p>;
+  if (loading) return <p className="text-slate-400 dark:text-slate-500">Loading…</p>;
+  if (error) return <p className="text-sm text-red-600 dark:text-red-400">{error}</p>;
   if (!doubt) return null;
 
   const failed = doubt.aiDraftStatus === 'failed';
@@ -42,7 +42,10 @@ export default function DoubtDetail() {
   return (
     <div className="mx-auto max-w-2xl space-y-4">
       <div>
-        <Link to="/doubts" className="text-sm text-slate-500 hover:text-slate-900">
+        <Link
+          to="/doubts"
+          className="text-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+        >
           ← Back to board
         </Link>
       </div>
@@ -50,7 +53,7 @@ export default function DoubtDetail() {
       {/* The doubt */}
       <div className="card">
         <h1 className="text-2xl font-semibold">{doubt.title}</h1>
-        <p className="mt-1 text-xs text-slate-400">
+        <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
           Asked by {doubt.studentId?.name || 'student'}
         </p>
         <div className="mt-3">
@@ -60,16 +63,20 @@ export default function DoubtDetail() {
 
       {/* The answer, or a status message */}
       {answer ? (
-        <div className="card border-green-200">
+        <div className="card border-green-200 dark:border-green-900/60">
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="badge bg-green-100 text-green-700">Approved answer</span>
+            <span className="badge bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400">
+              Approved answer
+            </span>
             <span className="badge">
               {answer.source === 'ai' ? 'AI-drafted' : 'Teacher-written'}
             </span>
             {answer.reviewedBy?.name && (
-              <span className="text-sm text-slate-500">
+              <span className="text-sm text-slate-500 dark:text-slate-400">
                 {answer.source === 'ai' ? 'Approved by ' : 'Answered by '}
-                <span className="font-medium text-slate-700">{answer.reviewedBy.name}</span>
+                <span className="font-medium text-slate-700 dark:text-slate-200">
+                  {answer.reviewedBy.name}
+                </span>
               </span>
             )}
           </div>
@@ -78,11 +85,11 @@ export default function DoubtDetail() {
       ) : (
         <div className="card">
           {failed ? (
-            <p className="text-sm text-amber-700">
+            <p className="text-sm text-amber-700 dark:text-amber-400">
               AI failed to generate a draft answer — awaiting a manual answer from a teacher.
             </p>
           ) : (
-            <p className="text-sm text-slate-500">Awaiting teacher response.</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Awaiting teacher response.</p>
           )}
         </div>
       )}

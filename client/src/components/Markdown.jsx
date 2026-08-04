@@ -2,6 +2,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import oneLight from 'react-syntax-highlighter/dist/esm/styles/prism/one-light';
+import oneDark from 'react-syntax-highlighter/dist/esm/styles/prism/one-dark';
 import javascript from 'react-syntax-highlighter/dist/esm/languages/prism/javascript';
 import jsx from 'react-syntax-highlighter/dist/esm/languages/prism/jsx';
 import typescript from 'react-syntax-highlighter/dist/esm/languages/prism/typescript';
@@ -12,6 +13,7 @@ import java from 'react-syntax-highlighter/dist/esm/languages/prism/java';
 import bash from 'react-syntax-highlighter/dist/esm/languages/prism/bash';
 import json from 'react-syntax-highlighter/dist/esm/languages/prism/json';
 import sql from 'react-syntax-highlighter/dist/esm/languages/prism/sql';
+import { useTheme } from '../theme/ThemeContext.jsx';
 
 // Register only the languages we expect — avoids bundling every Prism grammar
 // (which balloons the chunk to ~800 kB).
@@ -37,8 +39,9 @@ SyntaxHighlighter.registerLanguage('sql', sql);
  * markup or scripts.
  */
 export default function Markdown({ children }) {
+  const { theme } = useTheme();
   return (
-    <div className="markdown text-sm text-slate-700">
+    <div className="markdown text-sm text-slate-700 dark:text-slate-300">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -50,13 +53,16 @@ export default function Markdown({ children }) {
                 {...rest}
                 PreTag="div"
                 language={match[1]}
-                style={oneLight}
+                style={theme === 'dark' ? oneDark : oneLight}
                 customStyle={{ borderRadius: '0.5rem', fontSize: '0.85em', margin: '0.5rem 0' }}
               >
                 {String(codeChildren).replace(/\n$/, '')}
               </SyntaxHighlighter>
             ) : (
-              <code {...rest} className="rounded bg-slate-100 px-1 py-0.5 text-[0.85em]">
+              <code
+                {...rest}
+                className="rounded bg-slate-100 px-1 py-0.5 text-[0.85em] dark:bg-slate-800"
+              >
                 {codeChildren}
               </code>
             );
@@ -64,7 +70,12 @@ export default function Markdown({ children }) {
           // Links open safely in a new tab.
           a({ children: linkChildren, ...props }) {
             return (
-              <a {...props} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">
+              <a
+                {...props}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 underline dark:text-blue-400"
+              >
                 {linkChildren}
               </a>
             );

@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import Markdown from './Markdown.jsx';
 
 const tabBase = 'rounded-md px-3 py-1 text-xs font-medium transition';
-const tabActive = `${tabBase} bg-slate-900 text-white`;
-const tabIdle = `${tabBase} text-slate-600 hover:bg-slate-100`;
+const tabActive = `${tabBase} bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900`;
+const tabIdle = `${tabBase} text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800`;
 
 /**
  * A textarea with a Write/Preview toggle. "Write" is a plain textarea for
@@ -57,11 +57,11 @@ export default function MarkdownEditor({
           spellCheck={false}
         />
       ) : (
-        <div className={`input ${minH} bg-white ${autoGrow ? '' : 'overflow-auto'}`}>
+        <div className={`input ${minH} bg-white dark:bg-slate-800 ${autoGrow ? '' : 'overflow-auto'}`}>
           {value?.trim() ? (
             <Markdown>{value}</Markdown>
           ) : (
-            <p className="text-sm text-slate-400">Nothing to preview.</p>
+            <p className="text-sm text-slate-400 dark:text-slate-500">Nothing to preview.</p>
           )}
         </div>
       )}

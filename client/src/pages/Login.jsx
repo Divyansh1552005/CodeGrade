@@ -48,18 +48,18 @@ export default function Login() {
             required
           />
         </label>
-        {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+        {error && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
         <button className="btn w-full" disabled={busy}>
           {busy ? 'Logging in…' : 'Log in'}
         </button>
       </form>
-      <p className="mt-4 text-sm text-slate-500">
+      <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
         No account?{' '}
-        <Link className="font-medium text-slate-900" to="/register">
+        <Link className="font-medium text-slate-900 dark:text-slate-100" to="/register">
           Register
         </Link>
       </p>
-      <p className="mt-2 text-xs text-slate-400">
+      <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
         Demo: teacher@demo.com / student@demo.com · password123
       </p>
     </div>

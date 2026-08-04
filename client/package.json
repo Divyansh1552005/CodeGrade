@@ -12,10 +12,12 @@
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
     "axios": "^1.7.9",
+    "framer-motion": "^12.43.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-hot-toast": "^2.6.0",
     "react-markdown": "^9.1.0",
-    "react-router-dom": "^6.28.0",
+    "react-router-dom": "^7.18.2",
     "react-syntax-highlighter": "^15.6.6",
     "remark-gfm": "^4.0.1"
   },

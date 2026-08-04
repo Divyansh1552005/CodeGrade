@@ -1,4 +1,5 @@
 import Editor from '@monaco-editor/react';
+import { useTheme } from '../theme/ThemeContext.jsx';
 
 // Map our language keys to Monaco language ids.
 const MONACO_LANG = {
@@ -24,15 +25,18 @@ export default function CodeEditor({
   height = '400px',
   readOnly = false,
 }) {
+  const { theme } = useTheme();
   return (
-    <div className="overflow-hidden rounded-md border border-slate-300">
+    <div className="overflow-hidden rounded-md border border-slate-300 dark:border-slate-700">
       <Editor
         height={height}
         language={MONACO_LANG[language] || 'plaintext'}
-        theme="light"
+        theme={theme === 'dark' ? 'vs-dark' : 'light'}
         value={value}
         onChange={(v) => onChange(v ?? '')}
-        loading={<div className="p-4 text-sm text-slate-400">Loading editor…</div>}
+        loading={
+          <div className="p-4 text-sm text-slate-400 dark:text-slate-500">Loading editor…</div>
+        }
         options={{
           automaticLayout: true, // responsive: relayout on container resize
           minimap: { enabled: false },

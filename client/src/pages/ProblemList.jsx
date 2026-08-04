@@ -1,7 +1,10 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { api } from '../api/client.js';
 import { useCachedQuery, invalidate } from '../api/useCachedQuery.js';
 import { useAuth } from '../auth/AuthContext.jsx';
+import ConfirmDialog from '../components/ConfirmDialog.jsx';
 
 // Languages that have non-empty starter code for a problem.
 const startersFor = (p) =>
@@ -15,14 +18,24 @@ export default function ProblemList() {
   const { data, loading, error, refetch } = useCachedQuery('/problems');
   const problems = data?.problems ?? [];
 
-  async function onDelete(id) {
-    if (!window.confirm('Delete this problem?')) return;
+  const [pendingDelete, setPendingDelete] = useState(null); // problem being confirmed
+  const [deleting, setDeleting] = useState(false);
+
+  async function confirmDelete() {
+    const problem = pendingDelete;
+    setDeleting(true);
     try {
-      await api.delete(`/problems/${id}`);
+      const { data: res } = await api.delete(`/problems/${problem._id}`);
       invalidate('/problems');
       refetch();
+      setPendingDelete(null);
+      toast.success(
+        res.softDeleted ? 'Problem archived (it has existing submissions).' : 'Problem deleted.'
+      );
     } catch (err) {
-      alert(err.response?.data?.error || 'Delete failed');
+      toast.error(err.response?.data?.error || 'Delete failed');
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -37,10 +50,10 @@ export default function ProblemList() {
         )}
       </div>
 
-      {loading && <p className="text-slate-400">Loading…</p>}
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {loading && <p className="text-slate-400 dark:text-slate-500">Loading…</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       {!loading && problems.length === 0 && (
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-slate-400 dark:text-slate-500">
           No problems yet.{isTeacher && ' Create one to get started.'}
         </p>
       )}
@@ -52,18 +65,22 @@ export default function ProblemList() {
             <div
               key={p._id}
               className={`card flex items-start justify-between gap-4 ${
-                p.solved ? 'border-green-300 bg-green-50' : ''
+                p.solved
+                  ? 'border-green-300 bg-green-50 dark:border-green-900/60 dark:bg-green-950/30'
+                  : ''
               }`}
             >
               <div>
                 <h3 className="flex items-center gap-2 font-semibold">
                   {p.title}
                   {p.solved && (
-                    <span className="badge bg-green-100 text-green-700">Solved</span>
+                    <span className="badge bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400">
+                      Solved
+                    </span>
                   )}
                 </h3>
-                <p className="mt-1 text-sm text-slate-500">{p.description}</p>
-                <p className="mt-1 flex flex-wrap items-center gap-1 text-xs text-slate-400">
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{p.description}</p>
+                <p className="mt-1 flex flex-wrap items-center gap-1 text-xs text-slate-400 dark:text-slate-500">
                   <span>{p.testCases?.length || 0} test case(s)</span>
                   {startersFor(p).length > 0 && (
                     <>
@@ -88,8 +105,8 @@ export default function ProblemList() {
                       Edit
                     </Link>
                     <button
-                      className="btn-ghost btn-sm text-red-600"
-                      onClick={() => onDelete(p._id)}
+                      className="btn-ghost btn-sm text-red-600 dark:text-red-400"
+                      onClick={() => setPendingDelete(p)}
                     >
                       Delete
                     </button>
@@ -100,6 +117,21 @@ export default function ProblemList() {
           );
         })}
       </div>
+
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        onClose={() => !deleting && setPendingDelete(null)}
+        onConfirm={confirmDelete}
+        busy={deleting}
+        title="Delete problem?"
+        message={
+          <>
+            This will delete <strong>{pendingDelete?.title}</strong>. If students have already
+            submitted solutions, it will be archived instead so their history is preserved.
+          </>
+        }
+        confirmLabel="Delete"
+      />
     </div>
   );
 }

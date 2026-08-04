@@ -55,14 +55,14 @@ export default function Register() {
             <option value="teacher">Teacher</option>
           </select>
         </label>
-        {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+        {error && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
         <button className="btn w-full" disabled={busy}>
           {busy ? 'Creating…' : 'Register'}
         </button>
       </form>
-      <p className="mt-4 text-sm text-slate-500">
+      <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
         Have an account?{' '}
-        <Link className="font-medium text-slate-900" to="/login">
+        <Link className="font-medium text-slate-900 dark:text-slate-100" to="/login">
           Log in
         </Link>
       </p>

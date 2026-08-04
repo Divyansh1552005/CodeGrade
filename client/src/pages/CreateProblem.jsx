@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { api } from '../api/client.js';
 import { invalidate } from '../api/useCachedQuery.js';
 import { STARTER_TEMPLATES, LANGUAGE_LABELS } from '../data/starterTemplates.js';
@@ -11,8 +12,8 @@ const LANGUAGES = ['javascript', 'python', 'java', 'cpp'];
 const emptyStarter = () => ({ javascript: '', python: '', java: '', cpp: '' });
 
 const tabBase = 'rounded-md px-3 py-1 text-xs font-medium transition';
-const tabActive = `${tabBase} bg-slate-900 text-white`;
-const tabIdle = `${tabBase} text-slate-600 hover:bg-slate-100`;
+const tabActive = `${tabBase} bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900`;
+const tabIdle = `${tabBase} text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800`;
 
 export default function CreateProblem() {
   const { id } = useParams(); // present => edit mode
@@ -103,9 +104,12 @@ export default function CreateProblem() {
         await api.post('/problems', payload);
       }
       invalidate('/problems'); // so the list + Submit page refetch
+      toast.success(isEdit ? 'Problem updated.' : 'Problem created.');
       navigate('/problems');
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to save problem');
+      const msg = err.response?.data?.error || 'Failed to save problem';
+      setError(msg);
+      toast.error(msg);
     } finally {
       setBusy(false);
     }
@@ -165,8 +169,9 @@ export default function CreateProblem() {
 
         <div className="mb-4">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm font-medium text-slate-700">
-              Sample examples <span className="text-slate-400">(shown to students)</span>
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+              Sample examples{' '}
+              <span className="text-slate-400 dark:text-slate-500">(shown to students)</span>
             </span>
             <button type="button" className="btn-ghost btn-sm" onClick={addSample}>
               + Add example
@@ -174,14 +179,17 @@ export default function CreateProblem() {
           </div>
           <div className="space-y-3">
             {sampleCases.map((s, i) => (
-              <div key={i} className="rounded-lg border border-slate-200 p-3">
+              <div
+                key={i}
+                className="rounded-lg border border-slate-200 p-3 dark:border-slate-800"
+              >
                 <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                     Example {i + 1}
                   </span>
                   <button
                     type="button"
-                    className="btn-ghost btn-sm text-red-600"
+                    className="btn-ghost btn-sm text-red-600 dark:text-red-400"
                     onClick={() => removeSample(i)}
                     disabled={sampleCases.length === 1}
                     title="Remove"
@@ -249,14 +257,16 @@ export default function CreateProblem() {
             onChange={(v) => setLangCode(activeLang, v)}
             height="240px"
           />
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
             Optional {LANGUAGE_LABELS[activeLang]} starter code — leave blank if none.
           </p>
         </div>
 
         <div className="mb-4">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm font-medium text-slate-700">Test cases</span>
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+              Test cases
+            </span>
             <button type="button" className="btn-ghost btn-sm" onClick={addCase}>
               + Add test case
             </button>
@@ -280,7 +290,7 @@ export default function CreateProblem() {
                 />
                 <button
                   type="button"
-                  className="btn-ghost btn-sm text-red-600"
+                  className="btn-ghost btn-sm text-red-600 dark:text-red-400"
                   onClick={() => removeCase(i)}
                   disabled={testCases.length === 1}
                   title="Remove"
@@ -292,7 +302,7 @@ export default function CreateProblem() {
           </div>
         </div>
 
-        {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+        {error && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
         <button className="btn" disabled={busy}>
           {busy ? 'Saving…' : isEdit ? 'Save changes' : 'Create problem'}
         </button>

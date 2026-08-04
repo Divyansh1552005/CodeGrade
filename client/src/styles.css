@@ -1,5 +1,10 @@
 @import 'tailwindcss';
 
+/* Class-based dark mode: toggled via a `dark` class on <html> (see
+   theme/ThemeContext.jsx), rather than Tailwind v4's default media-query
+   variant, so the user's explicit choice always wins over OS preference. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* Minimal spacing for rendered markdown (no typography plugin needed). */
 .markdown > :first-child { margin-top: 0; }
 .markdown > :last-child { margin-bottom: 0; }
@@ -17,36 +22,46 @@
 .markdown th { background: #f8fafc; }
 .markdown hr { border: 0; border-top: 1px solid #e2e8f0; margin: 0.75rem 0; }
 
+.dark .markdown blockquote { border-left-color: #475569; color: #94a3b8; }
+.dark .markdown th, .dark .markdown td { border-color: #334155; }
+.dark .markdown th { background: #1e293b; }
+.dark .markdown hr { border-top-color: #334155; }
+
 /* A few tiny component classes layered on Tailwind to keep JSX readable. */
 @layer components {
   .btn {
     @apply inline-flex items-center justify-center rounded-md bg-slate-900 px-4 py-2
       text-sm font-medium text-white transition hover:bg-slate-700
-      disabled:cursor-not-allowed disabled:opacity-50;
+      disabled:cursor-not-allowed disabled:opacity-50
+      dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300;
   }
   .btn-ghost {
     @apply inline-flex items-center rounded-md px-3 py-1.5 text-sm font-medium
-      text-slate-600 transition hover:bg-slate-100;
+      text-slate-600 transition hover:bg-slate-100
+      dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200;
   }
   .btn-sm {
     @apply px-3 py-1 text-xs;
   }
   .card {
-    @apply rounded-xl border border-slate-200 bg-white p-6 shadow-sm;
+    @apply rounded-xl border border-slate-200 bg-white p-6 shadow-sm
+      dark:border-slate-800 dark:bg-slate-900;
   }
   .field {
-    @apply mb-4 flex flex-col gap-1 text-sm font-medium text-slate-700;
+    @apply mb-4 flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-300;
   }
   .input {
     @apply rounded-md border border-slate-300 px-3 py-2 text-sm font-normal
-      text-slate-900 outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500;
+      text-slate-900 outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500
+      dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100
+      dark:focus:border-slate-400 dark:focus:ring-slate-400;
   }
   .pill {
     @apply inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs
-      font-medium text-slate-600;
+      font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300;
   }
   .badge {
     @apply inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs
-      font-semibold text-slate-700;
+      font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300;
   }
 }

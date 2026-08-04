@@ -103,7 +103,10 @@ export default function SubmitCode() {
     <div className="card">
       {locked && (
         <div className="mb-3">
-          <Link to="/problems" className="text-sm text-slate-500 hover:text-slate-900">
+          <Link
+            to="/problems"
+            className="text-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+          >
             ← Back to problems
           </Link>
         </div>
@@ -111,14 +114,14 @@ export default function SubmitCode() {
       <h1 className="mb-4 text-xl font-semibold">
         {locked && selected ? selected.title : 'Submit Code'}
       </h1>
-      {loading && <p className="text-slate-400">Loading problems…</p>}
+      {loading && <p className="text-slate-400 dark:text-slate-500">Loading problems…</p>}
       {(error || loadError) && (
-        <p className="mb-3 text-sm text-red-600">{error || loadError}</p>
+        <p className="mb-3 text-sm text-red-600 dark:text-red-400">{error || loadError}</p>
       )}
-      {notFound && <p className="text-sm text-red-600">Problem not found.</p>}
+      {notFound && <p className="text-sm text-red-600 dark:text-red-400">Problem not found.</p>}
 
       {!locked && !loading && problems.length === 0 && (
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-slate-500 dark:text-slate-400">
           No problems are available to solve yet. Check back once a teacher adds one.
         </p>
       )}
@@ -184,14 +187,14 @@ export default function SubmitCode() {
 const PastSubmissions = memo(function PastSubmissions({ submissions }) {
   const [openId, setOpenId] = useState(null);
   return (
-    <div className="mt-6 border-t border-slate-200 pt-5">
+    <div className="mt-6 border-t border-slate-200 pt-5 dark:border-slate-800">
       <h2 className="mb-3 text-lg font-semibold">Your submissions</h2>
       <div className="space-y-2">
         {submissions.map((s) => {
           const solved = s.totalCount > 0 && s.passCount === s.totalCount;
           const open = openId === s._id;
           return (
-            <div key={s._id} className="rounded-lg border border-slate-200">
+            <div key={s._id} className="rounded-lg border border-slate-200 dark:border-slate-800">
               <button
                 type="button"
                 className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
@@ -199,21 +202,29 @@ const PastSubmissions = memo(function PastSubmissions({ submissions }) {
               >
                 <span className="flex items-center gap-2 text-sm">
                   <span
-                    className={`badge ${solved ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}
+                    className={`badge ${
+                      solved
+                        ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
+                        : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400'
+                    }`}
                   >
                     {s.passCount}/{s.totalCount}
                   </span>
                   <span className="pill">{LANGUAGE_LABELS[s.language] || s.language}</span>
-                  <span className="text-slate-400">
+                  <span className="text-slate-400 dark:text-slate-500">
                     {new Date(s.createdAt).toLocaleString()}
                   </span>
                 </span>
-                <span className="text-xs text-slate-400">{open ? 'Hide' : 'View'}</span>
+                <span className="text-xs text-slate-400 dark:text-slate-500">
+                  {open ? 'Hide' : 'View'}
+                </span>
               </button>
               {open && (
-                <div className="border-t border-slate-100 px-3 pb-3">
+                <div className="border-t border-slate-100 px-3 pb-3 dark:border-slate-800">
                   <div className="mt-3">
-                    <p className="mb-1 text-xs font-semibold text-slate-500">Submitted code</p>
+                    <p className="mb-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                      Submitted code
+                    </p>
                     <pre className="max-h-64 overflow-auto rounded-md bg-slate-900 p-3 text-xs text-slate-100">
                       {s.code}
                     </pre>
@@ -233,11 +244,15 @@ const Results = memo(function Results({ submission }) {
   const { passCount, totalCount, testResults, aiFeedback, status } = submission;
   const allPass = passCount === totalCount;
   return (
-    <div className="mt-6 border-t border-slate-200 pt-5">
+    <div className="mt-6 border-t border-slate-200 pt-5 dark:border-slate-800">
       <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">
         Results
         <span
-          className={`badge ${allPass ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}
+          className={`badge ${
+            allPass
+              ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
+              : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400'
+          }`}
         >
           {passCount}/{totalCount} passed
         </span>
@@ -246,7 +261,7 @@ const Results = memo(function Results({ submission }) {
 
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
-          <thead className="text-slate-500">
+          <thead className="text-slate-500 dark:text-slate-400">
             <tr>
               <th className="p-2">#</th>
               <th className="p-2">Input</th>
@@ -257,7 +272,7 @@ const Results = memo(function Results({ submission }) {
           </thead>
           <tbody>
             {testResults.map((r, i) => (
-              <tr key={i} className="border-t border-slate-100 align-top">
+              <tr key={i} className="border-t border-slate-100 align-top dark:border-slate-800">
                 <td className="p-2">{i + 1}</td>
                 <td className="p-2"><pre className="whitespace-pre-wrap">{r.input}</pre></td>
                 <td className="p-2"><pre className="whitespace-pre-wrap">{r.expectedOutput}</pre></td>
@@ -270,14 +285,14 @@ const Results = memo(function Results({ submission }) {
       </div>
 
       {aiFeedback ? (
-        <div className="mt-5 overflow-hidden rounded-xl border border-slate-200 bg-white">
-          <div className="flex items-center gap-2 border-b border-slate-100 bg-gradient-to-r from-indigo-50 to-slate-50 px-4 py-3">
-            <h3 className="font-semibold text-slate-800">AI Feedback</h3>
+        <div className="mt-5 overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex items-center gap-2 border-b border-slate-100 bg-gradient-to-r from-indigo-50 to-slate-50 px-4 py-3 dark:border-slate-800 dark:from-indigo-950/40 dark:to-slate-900">
+            <h3 className="font-semibold text-slate-800 dark:text-slate-100">AI Feedback</h3>
           </div>
 
           <div className="space-y-4 p-4">
             {/* Summary */}
-            <div className="rounded-lg bg-slate-50 p-3">
+            <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800">
               <Markdown>{aiFeedback.summary}</Markdown>
             </div>
 
@@ -299,9 +314,11 @@ const Results = memo(function Results({ submission }) {
 
             {/* Complexity */}
             {aiFeedback.complexityNote && (
-              <div className="flex flex-wrap items-baseline gap-2 rounded-lg border border-slate-200 px-3 py-2">
-                <span className="badge bg-indigo-100 text-indigo-700">Complexity</span>
-                <div className="text-sm text-slate-600">
+              <div className="flex flex-wrap items-baseline gap-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800">
+                <span className="badge bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400">
+                  Complexity
+                </span>
+                <div className="text-sm text-slate-600 dark:text-slate-400">
                   <Markdown>{aiFeedback.complexityNote}</Markdown>
                 </div>
               </div>
@@ -309,7 +326,7 @@ const Results = memo(function Results({ submission }) {
           </div>
         </div>
       ) : (
-        <p className="mt-4 text-sm text-slate-400">
+        <p className="mt-4 text-sm text-slate-400 dark:text-slate-500">
           AI feedback was not available for this submission.
         </p>
       )}
@@ -318,22 +335,26 @@ const Results = memo(function Results({ submission }) {
 });
 
 const TONES = {
-  green: 'border-green-200 bg-green-50',
-  amber: 'border-amber-200 bg-amber-50',
+  green: 'border-green-200 bg-green-50 dark:border-green-900/60 dark:bg-green-950/30',
+  amber: 'border-amber-200 bg-amber-50 dark:border-amber-900/60 dark:bg-amber-950/30',
 };
 
 function FeedbackList({ title, items, tone, empty }) {
   const list = Array.isArray(items) ? items.filter(Boolean) : [];
   return (
-    <div className={`rounded-lg border p-3 ${TONES[tone] || 'border-slate-200 bg-slate-50'}`}>
-      <h4 className="mb-2 text-sm font-semibold text-slate-700">{title}</h4>
+    <div
+      className={`rounded-lg border p-3 ${
+        TONES[tone] || 'border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800'
+      }`}
+    >
+      <h4 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">{title}</h4>
       {list.length === 0 ? (
-        <p className="text-sm text-slate-400">{empty}</p>
+        <p className="text-sm text-slate-400 dark:text-slate-500">{empty}</p>
       ) : (
         <ul className="space-y-1.5">
           {list.map((s, i) => (
-            <li key={i} className="flex gap-2 text-sm text-slate-700">
-              <span className="mt-1 text-slate-400">•</span>
+            <li key={i} className="flex gap-2 text-sm text-slate-700 dark:text-slate-300">
+              <span className="mt-1 text-slate-400 dark:text-slate-500">•</span>
               <div className="min-w-0 flex-1">
                 <Markdown>{s}</Markdown>
               </div>
