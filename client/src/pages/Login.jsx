@@ -77,9 +77,6 @@ export default function Login() {
           Register
         </Link>
       </motion.p>
-      <p className="mt-2 text-center text-xs text-slate-400 dark:text-slate-500">
-        Demo: teacher@demo.com / student@demo.com · password123
-      </p>
     </AuthCard>
   );
 }

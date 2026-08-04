@@ -4,6 +4,7 @@ import { Toaster } from 'react-hot-toast';
 import { AnimatePresence, motion } from 'framer-motion';
 import NavBar from '../components/NavBar.jsx';
 import LoadingSpinner from '../components/LoadingSpinner.jsx';
+import ColdStartNotice from '../components/ColdStartNotice.jsx';
 import { useTheme } from '../theme/ThemeContext.jsx';
 
 function Fallback() {
@@ -16,6 +17,7 @@ export default function RootLayout() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-100">
+      <ColdStartNotice />
       <NavBar />
       <main className="mx-auto max-w-4xl px-4 py-8">
         <Suspense fallback={<Fallback />}>
