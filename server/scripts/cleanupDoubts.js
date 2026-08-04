@@ -8,8 +8,7 @@ import Doubt from '../models/Doubt.js';
 import Answer from '../models/Answer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(__dirname, '../../.env') });
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 /**
  * One-off maintenance: remove leftover test doubts.

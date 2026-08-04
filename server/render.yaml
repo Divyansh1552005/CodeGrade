@@ -1,0 +1,56 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# Deploys just the backend (server/). The frontend goes to Vercel instead —
+# see the "Deployment" section in README.md for the full walkthrough.
+#
+# This file lives in server/ (not the repo root) since it only describes the
+# backend service. `rootDir` below is still relative to the repo root, not to
+# this file, so it stays `server` either way. Render's Blueprint auto-detect
+# looks for render.yaml at the repo root by default — if it doesn't pick this
+# up automatically, the Blueprint creation flow (dashboard → New → Blueprint)
+# lets you point it at a specific render.yaml path; use `server/render.yaml`.
+# Any env var below with `sync: false` is a secret Render will prompt you for
+# instead of reading from this file (never commit real secrets here).
+services:
+  - type: web
+    name: codegrade-api
+    runtime: node
+    rootDir: server
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_EXPIRY
+        value: 15m
+      - key: JWT_REFRESH_EXPIRY
+        value: 7d
+      - key: LLM_PROVIDER
+        value: gemini
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: llama-3.3-70b-versatile
+      - key: JUDGE0_API_URL
+        value: https://judge0-ce.p.rapidapi.com
+      - key: JUDGE0_API_KEY
+        sync: false
+      # Comma-separated list of allowed browser origins, `*` wildcard
+      # supported (e.g. "https://your-app.vercel.app,https://*.vercel.app"
+      # to also allow every preview deployment). REQUIRED in production —
+      # see the CORS note in server/app.js.
+      - key: CLIENT_ORIGIN
+        sync: false

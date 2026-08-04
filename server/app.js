@@ -9,16 +9,48 @@ import doubtRoutes from './routes/doubts.js';
 import answerRoutes from './routes/answers.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
+/**
+ * Build a CORS `origin` option from CLIENT_ORIGIN: a comma-separated list of
+ * allowed origins, each optionally containing `*` as a wildcard (e.g.
+ * "https://*.vercel.app" to cover every preview deployment alongside the
+ * production domain). Falls back to reflecting any origin when CLIENT_ORIGIN
+ * is unset, which matches same-origin dev (the Vite proxy) — but this must be
+ * set explicitly in production: credentialed CORS (cookies) with an
+ * unrestricted origin is not something to expose to the internet, only
+ * acceptable here as a permissive local-dev default.
+ */
+function buildCorsOrigin() {
+  const raw = process.env.CLIENT_ORIGIN;
+  if (!raw) return true;
+
+  const patterns = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map(
+      (pattern) =>
+        new RegExp(`^${pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`)
+    );
+
+  return (origin, callback) => {
+    // No Origin header (curl, server-to-server calls, same-origin) — allow.
+    if (!origin) return callback(null, true);
+    if (patterns.some((re) => re.test(origin))) return callback(null, true);
+    return callback(new Error(`CORS: origin ${origin} not allowed`));
+  };
+}
+
 /** Build the Express app (no DB connection here — see server.js / tests). */
 export function createApp() {
   const app = express();
 
+  // Behind Render's (or any) reverse proxy — affects req.ip/req.secure.
+  app.set('trust proxy', 1);
+
   // Credentialed CORS so the browser sends/receives the httpOnly refresh cookie.
-  // In dev the Vite proxy makes requests same-origin; CLIENT_ORIGIN covers a
-  // split-origin deployment.
   app.use(
     cors({
-      origin: process.env.CLIENT_ORIGIN || true,
+      origin: buildCorsOrigin(),
       credentials: true,
     })
   );

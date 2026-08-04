@@ -69,11 +69,14 @@ treated as the primary concern, on par with feature completeness.
 
 ### 1. Configure environment
 
-Copy `.env.example` to `.env` in the project root and fill in the values
-(MongoDB URI, Redis URL, JWT secrets, LLM provider key, Judge0 RapidAPI key).
+Copy `server/.env.example` to `server/.env` and fill in the values (MongoDB
+URI, Redis URL, JWT secrets, LLM provider key, Judge0 RapidAPI key). The
+frontend has its own, much smaller `client/.env.example` → `client/.env` —
+only needed if you want to point it at a non-default API URL (see
+`VITE_API_URL` below); local dev works without it.
 
-> The `.env` file is gitignored. **Never commit it.** Treat all keys as live
-> secrets — regenerate immediately if exposed.
+> Both `.env` files are gitignored. **Never commit them.** Treat all keys as
+> live secrets — regenerate immediately if exposed.
 
 ### 2. Backend
 
@@ -111,6 +114,101 @@ The test suite does **not** require a live Redis connection — rate limiting
 falls back to an in-memory limiter with the identical API when
 `NODE_ENV=test`, so `npm test` never touches the real Redis instance or its
 counters.
+
+---
+
+## Deployment — Vercel (frontend) + Render (backend)
+
+The frontend and backend deploy to two different domains, which has one real
+consequence worth understanding up front: **the refresh-token cookie is
+cross-site**. That's handled already (`utils/cookies.js` sets
+`SameSite=None; Secure` whenever `NODE_ENV=production`), but it only works if
+every piece below is wired up correctly — a mismatch in any one of these
+silently breaks login persistence (you'd see login work, but a page refresh
+logs you out, or the browser just never sends the cookie back).
+
+### 1. Backend → Render
+
+- New Web Service, root directory `server` (or use the included
+  `server/render.yaml` Blueprint — Render dashboard → New → Blueprint → point
+  at this repo; if it doesn't auto-detect the file since it's not at the repo
+  root, the Blueprint flow lets you specify the path: `server/render.yaml`).
+- Build command: `npm install`. Start command: `npm start`. Health check
+  path: `/health`.
+- Environment variables — everything in `server/.env.example`, plus:
+  - **`NODE_ENV=production`** — required; this is what flips the refresh
+    cookie to `Secure`/`SameSite=None`. Without it, the browser will accept
+    the cookie on login but silently refuse to send it back cross-site, and
+    the user gets logged out on every reload.
+  - **`CLIENT_ORIGIN`** — set to your Vercel URL(s), comma-separated, `*`
+    wildcard supported — e.g.
+    `https://your-app.vercel.app,https://*.vercel.app` (the wildcard form
+    covers every preview deployment too, not just production). **This is
+    required in production** — `app.js`'s CORS config only falls back to
+    "allow any origin" when `CLIENT_ORIGIN` is unset, which is a dev
+    convenience, not something you want facing the internet once cookies are
+    involved.
+  - `MONGODB_URI` / `REDIS_URL` — this project already uses hosted MongoDB
+    Atlas and a hosted Redis instance, both reachable from anywhere, so no
+    extra provisioning is needed here — just point at the same ones (or your
+    own).
+- Once deployed, note the service's URL (e.g. `https://codegrade-api.onrender.com`)
+  — the frontend needs it next.
+
+> Render's free tier spins a service down after inactivity; the first
+> request after idle can take ~30–60s to wake it up. Fine for a demo, worth
+> knowing so a "slow" first login isn't mistaken for a bug.
+
+### 2. Frontend → Vercel
+
+- New Project, **root directory `client`** (this matters — Vercel needs to
+  build from inside `client/`, not the repo root). Framework preset "Vite"
+  is auto-detected; build command `npm run build`, output directory `dist`
+  are the defaults and don't need overriding.
+- Environment variable: **`VITE_API_URL`** = the Render backend's full URL
+  from step 1, e.g. `https://codegrade-api.onrender.com` — **no trailing
+  slash, no `/api` suffix** (the `/api` prefix only exists in the local Vite
+  dev proxy, which strips it before forwarding; the deployed backend's
+  routes are mounted at the root, e.g. `/auth/login`).
+- `client/vercel.json` (already in the repo) adds the SPA rewrite Vercel
+  needs for client-side routing — without it, refreshing on any route other
+  than `/` (e.g. `/problems`) 404s, since Vercel would otherwise look for an
+  actual `/problems` file.
+- Deploy, note the resulting URL, and go back to Render to set `CLIENT_ORIGIN`
+  to it if you hadn't already (chicken-and-egg: you need the Vercel URL to
+  configure the backend, and Vercel doesn't need any backend config to
+  deploy first).
+
+### 3. Sanity-check the cross-site cookie
+
+After both are deployed: log in on the Vercel URL, open DevTools → Application
+→ Cookies, and confirm a `refreshToken` cookie exists **scoped to the Render
+domain**, with `Secure` and `SameSite=None` flags set. Then hard-refresh the
+page — you should stay logged in (the silent `/auth/refresh` call on load
+should succeed). If it doesn't:
+- Check `NODE_ENV=production` is actually set on Render (not just in the
+  Blueprint file — confirm it in the dashboard).
+- Check `CLIENT_ORIGIN` on Render matches the Vercel URL **exactly**
+  (scheme + host, no trailing slash) or matches your wildcard pattern.
+- Check `VITE_API_URL` on Vercel has no trailing slash and no `/api` suffix.
+- Both origins must be HTTPS — `Secure` cookies are refused over plain HTTP,
+  and both Vercel and Render serve HTTPS by default, so this should already
+  be true unless you're using a custom domain without TLS configured.
+
+### The security tradeoff, made explicit
+
+Cross-site cookies (`SameSite=None`) are inherently a step down from
+same-site (`SameSite=Lax`/`Strict`) — that's the "some security issues" that
+come with splitting frontend and backend across two domains instead of
+serving both from one. This is mitigated as much as it reasonably can be
+without collapsing back to a single domain: the cookie is still `httpOnly`
+(never readable by JS) and `Secure` (HTTPS-only), `CLIENT_ORIGIN` is an
+explicit allowlist rather than "allow everything," and refresh tokens are
+still rotated/hashed/reuse-detected exactly as described below. The
+alternative — same-site cookies — would require putting both behind one
+domain (e.g. Render serving the built frontend too, or a reverse proxy in
+front of both), which is a legitimate production hardening step if this ever
+needs to be more than a demo deployment.
 
 ---
 

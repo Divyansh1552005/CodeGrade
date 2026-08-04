@@ -4,6 +4,9 @@
   "description": "AI-Powered Code Grading & Doubt Resolution Portal — backend",
   "main": "server.js",
   "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",

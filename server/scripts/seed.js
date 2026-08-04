@@ -7,8 +7,7 @@ import User from '../models/User.js';
 import Problem from '../models/Problem.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(__dirname, '../../.env') });
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 /**
  * Seed a teacher, a student, and a couple of problems so the app is usable

@@ -4,11 +4,11 @@ import { fileURLToPath } from 'node:url';
 import { createApp } from './app.js';
 import { connectDB } from './config/db.js';
 
-// Load the root .env regardless of where `node` is invoked from, and fall back
-// to a local server/.env if one exists.
+// Load server/.env regardless of where `node` is invoked from (also covers
+// running `node server.js` from inside server/, where this is a no-op on top
+// of dotenv's own cwd-relative default).
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '.env') });
 
 const PORT = process.env.PORT || 5000;
 
