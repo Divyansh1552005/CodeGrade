@@ -61,7 +61,7 @@ export default function ColdStartNotice() {
               type="button"
               onClick={dismiss}
               aria-label="Dismiss"
-              className="absolute left-3 top-3 flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+              className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full bg-red-600 text-white transition hover:bg-red-500"
             >
               <CrossIcon />
             </button>
@@ -74,6 +74,17 @@ export default function ColdStartNotice() {
               a period of inactivity. If things feel slow or a login fails on the
               first try, open the link below in a new tab to cold-start it
               (~30–60s), then come back here and try again.
+            </p>
+            <p className="mt-3 text-sm text-slate-600 dark:text-slate-400">
+              When it wakes up, the tab will show something like{' '}
+              <code className="rounded bg-slate-100 px-1 py-0.5 text-xs dark:bg-slate-800">
+                {'{"error":"Not found"}'}
+              </code>{' '}
+              — that's expected, not a failure. The backend is an API only, with no
+              page at its root URL, so a plain browser visit just hits its 404
+              handler. Seeing that JSON (instead of a timeout or a connection error)
+              is actually the confirmation you want: the server is awake and
+              responding correctly.
             </p>
             <a
               href={RENDER_URL}
