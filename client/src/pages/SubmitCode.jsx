@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { api } from '../api/client.js';
 import { useCachedQuery, invalidate } from '../api/useCachedQuery.js';
 import Markdown from '../components/Markdown.jsx';
@@ -83,7 +84,9 @@ export default function SubmitCode() {
   async function onSubmit(e) {
     e.preventDefault();
     if (!code.trim()) {
-      setError('Code cannot be empty.');
+      const msg = 'Code cannot be empty.';
+      setError(msg);
+      toast.error(msg);
       return;
     }
     setError('');
@@ -95,7 +98,11 @@ export default function SubmitCode() {
       loadSubmissions(problemId); // refresh the history
       invalidate('/problems'); // so the "Solved" badge updates on the list
     } catch (err) {
-      setError(err.response?.data?.error || 'Submission failed');
+      // Covers rate-limit responses (429, e.g. "You can submit once per
+      // minute — try again in 43s.") the same way as any other failure.
+      const msg = err.response?.data?.error || 'Submission failed';
+      setError(msg);
+      toast.error(msg);
     } finally {
       setBusy(false);
     }
@@ -173,10 +180,15 @@ export default function SubmitCode() {
           <CodeEditor language={language} value={code} onChange={setCode} height="400px" />
         </div>
 
-        <button className="btn flex items-center gap-2" disabled={busy || !problemId}>
-          {busy && <Spinner />}
-          {busy ? 'Running…' : 'Run & Grade'}
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button className="btn flex items-center gap-2" disabled={busy || !problemId}>
+            {busy && <Spinner />}
+            {busy ? 'Running…' : 'Run & Grade'}
+          </button>
+          <span className="text-xs text-slate-400 dark:text-slate-500">
+            Limit: 2 submissions/minute, 20/day.
+          </span>
+        </div>
       </form>
 
       {result && <Results submission={result} />}

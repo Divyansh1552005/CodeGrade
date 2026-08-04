@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
+import { generalRateLimit } from './rateLimit.js';
 
 /**
  * Verify the access JWT and attach the authenticated user to req.user.
@@ -7,8 +8,12 @@ import User from '../models/User.js';
  * header (held in client memory). The refresh token — the long-lived secret —
  * is the only thing kept in an httpOnly cookie.
  * Rejects with 401 if the token is missing or invalid.
+ *
+ * Also applies the basic per-user rate limit (see rateLimit.js) here rather
+ * than per-route, so every protected route gets it automatically.
  */
 export async function requireAuth(req, res, next) {
+  let user;
   try {
     const [scheme, headerToken] = (req.headers.authorization || '').split(' ');
     const token = scheme === 'Bearer' ? headerToken : null;
@@ -18,14 +23,16 @@ export async function requireAuth(req, res, next) {
     }
 
     const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
-    const user = await User.findById(payload.sub).select('-passwordHash');
+    user = await User.findById(payload.sub).select('-passwordHash');
     if (!user) {
       return res.status(401).json({ error: 'User no longer exists' });
     }
-
-    req.user = user;
-    return next();
   } catch (err) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
+
+  req.user = user;
+  // Outside the try/catch above: a rate-limit rejection or store error must
+  // not be swallowed and reported back as a misleading 401.
+  return generalRateLimit(req, res, next);
 }

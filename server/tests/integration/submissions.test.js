@@ -145,4 +145,34 @@ describe('POST /submissions', () => {
       .send({ problemId: 'x', code: 'y', language: 'python' });
     expect(res.status).toBe(401);
   });
+
+  it('allows 2 submissions within a minute but rate-limits the 3rd (429)', async () => {
+    const token = await registerStudent();
+    const problem = await Problem.create({
+      title: 'RateLimited',
+      testCases: [{ input: '2', expectedOutput: '4' }],
+    });
+    post
+      .mockResolvedValueOnce({ data: { stdout: b64('4\n'), status: { id: 3 } } })
+      .mockResolvedValueOnce({ data: { stdout: b64('4\n'), status: { id: 3 } } });
+
+    const submit = () =>
+      request(app)
+        .post('/submissions')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ problemId: problem._id.toString(), code: 'print(4)', language: 'python' });
+
+    const first = await submit();
+    expect(first.status).toBe(201);
+
+    const second = await submit();
+    expect(second.status).toBe(201);
+
+    const third = await submit();
+    expect(third.status).toBe(429);
+    expect(third.body.error).toMatch(/twice per minute/i);
+    expect(third.headers['retry-after']).toBeDefined();
+    // The 3rd request never reached Judge0 at all.
+    expect(post).toHaveBeenCalledTimes(2);
+  });
 });

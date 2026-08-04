@@ -58,6 +58,12 @@ export default function ProblemList() {
         )}
       </div>
 
+      {!isTeacher && (
+        <p className="mb-4 text-xs text-slate-400 dark:text-slate-500">
+          Submissions are limited to 2 per minute and 20 per day.
+        </p>
+      )}
+
       <TopicFilter
         selected={selectedTopics}
         onChange={setSelectedTopics}

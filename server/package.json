@@ -28,9 +28,11 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "ioredis": "^6.0.0",
     "jsonwebtoken": "^9.0.2",
     "langchain": "^0.3.15",
     "mongoose": "^8.9.5",
+    "rate-limiter-flexible": "^11.2.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {

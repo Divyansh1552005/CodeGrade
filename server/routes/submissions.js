@@ -5,6 +5,11 @@ import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roleGuard.js';
 import { validate } from '../middleware/validate.js';
 import { httpError } from '../middleware/errorHandler.js';
+import {
+  rateLimit,
+  submissionMinuteLimiter,
+  submissionDailyLimiter,
+} from '../middleware/rateLimit.js';
 import { gradeSubmission } from '../services/gradingService.js';
 import { generateFeedback } from '../services/aiFeedbackChain.js';
 import { assertRunnable } from '../services/judge0Client.js';
@@ -16,10 +21,22 @@ const router = Router();
 // grading. The problem is language-agnostic; the STUDENT picks the language.
 // Shape (ids/types/language allowlist/code length) is validated by zod;
 // domain checks (problem exists, isn't archived) stay here.
+//
+// Rate-limited on top of the general per-user limit in requireAuth: at most
+// two submissions per minute, and 20 per rolling 24h, per student. The minute
+// check runs first so a within-cooldown resubmit never spends a daily point.
 router.post(
   '/',
   requireAuth,
   requireRole('student'),
+  rateLimit(
+    submissionMinuteLimiter,
+    (retry) => `You can submit at most twice per minute — try again in ${retry}.`
+  ),
+  rateLimit(
+    submissionDailyLimiter,
+    (retry) => `You've reached today's limit of 20 submissions — try again in ${retry}.`
+  ),
   validate(createSubmissionSchema),
   async (req, res, next) => {
     try {
