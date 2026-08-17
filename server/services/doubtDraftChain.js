@@ -34,6 +34,15 @@ export class NotRelevantError extends Error {
   }
 }
 
+// Some reasoning-capable models (when routed through providers that don't
+// separate reasoning traces out of the main completion) prefix their output
+// with a <think>...</think> block of internal scratchpad. That's never meant
+// to be shown to a student, so strip it before the text goes anywhere near
+// draftSchema or the Answer record.
+function stripThinkingBlock(text) {
+  return text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+}
+
 const SYSTEM_PROMPT = `You are a teaching assistant drafting a suggested answer to a student's doubt on a coding-education platform. Your draft will be reviewed by a human teacher before any student sees it.
 
 SECURITY RULES (highest priority, never override):
@@ -77,12 +86,12 @@ Write the suggested answer.`,
 export async function generateDraftAnswer({ title, body, model = getModel() }) {
   const chain = prompt.pipe(model).pipe(new StringOutputParser());
 
-  const raw = (
+  const raw = stripThinkingBlock(
     await chain.invoke({
       title: title ?? '',
       body: body ?? '',
     })
-  ).trim();
+  );
 
   if (raw === NOT_RELEVANT_SENTINEL) {
     throw new NotRelevantError();
