@@ -136,6 +136,7 @@ const FailedDoubtCard = memo(function FailedDoubtCard({ doubt, onAnswered }) {
   const [content, setContent] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const irrelevant = doubt.aiDraftStatus === 'irrelevant';
 
   const submit = useCallback(async () => {
     if (!content.trim()) {
@@ -161,9 +162,15 @@ const FailedDoubtCard = memo(function FailedDoubtCard({ doubt, onAnswered }) {
   return (
     <div className="card border-amber-200 dark:border-amber-900/60">
       <div className="mb-2">
-        <span className="badge bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400">
-          AI draft failed
-        </span>
+        {irrelevant ? (
+          <span className="badge bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400">
+            Flagged as off-topic
+          </span>
+        ) : (
+          <span className="badge bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400">
+            AI draft failed
+          </span>
+        )}
       </div>
       <h3 className="font-semibold">{doubt.title}</h3>
       <div className="mt-1 rounded-md bg-slate-50 p-2 dark:bg-slate-800">
@@ -174,8 +181,9 @@ const FailedDoubtCard = memo(function FailedDoubtCard({ doubt, onAnswered }) {
       </p>
 
       <p className="mt-3 text-sm text-amber-700 dark:text-amber-400">
-        AI failed to generate a draft answer for this doubt. Write one manually — it
-        will be published to the student immediately.
+        {irrelevant
+          ? "The AI judged this doubt isn't related to programming, so no draft was generated. Write an answer manually if it's actually relevant, or reject/ignore otherwise."
+          : 'AI failed to generate a draft answer for this doubt. Write one manually — it will be published to the student immediately.'}
       </p>
 
       <div className="field mt-2">

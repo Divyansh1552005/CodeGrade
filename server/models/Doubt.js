@@ -12,7 +12,7 @@ const doubtSchema = new mongoose.Schema(
     // Tracks the outcome of the AI draft generation for this doubt.
     aiDraftStatus: {
       type: String,
-      enum: ['pending', 'success', 'failed'],
+      enum: ['pending', 'success', 'failed', 'irrelevant'],
       default: 'pending',
     },
   },

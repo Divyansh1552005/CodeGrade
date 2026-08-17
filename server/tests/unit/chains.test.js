@@ -2,7 +2,12 @@ import { describe, it, expect } from '@jest/globals';
 import { RunnableLambda } from '@langchain/core/runnables';
 import { AIMessage } from '@langchain/core/messages';
 import { generateFeedback, feedbackSchema } from '../../services/aiFeedbackChain.js';
-import { generateDraftAnswer, draftSchema } from '../../services/doubtDraftChain.js';
+import {
+  generateDraftAnswer,
+  draftSchema,
+  NOT_RELEVANT_SENTINEL,
+  NotRelevantError,
+} from '../../services/doubtDraftChain.js';
 
 /**
  * A fake chat model whose withStructuredOutput() returns a Runnable that always
@@ -74,6 +79,13 @@ describe('doubtDraftChain', () => {
   it('rejects an empty draft', async () => {
     const model = fakeChat('   ');
     await expect(generateDraftAnswer({ title: 'q', body: 'b', model })).rejects.toThrow();
+  });
+
+  it('throws NotRelevantError when the model flags the doubt as off-topic', async () => {
+    const model = fakeChat(NOT_RELEVANT_SENTINEL);
+    await expect(
+      generateDraftAnswer({ title: 'How to cook Maggi', body: 'boil water...', model })
+    ).rejects.toThrow(NotRelevantError);
   });
 
   it('strips any privileged field the model tries to inject (state/role)', () => {

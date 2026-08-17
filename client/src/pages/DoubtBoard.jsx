@@ -19,6 +19,11 @@ function statusFor(doubt) {
       label: 'approved',
       cls: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400',
     };
+  if (doubt.aiDraftStatus === 'irrelevant')
+    return {
+      label: 'flagged as off-topic',
+      cls: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400',
+    };
   if (doubt.aiDraftStatus === 'failed')
     return {
       label: 'awaiting teacher response',

@@ -5,7 +5,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roleGuard.js';
 import { validate } from '../middleware/validate.js';
 import { httpError } from '../middleware/errorHandler.js';
-import { generateDraftAnswer } from '../services/doubtDraftChain.js';
+import { generateDraftAnswer, NotRelevantError } from '../services/doubtDraftChain.js';
 import { createDoubtSchema } from '../validation/schemas.js';
 
 const router = Router();
@@ -18,9 +18,11 @@ const router = Router();
  * The LLM ONLY returns a content string; our code is the sole writer of `state`.
  * On success we create the answer directly as 'pending' (a valid initial state
  * in the model's state machine) — done in one write so an observer never sees a
- * transient 'draft'. On ANY failure (throw, timeout, or Zod schema rejection
- * inside generateDraftAnswer) we create NO broken Answer, mark the doubt
- * 'failed', and log — a teacher can then answer it manually.
+ * transient 'draft'. If the doubt isn't a programming question, the chain
+ * throws NotRelevantError and we mark the doubt 'irrelevant' with no Answer —
+ * distinct from a genuine AI failure. On any OTHER failure (throw, timeout, or
+ * Zod schema rejection inside generateDraftAnswer) we create NO broken Answer,
+ * mark the doubt 'failed', and log — a teacher can then answer it manually.
  *
  * Never throws: safe to call fire-and-forget.
  */
@@ -36,9 +38,15 @@ export async function processDoubtDraft(doubtId, { title, body }) {
 
     await Doubt.findByIdAndUpdate(doubtId, { aiDraftStatus: 'success' });
   } catch (aiErr) {
-    console.error(`AI draft failed for doubt ${doubtId}:`, aiErr.message);
     // Defensive: ensure no half-written Answer lingers for this doubt.
     await Answer.deleteMany({ doubtId });
+
+    if (aiErr instanceof NotRelevantError) {
+      await Doubt.findByIdAndUpdate(doubtId, { aiDraftStatus: 'irrelevant' });
+      return;
+    }
+
+    console.error(`AI draft failed for doubt ${doubtId}:`, aiErr.message);
     await Doubt.findByIdAndUpdate(doubtId, { aiDraftStatus: 'failed' });
   }
 }
@@ -100,12 +108,13 @@ router.get('/', requireAuth, async (req, res, next) => {
   }
 });
 
-// GET /doubts/failed  — teacher-only: doubts whose AI draft failed and that do
-// not yet have any answer, so they need a manual answer. (Declared before the
-// '/:id' route so it isn't captured as an id.)
+// GET /doubts/failed  — teacher-only: doubts with no AI-drafted answer (either
+// a genuine AI failure, or the doubt was judged off-topic/non-programming)
+// that do not yet have any answer, so they need a manual decision. (Declared
+// before the '/:id' route so it isn't captured as an id.)
 router.get('/failed', requireAuth, requireRole('teacher'), async (_req, res, next) => {
   try {
-    const failed = await Doubt.find({ aiDraftStatus: 'failed' })
+    const failed = await Doubt.find({ aiDraftStatus: { $in: ['failed', 'irrelevant'] } })
       .sort({ createdAt: -1 })
       .populate('studentId', 'name');
 

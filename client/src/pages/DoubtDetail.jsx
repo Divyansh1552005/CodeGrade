@@ -39,6 +39,7 @@ export default function DoubtDetail() {
   if (!doubt) return null;
 
   const failed = doubt.aiDraftStatus === 'failed';
+  const irrelevant = doubt.aiDraftStatus === 'irrelevant';
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
@@ -85,7 +86,12 @@ export default function DoubtDetail() {
         </div>
       ) : (
         <div className="card">
-          {failed ? (
+          {irrelevant ? (
+            <p className="text-sm text-purple-700 dark:text-purple-400">
+              This doesn't look like a programming question, so no AI draft was generated —
+              a teacher can still answer it manually.
+            </p>
+          ) : failed ? (
             <p className="text-sm text-amber-700 dark:text-amber-400">
               AI failed to generate a draft answer — awaiting a manual answer from a teacher.
             </p>

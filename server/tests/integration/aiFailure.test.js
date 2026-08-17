@@ -6,7 +6,11 @@ const svc = (p) => new URL(`../../services/${p}`, import.meta.url).pathname;
 // The doubt-draft chain is mocked to THROW, simulating an LLM failure / timeout
 // / schema-validation error.
 const generateDraftAnswer = jest.fn();
-jest.unstable_mockModule(svc('doubtDraftChain.js'), () => ({ generateDraftAnswer }));
+class NotRelevantError extends Error {}
+jest.unstable_mockModule(svc('doubtDraftChain.js'), () => ({
+  generateDraftAnswer,
+  NotRelevantError,
+}));
 
 const { createApp } = await import('../../app.js');
 const Doubt = (await import('../../models/Doubt.js')).default;
@@ -74,6 +78,27 @@ describe('AI draft failure handling', () => {
     const answer = await Answer.findOne({ doubtId: res.body.doubt._id });
     expect(answer.source).toBe('ai');
     expect(answer.state).toBe('pending');
+  });
+
+  it('marks aiDraftStatus "irrelevant" and creates NO Answer when the doubt is off-topic', async () => {
+    generateDraftAnswer.mockRejectedValue(new NotRelevantError());
+
+    const res = await request(app)
+      .post('/doubts')
+      .set('Authorization', `Bearer ${studentToken}`)
+      .send({ title: 'How to cook Maggi', body: 'boil water, add noodles...' });
+
+    expect(res.status).toBe(201);
+    await waitForStatus(res.body.doubt._id, 'irrelevant');
+
+    const answers = await Answer.find({ doubtId: res.body.doubt._id });
+    expect(answers).toHaveLength(0);
+
+    // Surfaced to the teacher queue alongside genuine AI failures.
+    const queue = await request(app)
+      .get('/doubts/failed')
+      .set('Authorization', `Bearer ${teacherToken}`);
+    expect(queue.body.doubts.map((d) => d._id)).toContain(res.body.doubt._id);
   });
 
   it('lists failed doubts for the teacher via GET /doubts/failed', async () => {

@@ -7,6 +7,7 @@ jest.unstable_mockModule(svc('doubtDraftChain.js'), () => ({
   generateDraftAnswer: jest.fn(async () => ({
     draftAnswer: 'Consider using a hash map for O(n) lookups.',
   })),
+  NotRelevantError: class NotRelevantError extends Error {},
 }));
 
 const { createApp } = await import('../../app.js');
