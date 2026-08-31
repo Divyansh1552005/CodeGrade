@@ -99,6 +99,9 @@ answerSchema.set('toJSON', {
   },
 });
 
+// Speeds up GET /answers?state=pending (the teacher review queue).
+answerSchema.index({ state: 1 });
+
 const Answer = mongoose.model('Answer', answerSchema);
 
 export { ALLOWED_TRANSITIONS };

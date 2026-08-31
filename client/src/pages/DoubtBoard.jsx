@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { Link } from 'react-router-dom';
-import { useCachedQuery } from '../api/useCachedQuery.js';
+import { usePaginatedQuery } from '../api/usePaginatedQuery.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import LoadingSpinner from '../components/LoadingSpinner.jsx';
 
@@ -35,8 +35,14 @@ function statusFor(doubt) {
 export default function DoubtBoard() {
   const { user } = useAuth();
   const isStudent = user.role === 'student';
-  const { data, loading, error } = useCachedQuery('/doubts');
-  const doubts = data?.doubts ?? [];
+  const {
+    items: doubts,
+    loading,
+    loadingMore,
+    hasMore,
+    error,
+    loadMore,
+  } = usePaginatedQuery('/doubts', 'doubts');
 
   return (
     <div>
@@ -60,6 +66,14 @@ export default function DoubtBoard() {
           <DoubtRow key={d._id} doubt={d} />
         ))}
       </div>
+
+      {hasMore && (
+        <div className="mt-4 flex justify-center">
+          <button className="btn-ghost btn-sm" onClick={loadMore} disabled={loadingMore}>
+            {loadingMore ? 'Loading…' : 'Load more'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

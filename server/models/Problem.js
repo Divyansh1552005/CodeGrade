@@ -55,4 +55,7 @@ const problemSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Speeds up the topics=a,b filter on GET /problems.
+problemSchema.index({ topics: 1 });
+
 export default mongoose.model('Problem', problemSchema);

@@ -7,6 +7,9 @@ import { validate } from '../middleware/validate.js';
 import { httpError } from '../middleware/errorHandler.js';
 import { TOPICS } from '../constants/topics.js';
 import { createProblemSchema, patchProblemSchema } from '../validation/schemas.js';
+import { decodeCursor, encodeCursor, cursorFilter } from '../utils/pagination.js';
+
+const MAX_PAGE_LIMIT = 100;
 
 const router = Router();
 
@@ -39,15 +42,19 @@ router.get('/stats/counts', requireAuth, async (_req, res, next) => {
   }
 });
 
-// GET /problems[?topics=a,b]  — list all (non-archived) problems; any
-// authenticated user. `topics` is a comma-separated OR filter: a problem
-// matches if it has at least one of the given topics.
+// GET /problems[?topics=a,b][&limit=20&cursor=...]  — list all (non-archived)
+// problems; any authenticated user. `topics` is a comma-separated OR filter: a
+// problem matches if it has at least one of the given topics.
 // Each problem is annotated with a stable `number` ("Problem 1", "Problem 2",
 // ...) ranked by creation order across ALL non-archived problems — so a
 // problem's number never shifts when a topic filter is applied or the sort
-// order changes, and stays stable as new problems are added after it.
+// order changes, and stays stable as new problems are added after it. This
+// numbering is computed over every non-archived problem regardless of paging.
 // For students, each problem is also annotated with `solved` = they have a
 // graded submission that passed every test case.
+// Pagination is opt-in: pass `limit` to get a page back (cursor-based, sorted
+// by createdAt/_id descending — cheaper at scale than offset/skip) plus a
+// `nextCursor` to fetch the next page; omit it to get the full list as before.
 router.get('/', requireAuth, async (req, res, next) => {
   try {
     const filter = { archived: { $ne: true } };
@@ -65,7 +72,23 @@ router.get('/', requireAuth, async (req, res, next) => {
       .lean();
     const numberOf = new Map(allIds.map((p, i) => [String(p._id), i + 1]));
 
-    const problems = await Problem.find(filter).sort({ createdAt: -1 }).lean();
+    let query = Problem.find(filter).sort({ createdAt: -1, _id: -1 });
+
+    const limit = req.query.limit ? Math.min(Number(req.query.limit) || 0, MAX_PAGE_LIMIT) : null;
+    let nextCursor = null;
+    if (limit) {
+      const cursor = decodeCursor(req.query.cursor);
+      if (cursor) query = query.where(cursorFilter(cursor));
+      query = query.limit(limit + 1);
+    }
+
+    const problems = await query.lean();
+
+    if (limit && problems.length > limit) {
+      nextCursor = encodeCursor(problems[limit - 1]);
+      problems.length = limit;
+    }
+
     for (const p of problems) p.number = numberOf.get(String(p._id));
 
     if (req.user.role === 'student') {
@@ -83,7 +106,12 @@ router.get('/', requireAuth, async (req, res, next) => {
       for (const p of problems) p.solved = solved.has(String(p._id));
     }
 
-    res.json({ problems });
+    const body = { problems };
+    if (limit) {
+      body.nextCursor = nextCursor;
+      body.hasMore = Boolean(nextCursor);
+    }
+    res.json(body);
   } catch (err) {
     next(err);
   }

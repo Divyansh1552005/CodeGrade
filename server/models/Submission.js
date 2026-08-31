@@ -48,4 +48,8 @@ const submissionSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Speeds up "this student's submissions for this problem" lookups (solved
+// badges, submission history) — the dominant query shape on this collection.
+submissionSchema.index({ studentId: 1, problemId: 1 });
+
 export default mongoose.model('Submission', submissionSchema);

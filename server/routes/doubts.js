@@ -7,6 +7,9 @@ import { validate } from '../middleware/validate.js';
 import { httpError } from '../middleware/errorHandler.js';
 import { generateDraftAnswer, NotRelevantError } from '../services/doubtDraftChain.js';
 import { createDoubtSchema } from '../validation/schemas.js';
+import { decodeCursor, encodeCursor, cursorFilter } from '../utils/pagination.js';
+
+const MAX_PAGE_LIMIT = 100;
 
 const router = Router();
 
@@ -83,17 +86,33 @@ router.post(
   }
 );
 
-// GET /doubts[?mine=1]  — shared board (list), or (with `mine`) just the
-// requesting user's own doubts — used by the profile page. Each doubt is
-// annotated with `hasApprovedAnswer` so the list can render a status badge
-// without N+1 calls.
+// GET /doubts[?mine=1][&limit=20&cursor=...]  — shared board (list), or (with
+// `mine`) just the requesting user's own doubts — used by the profile page.
+// Each doubt is annotated with `hasApprovedAnswer` so the list can render a
+// status badge without N+1 calls.
+// Pagination is opt-in: pass `limit` to get a page back (cursor-based, sorted
+// by createdAt/_id descending) plus a `nextCursor` to fetch the next page;
+// omit it to get the full list as before.
 router.get('/', requireAuth, async (req, res, next) => {
   try {
     const filter = req.query.mine ? { studentId: req.user._id } : {};
-    const doubts = await Doubt.find(filter)
-      .sort({ createdAt: -1 })
-      .populate('studentId', 'name')
-      .lean();
+
+    let query = Doubt.find(filter).sort({ createdAt: -1, _id: -1 });
+
+    const limit = req.query.limit ? Math.min(Number(req.query.limit) || 0, MAX_PAGE_LIMIT) : null;
+    let nextCursor = null;
+    if (limit) {
+      const cursor = decodeCursor(req.query.cursor);
+      if (cursor) query = query.where(cursorFilter(cursor));
+      query = query.limit(limit + 1);
+    }
+
+    const doubts = await query.populate('studentId', 'name').lean();
+
+    if (limit && doubts.length > limit) {
+      nextCursor = encodeCursor(doubts[limit - 1]);
+      doubts.length = limit;
+    }
 
     const approvedIds = await Answer.find({
       doubtId: { $in: doubts.map((d) => d._id) },
@@ -102,7 +121,13 @@ router.get('/', requireAuth, async (req, res, next) => {
     const approved = new Set(approvedIds.map(String));
 
     for (const d of doubts) d.hasApprovedAnswer = approved.has(String(d._id));
-    res.json({ doubts });
+
+    const body = { doubts };
+    if (limit) {
+      body.nextCursor = nextCursor;
+      body.hasMore = Boolean(nextCursor);
+    }
+    res.json(body);
   } catch (err) {
     next(err);
   }

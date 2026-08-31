@@ -5,6 +5,7 @@ import mongoose from 'mongoose';
  * revoked. The raw token is only ever returned to the client once, at issue
  * time; we keep only its SHA-256 hash.
  */
+ 
 const refreshTokenSchema = new mongoose.Schema(
   {
     userId: {

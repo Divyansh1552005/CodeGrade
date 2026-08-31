@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { api } from '../api/client.js';
-import { useCachedQuery, invalidate } from '../api/useCachedQuery.js';
+import { useCachedQuery } from '../api/useCachedQuery.js';
+import { usePaginatedQuery } from '../api/usePaginatedQuery.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import TopicFilter from '../components/TopicFilter.jsx';
@@ -15,9 +16,16 @@ export default function ProblemList() {
   const query = selectedTopics.length
     ? `/problems?topics=${selectedTopics.map(encodeURIComponent).join(',')}`
     : '/problems';
-  const { data, loading, error, refetch } = useCachedQuery(query);
+  const {
+    items: problems,
+    loading,
+    loadingMore,
+    hasMore,
+    error,
+    loadMore,
+    refetch,
+  } = usePaginatedQuery(query, 'problems');
   const { data: stats } = useCachedQuery('/problems/stats/counts');
-  const problems = useMemo(() => data?.problems ?? [], [data]);
 
   const [pendingDelete, setPendingDelete] = useState(null); // problem being confirmed
   const [deleting, setDeleting] = useState(false);
@@ -27,7 +35,6 @@ export default function ProblemList() {
     setDeleting(true);
     try {
       const { data: res } = await api.delete(`/problems/${problem._id}`);
-      invalidate('/problems');
       refetch();
       setPendingDelete(null);
       toast.success(
@@ -142,6 +149,14 @@ export default function ProblemList() {
           );
         })}
       </div>
+
+      {hasMore && (
+        <div className="mt-4 flex justify-center">
+          <button className="btn-ghost btn-sm" onClick={loadMore} disabled={loadingMore}>
+            {loadingMore ? 'Loading…' : 'Load more'}
+          </button>
+        </div>
+      )}
 
       <ConfirmDialog
         open={Boolean(pendingDelete)}
