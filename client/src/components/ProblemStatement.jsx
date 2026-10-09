@@ -13,6 +13,7 @@ export default function ProblemStatement({ problem }) {
 
   return (
     <div className="mb-5 space-y-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4 dark:border-slate-800 dark:bg-slate-900/40">
+      <p className="text-sm capitalize">{problem.difficulty || 'easy'} · {{ easy: 100, medium: 200, hard: 300 }[problem.difficulty || 'easy']} XP for your first solve</p>
       {problem.topics?.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {problem.topics.map((topic) => (

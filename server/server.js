@@ -4,6 +4,10 @@ import { fileURLToPath } from 'node:url';
 import { createApp } from './app.js';
 import WorkItem from './models/WorkItem.js';
 import StudentStats from './models/StudentStats.js';
+import UserStats from './models/UserStats.js';
+import Badge from './models/Badge.js';
+import UserBadge from './models/UserBadge.js';
+import GamificationEvent from './models/GamificationEvent.js';
 import Notification from './models/Notification.js';
 import Answer from './models/Answer.js';
 import Problem from './models/Problem.js';
@@ -19,7 +23,7 @@ const PORT = process.env.PORT || 5000;
 
 async function main() {
   await connectDB();
-  await Promise.all([WorkItem.init(), Answer.init(), Problem.init(), StudentStats.init(), Notification.init()]);
+  await Promise.all([WorkItem.init(), Answer.init(), Problem.init(), StudentStats.init(), Notification.init(), UserStats.init(), Badge.init(), UserBadge.init(), GamificationEvent.init()]);
   const app = createApp();
   app.listen(PORT, () => {
     console.log(`API listening on http://localhost:${PORT}`);

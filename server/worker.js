@@ -4,10 +4,15 @@ import mongoose from 'mongoose';
 import { Queue, Worker } from 'bullmq';
 import WorkItem from './models/WorkItem.js';
 import StudentStats from './models/StudentStats.js';
+import UserStats from './models/UserStats.js';
+import Badge from './models/Badge.js';
+import UserBadge from './models/UserBadge.js';
+import GamificationEvent from './models/GamificationEvent.js';
 import Notification from './models/Notification.js';
 import { connectDB } from './config/db.js';
 import { QUEUE_NAMES, createWorkerConnection, createQueues, queueOptions, reportQueueError } from './services/queueRuntime.js';
 import { processWork, failWork } from './services/workProcessor.js';
+import { recalculateDifficulties } from './services/difficultyService.js';
 import { dispatchPendingWork, reconcileWork } from './services/recoveryService.js';
 
 dotenv.config({ path: fileURLToPath(new URL('.env', import.meta.url)) });
@@ -17,7 +22,7 @@ async function main() {
   // Build new unique indexes before workers accept replayable imports/drafts.
   const { default: Answer } = await import('./models/Answer.js');
   const { default: Problem } = await import('./models/Problem.js');
-  await Promise.all([WorkItem.init(), Answer.init(), Problem.init(), StudentStats.init(), Notification.init()]);
+  await Promise.all([WorkItem.init(), Answer.init(), Problem.init(), StudentStats.init(), Notification.init(), UserStats.init(), Badge.init(), UserBadge.init(), GamificationEvent.init()]);
   const connection = createWorkerConnection();
   const queues = createQueues(connection);
   const workers = [...new Set(Object.values(QUEUE_NAMES))].map((name) => {
@@ -40,7 +45,7 @@ async function main() {
     reconciling = true;
     try { await reconcileWork(queues); } finally { reconciling = false; }
   };
-  const maintenance = new Worker('queue-maintenance', reconcile, { ...queueOptions(connection), concurrency: 1 });
+  const maintenance = new Worker('queue-maintenance', async (job) => job.name === 'difficulty' ? recalculateDifficulties() : reconcile(), { ...queueOptions(connection), concurrency: 1 });
   maintenance.on('error', reportQueueError);
   workers.push(maintenance);
   let closing = false, dispatching = false, timer;
@@ -69,6 +74,10 @@ async function main() {
   await maintenanceQueue.upsertJobScheduler('reconcile-work', { every: 60000 }, {
     name: 'reconcile', data: {}, opts: { attempts: 3, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: 10, removeOnFail: 20 },
   });
+  await maintenanceQueue.upsertJobScheduler('recalculate-difficulty', { every: 3600000 }, {
+    name: 'difficulty', data: {}, opts: { attempts: 3, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: 10, removeOnFail: 20 },
+  });
+  await recalculateDifficulties();
   await reconcile();
   await dispatch();
   timer = setInterval(dispatch, 2000);

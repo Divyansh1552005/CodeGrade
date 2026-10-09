@@ -131,7 +131,7 @@ try {
   const teacher = await register('teacher');
   const otherTeacher = await register('teacher');
   const definition = { title: 'Smoke Echo', description: 'Print the input number.', inputFormat: 'One integer.', outputFormat: 'The same integer.',
-    constraints: '1 <= n <= 10', topics: ['Arrays'], sampleCases: [{ input: '7', output: '7' }], testCases: [{ input: '7', expectedOutput: '7' }] };
+    constraints: '1 <= n <= 10', difficulty: 'medium', topics: ['Arrays'], sampleCases: [{ input: '7', output: '7' }], testCases: [{ input: '7', expectedOutput: '7' }] };
   const { problem } = await request('/problems', { actor: teacher, method: 'POST', body: definition, expected: 201 });
   let submissionId;
   await check('API accepts queued grading while worker is stopped', async () => {
@@ -158,17 +158,21 @@ try {
     assert.equal(done.feedbackStatus, 'completed', done.feedbackError || 'AI feedback failed');
     assert(done.aiFeedback?.summary, 'Feedback summary missing');
   });
-  await check('Analytics, XP, streak, achievement and grading notification', async () => {
+  await check('Analytics, weighted XP, level, streak and badge without grading notifications', async () => {
     assert.equal(graded.status, 'graded', graded.error || 'No graded submission');
     const progress = await waitFor('completion projection', async () => {
       const { progress } = await request('/activity/progress', { actor: student });
-      return progress.xp === 100 && progress;
+      return progress.xp === 200 && progress.badges?.some((badge) => badge.key === 'first-solve') && progress;
     });
     assert.equal(progress.solvedCount, 1); assert.equal(progress.currentStreak, 1);
     assert(progress.achievements.includes('first-solve'));
-    await waitFor('grading notification', async () => (await request('/activity/notifications', { actor: student })).notifications.length === 1);
+    assert.equal(progress.level, 2); assert.equal(progress.xpIntoLevel, 100); assert.equal(progress.xpForNextLevel, 300);
+    const topic = await request('/leaderboard?scope=topic&topic=Arrays', { actor: student });
+    assert(topic.entries.some((entry) => String(entry.userId._id) === String(student.user._id) && entry.xp === 200));
+    assert.equal((await request('/activity/notifications', { actor: student })).notifications.length, 0);
+    assert.equal(await WorkItem.countDocuments({ key: `submission-notification-${submissionId}` }), 0);
     const { entries } = await request('/activity/leaderboard', { actor: student });
-    assert(entries.some((e) => String(e.studentId._id) === String(student.user._id) && e.xp === 100));
+    assert(entries.some((e) => String(e.studentId._id) === String(student.user._id) && e.xp === 200));
   });
   await check('Real AI doubt draft stays hidden until teacher approval', async () => {
     const { doubt } = await request('/doubts', { actor: student, method: 'POST', expected: 201,
@@ -209,6 +213,21 @@ try {
         assert.equal(row.submissions, 1); assert.equal(row.graded, graded.status === 'graded' ? 1 : 0);
       }
     }
+  });
+  await check('Scheduled difficulty job updates pass rate without changing awarded XP', async () => {
+    const maintenance = queues.find((queue) => queue.name === 'queue-maintenance');
+    assert(await maintenance.getJobScheduler('recalculate-difficulty'), 'Hourly difficulty scheduler missing');
+    await Submission.insertMany(Array.from({ length: 9 }, () => ({
+      studentId: new mongoose.Types.ObjectId(), problemId: problem._id, code: 'print(7)', language: 'python',
+      status: 'graded', passCount: 1, totalCount: 1, completionRecordedAt: new Date(), gamificationRecordedAt: new Date(),
+    })));
+    const job = await maintenance.add('difficulty', {}, { attempts: 3, removeOnComplete: 10 });
+    await waitFor('difficulty recalculation', async () => {
+      const updated = await Problem.findById(problem._id);
+      return updated.difficultySampleSize === 10 && updated.difficulty === 'easy' && (await job.getState()) === 'completed';
+    });
+    const { progress } = await request('/activity/progress', { actor: student });
+    assert.equal(progress.xp, 200, 'Existing XP changed after difficulty recalculation');
   });
   await check('Worker restart reconstructs a missing outbox record', async () => {
     await stop(worker); worker = undefined;

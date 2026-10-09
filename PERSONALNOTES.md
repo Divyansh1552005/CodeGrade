@@ -45,7 +45,7 @@ that grading or AI generation has finished.
 6. The worker dispatches and consumes the job, runs Judge0, compares outputs,
    and saves test results. The submission becomes graded or error.
 7. Separate jobs produce AI feedback and project completion into progress,
-   achievements and notifications. AI failure does not erase test results.
+   achievements. AI failure does not erase test results.
 8. The browser keeps checking pending feedback, then stops at a terminal state.
 
 The snapshot prevents a teacher's later test-case edit from changing an already
@@ -233,15 +233,14 @@ Redis is unavailable, but it cannot actually finish until Redis is fixed.
    pending/running/completed/failed status; test results remain usable during
    AI retries. The UI keeps checking until feedback finishes or fails.
 4. **Completion and analytics**: rebuild the student's graded-submission count,
-   test totals, unique solved problems, XP and activity days. Rebuilding means
+   test totals and unique solved problems. Separate UserStats records hold XP and streaks. Rebuilding means
    counting saved truth, so replaying a job cannot add extra points.
-5. **Gamification**: each unique problem solved earns 100 XP. Solving it again
-   earns no more XP. A day with an eventually graded submission counts toward
-   a streak using UTC submission dates. Today's streak can continue from
-   yesterday; after an additional missed day it resets. Achievements unlock
-   at one, five and ten solves and a seven-day streak. The leaderboard shows
-   the top 20 students by XP, then solved count.
-6. **Notifications**: grading-complete and approved-answer alerts appear on the
+5. **Gamification**: easy/medium/hard first solves earn 100/200/300 XP.
+   Repeats earn no XP but successful solves still maintain a UTC streak.
+   The worker's first award date counts; failures do not. Levels use a quadratic
+   threshold curve. Catalog rules unlock first/five/ten solves, seven-day streak
+   and level five badges. UserStats and unique UserBadge records own this data.
+6. **Notifications**: approved-answer alerts appear on the
    dashboard. They are in-app messages, not emails. Each has a unique event
    key, so retries do not create repeated alerts or reset a read marker. Only
    the recipient can list/mark their notifications; the latest 30 are shown.
@@ -340,7 +339,7 @@ edits, recovery does not duplicate active jobs, and job/notification ownership
 is enforced. Frontend tests check polling and teacher-job controls; `npm run build`
 checks that the new pages compile. The separate live smoke check was also run successfully with real providers.
 
-## Part 11 — Final verification (10 October 2026)
+## Part 11 — Phase 1 verification (10 October 2026)
 
 - Backend: 113 tests passed across 13 suites.
 - Frontend: 11 tests passed across four test files.
@@ -358,3 +357,68 @@ Redis connectivity is fixed and verified. Its observed eviction policy is still
 `volatile-lru`. Set the provider's policy to `noeviction` before production so
 queue keys cannot be evicted. The tests did not change global Redis configuration.
 See [BullMQ production guidance](https://docs.bullmq.io/guide/going-to-production).
+
+## Part 12 — Phase 2: the gamification layer
+
+Think of grading as deciding whether the code passes, and gamification as deciding
+what that success earns. The completion worker calls `awardSubmission`, which
+saves an immutable GamificationEvent before rebuilding UserStats. A retry uses
+the same event and date, so it cannot pay twice. A different successful submission
+on an already solved problem keeps the streak alive without granting extra XP.
+
+The problem's difficulty and topics are copied onto new submissions when accepted.
+That makes the promised reward stable while the queue runs. Easy earns 100 XP,
+medium 200 and hard 300. Level 1 starts at zero, level 2 at 100, level 3 at 400,
+level 4 at 900 and level 5 at 1600. The XP bar shows progress within the current
+level, not a percentage of lifetime XP.
+
+UTC award days drive streaks. Yesterday means add one, today means keep the same
+count, and a missed day means start again at one. Only successful nonempty-test
+submissions count. The dashboard reports a stale streak as zero. Old submissions
+are backfilled at their first worker award time, not their original submission
+date; old records without snapshots use the current problem's metadata.
+
+Badges are their own small rules engine. Badge stores a metric and threshold;
+UserBadge stores who earned it. `checkBadges(userId, event)` checks the saved stats
+after each successful event. Rules cover one/five/ten solves, seven days and level
+five. Unique indexes mean concurrent workers cannot give the same badge twice.
+StudentStats now keeps submission/test analytics only; UserStats owns game scores.
+
+The mini-leaderboard can show global or a topic. `/leaderboard?scope=global` ranks
+total XP; `/leaderboard?scope=topic&topic=Arrays` ranks Arrays XP. A multi-topic
+solve gives its full XP to each topic, while global XP is awarded only once.
+Names and scores are public to logged-in users; emails are excluded. Results are
+cached for 30 seconds in each API process. Weekly reset/time decay is future work.
+
+The worker registers an hourly difficulty job on the existing maintenance queue
+and recalculates at startup. It takes the latest graded, nonempty attempt per
+student/problem: at least ten students must have attempted it before the label
+changes. >=70% pass rate is easy, >=30% medium, below that hard. Smaller samples
+keep the teacher's initial choice. Infrastructure failures are excluded. Difficulty
+changes never rewrite XP already awarded.
+
+The dashboard now has a streak flame, level/XP bar, badge shelf and scope-selectable
+ranking. Teachers can choose initial difficulty in the form; students see current
+difficulty and the first-solve XP on problems. Existing polling handles updates.
+
+New files: `UserStats.js`, `Badge.js`, `UserBadge.js`, `GamificationEvent.js`,
+`gamificationService.js`, `badgeService.js`, `leaderboardService.js`,
+`difficultyService.js`, and `routes/leaderboard.js`. Completion, recovery and worker
+startup integrate them. `gamification.test.js` exercises actual temporary MongoDB;
+`ActivityPanel.test.jsx` checks the widgets. The final Phase 2 test result is recorded after validation below.
+
+Grading-complete notifications have been removed. Polling still updates grading
+results and progress. Already queued grading-alert jobs do nothing, and existing
+saved grading alerts are hidden. Approved-answer alerts still work normally.
+
+### Phase 2 final verification — 10 October 2026
+
+- 126 backend tests passed across 14 suites.
+- 14 frontend tests passed across five files; production build passed.
+- Nine isolated live checks passed against real Redis, Judge0 and AI.
+- Live grading awarded medium XP (200), projected level/badges/topic rankings,
+  and produced no grading notification. Approved-answer alerts still passed.
+- The live difficulty job changed the displayed difficulty while earned XP stayed
+  unchanged. Restart recovery, ownership and Redis quotas also passed.
+- `git diff --check` passed. Redis still reports volatile-lru; production requires
+  noeviction as already documented. Global Redis configuration was not changed.

@@ -45,6 +45,10 @@ const problemSchema = new mongoose.Schema(
     // Fixed, LeetCode-style categorization — a problem can carry several.
     // Mandatory for teacher-authored problems (enforced in routes/problems.js).
     topics: { type: [{ type: String, enum: TOPICS }], default: [] },
+    difficulty: { type: String, enum: ['easy', 'medium', 'hard'], default: 'easy' },
+    passRate: { type: Number, min: 0, max: 1 },
+    difficultySampleSize: { type: Number, default: 0 },
+    difficultyUpdatedAt: Date,
     starterCode: { type: starterCodeSchema, default: () => ({}) },
     testCases: { type: [testCaseSchema], default: [] },
     importKey: { type: String, select: false },

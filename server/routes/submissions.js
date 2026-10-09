@@ -56,6 +56,8 @@ router.post(
         language,
         status: 'queued',
         testCasesSnapshot: problem.testCases,
+        rewardDifficulty: problem.difficulty,
+        rewardTopics: problem.topics,
       });
 
       try {

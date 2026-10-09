@@ -107,6 +107,7 @@ export default function ProblemList() {
                     </span>
                   )}
                   {p.title}
+                  <span className="badge capitalize">{p.difficulty || 'easy'}</span>
                   {p.solved && (
                     <span className="badge bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400">
                       Solved

@@ -38,7 +38,7 @@ treated as the primary concern, on par with feature completeness.
 /server
   /config        db.js (MongoDB), redis.js (lazy ioredis client)
   /constants     topics.js (fixed problem-tag list, mirrored on the client)
-  /models        User, Problem, Submission, Doubt, Answer, RefreshToken, WorkItem, StudentStats, Notification
+  /models        User, Problem, Submission, Doubt, Answer, RefreshToken, WorkItem, StudentStats, Notification, UserStats, Badge, UserBadge, GamificationEvent
   /routes        auth, problems, submissions, doubts, answers, activity, jobs
   /services      execution/AI chains, processors, durable work/outbox dispatch, recovery, progress, tokenService
   worker.js      separate BullMQ consumers + recurring recovery
@@ -107,8 +107,8 @@ npm run dev      # → http://localhost:5173  (proxies /api to :5000)
 ### 4. Tests
 
 ```bash
-cd server  && npm test              # 113 tests: unit + integration + security
-cd client  && npm run test:frontend  # 11 UI/hook tests
+cd server  && npm test              # 126 tests: unit + integration + security
+cd client  && npm run test:frontend  # 14 UI/hook tests
 cd client  && npm run build
 # Optional live checks with server/.env Redis, Judge0 and AI credentials:
 cd server  && npm run test:smoke
@@ -298,8 +298,8 @@ at most once every 30 seconds per identical message.
 | Code execution | `submission-grading` | POST returns 202 with `{ submissionId, submission }`; worker runs Judge0 and publishes results immediately |
 | Doubt drafting | `doubt-drafts` | POST returns 201 with pending doubt; worker creates one AI answer for teacher review |
 | Code feedback | `ai-feedback` | Independent AI retries; test results remain available even when feedback fails |
-| Analytics, XP, streaks, achievements | `submission-completion` | Rebuilds each student's progress after grading; then records a notification job |
-| In-app alerts | `notifications` | Grading-complete and answer-approved messages, deduplicated per source event |
+| Analytics, XP, streaks, achievements | `submission-completion` | Rebuilds analytics and awards XP, levels, streaks and badges after successful grading |
+| In-app alerts | `notifications` | Approved-answer messages, deduplicated per source event |
 | Imports / exports / reports | `bulk-jobs` | Teacher-owned problem import, problem export, and grading-report export |
 | Recovery | `queue-maintenance` | Startup scan and recurring reconciliation every 60 seconds |
 
@@ -326,17 +326,41 @@ answer notifications. It checks Redis state before re-enqueueing a missing job,
 so an old active job is not duplicated merely because it is old. Unique work keys,
 AI-generation keys, import-row keys and notification keys guard repeated delivery.
 No AI failure deletes a teacher answer. Stats are rebuilt from immutable graded
-submissions rather than incrementing XP during retries. These processors follow
+submissions; XP is projected from immutable award events rather than incremented during retries. These processors follow
 [BullMQ's idempotent-job guidance](https://docs.bullmq.io/patterns/idempotent-jobs).
 
-**Progress rules:** award 100 XP for each unique problem solved (all tests pass,
-nonempty test set). Repeated solves add no XP. A day with at least one eventually
-graded submission counts toward the streak using its submission date in UTC.
-A current streak survives through the following day; after that it becomes zero.
-Achievements: first solve, five solves, ten solves, and seven consecutive days.
-Leaderboard lists the top 20 students by XP, then solved count and student ID.
-Progress includes graded submission count, total/passed tests, solved count and
-longest/current streak. Historical graded submissions are backfilled on recovery.
+**Progress rules (Phase 2):** first solves award easy/medium/hard XP of
+100/200/300; all tests must pass and the test set must be nonempty. Difficulty
+and topics are snapshotted when accepting new submissions. Repeated solves earn
+no extra XP, but successful solves can maintain a UTC streak. A same-day success
+does not increment it; yesterday increments it; a gap resets it to one. Failed
+submissions do not count. Stale current streaks become zero on read.
+
+`UserStats` is the source for XP, levels, solve streaks and topic XP. Level starts
+at one; reaching level L requires `100 * (L - 1)^2` total XP. `Badge` defines
+metric/threshold rules, `UserBadge` stores unique earned badges, and immutable
+`GamificationEvent` records make awards replay-safe. Badge rules are checked after
+every successful completion. The dashboard shows a flame, XP bar, badge shelf and
+mini-leaderboard. `StudentStats` now contains submission/test analytics only.
+
+`GET /leaderboard?scope=global` and `GET /leaderboard?scope=topic&topic=Arrays`
+return the top 20 students, cached for 30 seconds per API process. Topic scores
+include the full awarded XP for each of a problem's topics, frozen at award time.
+Weekly time decay/resets are future work. `/activity/leaderboard` remains a global
+compatibility endpoint. Rankings expose names and scores, not emails.
+
+The worker runs difficulty recalculation on startup and hourly through BullMQ's
+maintenance queue. The sample is each student's latest graded, nonempty attempt
+per problem; infrastructure errors are excluded. At least ten students are
+required to replace the difficulty: pass rate >=70% easy, >=30% medium, otherwise
+hard. Before that, teacher-selected difficulty remains. Existing awards retain
+original XP when displayed difficulty changes. Teacher create/edit and imports
+accept `difficulty` (`easy` default); problem lists/statements display it.
+
+Recovery backfills Phase 2 awards for old graded submissions, including previously
+completed jobs. Backfill uses its first worker award time for streaks, rather than
+inventing past award days; legacy submissions without reward snapshots use the
+current problem metadata. Awards, XP and badges survive retries without duplication.
 
 **Teacher tools:** Dashboard → Imports & Reports (`/bulk-jobs`). Paste a JSON array
 of problems or `{ "problems": [...] }` using the same fields as the create-problem
@@ -381,8 +405,8 @@ It consumes a small number of real Judge0/AI requests. `QUEUE_PREFIX` (default
 `bull`) and optional `RATE_LIMIT_PREFIX` allow environment isolation; workers
 sharing one Mongo database must share the same queue prefix.
 
-Final validation: 113 backend tests, 11 frontend tests, production build, and all
-eight live smoke checks passed. The live Redis instance reported `volatile-lru`;
+Final validation: 126 backend tests, 14 frontend tests, production build, and all
+nine live smoke checks passed. The live Redis instance reported `volatile-lru`;
 change its maxmemory-policy to `noeviction` before production, as required by
 [BullMQ production guidance](https://docs.bullmq.io/guide/going-to-production).
 
@@ -509,6 +533,7 @@ A hybrid model chosen for security:
 | GET | `/doubts/:id/answer` | auth | **approved** answer only |
 | GET | `/activity/progress` | auth | own analytics, XP, streaks and achievements |
 | GET | `/activity/leaderboard` | auth | top 20 students; public names and scores |
+| GET | `/leaderboard?scope=global\|topic&topic=Arrays` | auth | cached global/topic XP rankings |
 | GET | `/activity/notifications` | auth | latest 30 own notifications |
 | PATCH | `/activity/notifications/:id/read` | recipient | mark own notification read |
 | POST | `/jobs` | teacher | queue `problem-import`, `problem-export` or `report-export`; returns 202 |
@@ -523,7 +548,7 @@ per-user rate limit (enforced inside `requireAuth`, not listed per-row).
 
 ## Testing summary
 
-Backend (113 tests): Answer state-machine unit tests (valid + all illegal
+Backend (126 tests): Answer state-machine unit tests (valid + all illegal
 transitions), Judge0 client (timeout + non-2xx + base64 round-trip + Unicode
 regression), rate-limit middleware (wrapper logic + both submission quotas +
 live route wiring), Zod validation (every required/invalid field per route),
@@ -533,10 +558,10 @@ draft → approval workflow, role guards (student 403 on teacher routes), and
 the security cases (prompt injection, oversized code, invalid language
 rejected before Judge0).
 
-Frontend (11 tests): login rendering/submit, cached-query polling and stale-response
+Frontend (14 tests): login rendering/submit, cached-query polling and stale-response
 protection, bulk-job JSON validation, acceptance/status rendering, and server errors; submission
 queued/results/feedback rendering, terminal-error polling stop, and pending-history
-refresh on revisit.
+refresh on revisit, plus XP-bar/streak/badge rendering and leaderboard scope switching.
 Backend background-job tests additionally cover retries/recovery, replay safety,
 analytics/XP/streaks, notification ownership, and teacher-only imports/exports.
 
@@ -587,7 +612,7 @@ larger/longer-running project would probably revisit:
   the database. Simple and fast to ship; the cost is that adding a topic
   means editing two files by hand instead of an admin UI, and the two lists
   can drift if one is edited without the other.
-- **Backend test depth over frontend test depth.** 113 backend tests vs. 11
+- **Backend test depth over frontend test depth.** 126 backend tests vs. 14
   frontend tests, deliberately — the assignment explicitly weights backend
   correctness (safe execution, approval-state correctness,
   prompt-injection resistance) at least as heavily as feature completeness,
@@ -616,7 +641,7 @@ Things I'd do next, roughly in the order I'd prioritize them:
    RapidAPI rate limit — the tradeoff noted above, revisited once there's
    time to build and operate it properly.
 3. **Real frontend test coverage** — component/page tests for the pages that
-   currently have none (`ProblemList`, `SubmitCode`, `TeacherReview`), and
+   currently have none (`ProblemList`, `TeacherReview`), and
    an end-to-end test (Playwright/Cypress) walking the full doubt → AI draft
    → teacher approval → student-sees-it flow, since that's the app's central
    safety guarantee and currently only backend-tested.
@@ -641,3 +666,26 @@ Things I'd do next, roughly in the order I'd prioritize them:
     but there's no email delivery integration yet for account recovery.
 
 ---
+
+## Phase 2 implementation map
+
+- Models: `UserStats`, `Badge`, `UserBadge`, `GamificationEvent`.
+- Services: `gamificationService.js` (durable awards/projection/levels/streaks),
+  `badgeService.js` (catalog and rules), `leaderboardService.js` (cached rankings),
+  `difficultyService.js` (pass-rate sampling).
+- Worker: completion calls awards; maintenance schedules hourly recalculation.
+- API: `/activity/progress` includes XP-bar values and earned badges; `/leaderboard`
+  supports global/topic scope. UI: dashboard widgets and difficulty selection/display.
+- Tests: `gamification.test.js` covers replay, concurrency, failure recovery,
+  thresholds, streak boundaries, catalog rules, migration, cache and sampling;
+  `ActivityPanel.test.jsx` covers widgets, scope switching and role presentation.
+
+The event history and stats projections currently grow without automatic archival;
+award projection scans a user's events. Larger installations may need incremental
+projections and an archival plan. Grades/events are treated as immutable: manual
+regrading/deletion requires an explicit correction/reprojection policy.
+
+Grading completion does not produce an in-app notification. Results and progress
+update through polling. Old queued grading-alert jobs are safely ignored, and old
+saved grading alerts are hidden from notification lists/read APIs. Approved-answer
+notifications remain enabled.

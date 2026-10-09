@@ -23,6 +23,7 @@ export default function CreateProblem() {
 
   const [form, setForm] = useState({
     title: '',
+    difficulty: 'easy',
     description: '',
     inputFormat: '',
     outputFormat: '',
@@ -48,6 +49,7 @@ export default function CreateProblem() {
         const p = data.problem;
         setForm({
           title: p.title || '',
+          difficulty: p.difficulty || 'easy',
           description: p.description || '',
           inputFormat: p.inputFormat || '',
           outputFormat: p.outputFormat || '',
@@ -132,6 +134,15 @@ export default function CreateProblem() {
         <label className="field">
           Title
           <input className="input" value={form.title} onChange={setField('title')} required />
+        </label>
+        <label className="field">
+          Initial difficulty
+          <select className="input" value={form.difficulty} onChange={setField('difficulty')}>
+            <option value="easy">Easy · 100 XP</option>
+            <option value="medium">Medium · 200 XP</option>
+            <option value="hard">Hard · 300 XP</option>
+          </select>
+          <span className="text-xs text-slate-500">Updated from solve rates once enough students attempt the problem.</span>
         </label>
         <label className="field">
           Description

@@ -56,6 +56,7 @@ export const createProblemSchema = z.object({
   testCases: z
     .array(testCaseSchema, { required_error: 'testCases must be a non-empty array' })
     .min(1, 'testCases must be a non-empty array'),
+  difficulty: z.enum(['easy', 'medium', 'hard']).optional(),
   starterCode: starterCodeSchema,
 });
 

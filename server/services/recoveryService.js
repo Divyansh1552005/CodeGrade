@@ -30,6 +30,10 @@ export async function recoverDomainWork() {
   for await (const submission of Submission.find({ status: 'graded', feedbackStatus: { $in: ['pending', 'running'] } }).cursor()) {
     await ensureWork({ key: `feedback-${submission.id}`, type: 'feedback', ownerId: submission.studentId, payload: { submissionId: submission.id } });
   }
+  // Phase 2 backfill also covers completion jobs that finished before awards existed.
+  for await (const submission of Submission.find({ status: 'graded', gamificationRecordedAt: { $exists: false } }).cursor()) {
+    await ensureWork({ key: `gamification-${submission.id}`, type: 'completion', ownerId: submission.studentId, payload: { submissionId: submission.id } });
+  }
   for await (const answer of Answer.find({ state: 'approved', notificationRecordedAt: { $exists: false } }).cursor()) {
     await recordAnswerNotification(answer);
   }

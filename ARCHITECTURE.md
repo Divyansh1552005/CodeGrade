@@ -51,7 +51,7 @@ when extending the app.
 | LLM provider | Google Gemini by default (`@langchain/google-genai`); Groq supported as an alternative (`@langchain/groq`), selected via `LLM_PROVIDER` |
 | Code execution | Judge0 CE (hosted, via RapidAPI), **base64 transport** |
 | Auth | JWT access tokens (Bearer) + rotating, hashed, reuse-detected refresh tokens (httpOnly cookie) |
-| Testing | Jest + Supertest + mongodb-memory-server (backend, 113 tests); Vitest + React Testing Library (frontend) |
+| Testing | Jest + Supertest + mongodb-memory-server (backend, 126 tests); Vitest + React Testing Library (frontend) |
 
 ---
 
@@ -474,10 +474,10 @@ VITE_API_URL=               # optional, defaults to "/api" (proxied to PORT abov
 
 ## 13. Testing
 
-**Backend — 113 tests** across unit (`answerStateMachine`, `chains`,
+**Backend — 126 tests** across unit (`answerStateMachine`, `chains`,
 `judge0Client`, `rateLimit`) and integration (`auth`, `problems`,
 `submissions`, `doubts`+`answers`, `rbac`, `security`, `aiFailure`,
-`backgroundJobs`) suites, run
+`backgroundJobs`, `gamification`) suites, run
 against `mongodb-memory-server` (no live Mongo needed) and an in-memory rate
 limiter (no live Redis needed). Notably covers: the full submission grading
 flow, the doubt → AI draft → approval workflow end to end, every illegal
@@ -486,9 +486,9 @@ oversized/invalid-language submissions rejected before Judge0, topic
 filtering + stable problem numbering, and the rate limiter's exact quotas
 (2/min, 20/day) including the real route wiring via a live `429` assertion.
 
-**Frontend — 11 tests**: login rendering/submit, cached polling/stale responses,
+**Frontend — 14 tests**: login rendering/submit, cached polling/stale responses,
 bulk-job validation/status/error behavior and submission status/feedback/history
-polling (Vitest + RTL). UI
+polling, plus level/XP-bar, streak/badge and leaderboard-scope widgets (Vitest + RTL). UI
 polish (animations, theming, layout) is verified manually — see
 `PERSONALNOTES.md` for the "how I checked it works" notes.
 
@@ -528,8 +528,7 @@ also waits for these indexes. SIGINT/SIGTERM closes consumers before connections
   timestamps. Indexed for pending dispatch and owner history. Records retained
   for durable event deduplication; payload/results have no automatic TTL.
 - **StudentStats**: unique studentId; graded submissionCount, solvedProblemIds,
-  solvedCount, passedTests, totalTests, xp, activityDays, longestStreak,
-  achievements. Indexed by XP/solved count for the leaderboard.
+  solvedCount, passedTests and totalTests; submission/test analytics only.
 - **Notification**: unique event key, recipient userId, message, href, readAt.
   Indexed by recipient and descending creation time.
 - **Submission extensions**: private `testCasesSnapshot` (`select: false`, also
@@ -552,8 +551,8 @@ also waits for these indexes. SIGINT/SIGTERM closes consumers before connections
 6. `processSubmission()` runs test cases and commits `graded` with feedback
    pending. It then records independent feedback and completion WorkItems.
    A downstream event-recording failure never overwrites committed grading.
-7. Feedback retries independently; completion rebuilds analytics and records
-   a notification WorkItem. Grade status no longer waits for AI feedback.
+7. Feedback retries independently; completion rebuilds analytics and awards
+   gamification progress. Grade status no longer waits for AI feedback.
 8. Frontend polls every two seconds until execution and feedback both finish.
 
 ### Recovery and replay invariants
@@ -587,20 +586,17 @@ reset occurs after final failure.
 
 ### Progress, analytics, and notification rules
 
-`progressService.js` rebuilds StudentStats from all immutable graded submissions
-for one student. Each unique problem with nonempty, all-passing tests awards
-100 XP; duplicate deliveries and repeated solves cannot increment XP twice.
-The monotonically increasing graded submission count gates snapshot replacement,
-preventing an older concurrent rebuild from replacing a newer one. This assumes
-app routes do not delete/regrade historical graded submissions; future destructive
-maintenance must rebuild projections explicitly. Activity uses submission dates
-in UTC, not delayed worker completion dates. Current streak is evaluated on read
-so it expires without a scheduled daily mutation. Achievements: first/five/ten
-solves and seven-day streak. Leaderboard shows top 20 names and scores only.
+`progressService.js` rebuilds StudentStats submission/test analytics from immutable
+graded submissions. Gamification is owned by UserStats and the award-event
+projection described in section 16. Both projections use monotonic source counts
+to prevent older concurrent writes from replacing newer snapshots. Grades and
+award events are immutable under normal app routes; destructive maintenance
+requires explicit correction and projection rebuilding.
 
 Notification jobs use event-specific unique keys and `$setOnInsert` to preserve
-read markers on replay. Grading completion alerts and approved-answer alerts are
-in-app only. Recipient ownership applies to lists and read mutations. Alerts do
+read markers on replay. Approved-answer alerts are in-app only. Grading alerts
+are retired: completion creates none, old queued events are no-ops, and existing
+submission-key notifications are excluded from list/read APIs. Recipient ownership applies to lists and read mutations. Alerts do
 not expose pending AI answer content. There is no external email/Slack delivery.
 
 ### Bulk jobs and APIs
@@ -656,8 +652,10 @@ same optional `QUEUE_PREFIX` (default `bull`); rate limiting receives an optiona
 unchanged when the variables are absent. Do not use different queue prefixes for
 workers sharing a domain MongoDB.
 
+The script also verifies the hourly difficulty scheduler and executes its
+processor through real Redis, checking that recalculation leaves earned XP intact.
 The script checks queued acceptance with no worker, code execution, independent
-AI feedback, analytics/XP/streak/achievement projection, grading notification,
+AI feedback, analytics/weighted XP/level/streak/badge projection without grading alerts,
 AI draft invisibility until approval, approval alerts/read ownership, bulk import/
 export/report ownership, restart recovery of a missing outbox record, submission
 ownership, teacher role guard, and a Redis-backed 429 limit. It verifies that the
@@ -668,8 +666,100 @@ Cleanup stops only its child processes, removes only its unique queue namespace
 and exact temporary-user rate-limit keys, disconnects clients, and stops its
 temporary MongoDB. Existing Mongo data and standard Redis queues are untouched.
 The JSON report in `/tmp/codegrade-smoke-results.json` records check outcomes
-and Redis eviction policy. Final validation passed 113 backend tests, 11 frontend
-tests, production build, and eight live smoke checks. Live Redis connectivity is
+and Redis eviction policy. Final validation passed 126 backend tests, 14 frontend
+tests, production build, and nine live smoke checks. Live Redis connectivity is
 verified. Its observed policy was `volatile-lru`, so provider configuration must
 be switched to `noeviction` before production; no global Redis configuration is
 changed by the smoke test.
+
+## 16. Phase 2 — gamification on the completion queue
+
+### Durable models and lifecycle
+
+- **UserStats**: unique userId; xp, level, currentStreak, longestStreak,
+  lastSolvedDate, solvedCount, eventCount and per-topic XP. XP/solves/user index.
+- **Badge**: unique key, name, description, icon and rule (metric/threshold).
+  Allowed metrics are solvedCount, longestStreak and level.
+- **UserBadge**: userId, badgeId, awardedAt; unique user/badge index.
+- **GamificationEvent**: unique submissionId, userId, problemId, snapshotted
+  difficulty/topics, XP weight and first award time. Immutable retry input.
+- **Submission**: rewardDifficulty/rewardTopics captured on acceptance and
+  gamificationRecordedAt marks successful completion of award processing.
+- **Problem**: difficulty defaults easy; passRate, difficultySampleSize and
+  difficultyUpdatedAt explain scheduled updates. Validation permits only easy,
+  medium or hard as teacher/import input.
+
+API and worker startup initialize all four new models' unique indexes before
+accepting work. Completion requires graded, nonempty, all-passing tests to create
+an award event. Event upsert uses set-on-insert; concurrent duplicates use the same
+saved event. Stats are rebuilt from chronological events, selecting the first
+successful event for each problem to award XP once. An eventCount guard prevents
+stale concurrent projection writes. Event persistence, projection and badge
+writes are separate operations: retries repair intermediate failures without
+requiring MongoDB transactions or adding XP twice. The completion marker is saved
+only after awards and analytics succeed. Approved-answer notifications remain a
+separate flow.
+
+Recovery creates a stable gamification completion WorkItem for graded documents
+missing the Phase 2 marker, including previously completed Phase 1 jobs. Recovery
+preserves the existing finite retry budget. Old submissions without snapshots use
+current problem metadata; their streak date is the first backfill award time.
+StudentStats legacy XP/streak fields are no longer used or written.
+
+### XP, levels, streaks and badge rules
+
+Easy/medium/hard yield 100/200/300 XP per unique problem. Snapshotting metadata on
+acceptance prevents queue delays or difficulty recalculation from changing the
+reward. Each applicable topic receives that solve's full XP; topic scores do not
+partition global XP. Later topic edits do not rewrite previous awards.
+
+Level = floor(sqrt(xp / 100)) + 1. Level L starts at 100*(L-1)^2 XP; next level is
+100*L^2. Progress APIs return levelStartXp, nextLevelXp, xpIntoLevel and
+xpForNextLevel for the dashboard bar.
+
+Successful events use their first worker-award date in UTC. Same day keeps the
+streak unchanged, yesterday increments it, and a gap resets it to one. Repeated
+successful solves count as streak activity but award no more XP. Failed/empty-test
+submissions never enter this history. Read-time expiry reports zero after a missed
+UTC day without altering the historical longest streak. Chronological event
+reprojection handles concurrent awards and delayed retries consistently.
+
+`checkBadges(userId, event)` is independent of grading. A solve event evaluates
+the saved catalog against current UserStats. Built-in rules: first/five/ten solves,
+seven consecutive days and level five. Unique UserBadge upserts preserve one
+award and its earned date. Catalog seeding is idempotent and preserves existing
+rule edits; indexes protect concurrent initialization.
+
+### Leaderboards and scheduled difficulty
+
+Authenticated GET /leaderboard accepts scope=global (default) or scope=topic plus
+a supported topic. Global ranks total XP; topic ranks stored topic XP. Ties use
+solvedCount then userId. The top 20 student names/scores are cached for 30 seconds
+per API process; API and worker processes communicate through MongoDB, so cache
+staleness is bounded by TTL. No shared Redis cache or weekly decay/reset is
+implemented. The old /activity/leaderboard endpoint returns the global ranking.
+
+The existing queue-maintenance worker routes difficulty jobs separately from
+reconciliation. A persistent hourly BullMQ scheduler is registered on startup;
+startup also recalculates immediately. Aggregation considers each student's latest
+graded nonempty attempt per problem, excluding infrastructure errors. A ten-user
+minimum protects small samples. Rates >=0.7 are easy, >=0.3 medium, otherwise hard.
+Teacher difficulty remains below the minimum; rate/sample metadata still updates.
+Saved awards are unaffected by recalculation. Difficulty jobs use three attempts
+and exponential retry delay on the existing Redis connection.
+
+### UI and validation
+
+ActivityPanel shows level, XP bar, streak flame, best streak, badge shelf and a
+scope-selectable mini-leaderboard. Progress refreshes every ten seconds; rankings
+every thirty. Teachers do not request their own student progress. Create/edit
+supports initial difficulty; browsing and statements show the current difficulty
+and first-solve reward. SSE and weekly resets remain later extensions.
+
+Gamification integration tests cover weighted/snapshotted XP, unique solve and
+concurrent deduplication, interrupted projection replay, success-only award
+eligibility, UTC gaps, badge independence, Phase 1 backfill, leaderboard scopes,
+privacy/cache behavior, and difficulty thresholds/latest-attempt sampling.
+Component tests cover progress-bar values, badges/streaks, topic switching and
+teacher presentation. Event projections scan history and need an archival or
+incremental design if scale makes this expensive.

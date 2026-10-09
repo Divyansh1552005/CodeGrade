@@ -17,6 +17,9 @@ const Submission = (await import('../../models/Submission.js')).default;
 const Doubt = (await import('../../models/Doubt.js')).default;
 const Answer = (await import('../../models/Answer.js')).default;
 const WorkItem = (await import('../../models/WorkItem.js')).default;
+const UserStats = (await import('../../models/UserStats.js')).default;
+const UserBadge = (await import('../../models/UserBadge.js')).default;
+const { awardSubmission } = await import('../../services/gamificationService.js');
 const StudentStats = (await import('../../models/StudentStats.js')).default;
 const Notification = (await import('../../models/Notification.js')).default;
 const { ensureWork } = await import('../../services/workService.js');
@@ -122,7 +125,7 @@ describe('grading, independent feedback and completion', () => {
     await run(work);
     expect(grade).toHaveBeenCalledTimes(1);
   });
-  it('rebuilds analytics, awards 100 XP per unique solve and emits exactly one notification per submission', async () => {
+  it('rebuilds analytics and awards unique-solve XP without grading notifications', async () => {
     const problem = await Problem.create(problemInput);
     const a = await Submission.create({ studentId: student.user._id, problemId: problem.id, language: 'python', code: 'x', status: 'graded', passCount: 1, totalCount: 1 });
     const b = await Submission.create({ studentId: student.user._id, problemId: problem.id, language: 'python', code: 'x', status: 'graded', passCount: 1, totalCount: 1 });
@@ -130,13 +133,13 @@ describe('grading, independent feedback and completion', () => {
     for (const sub of [a, b]) {
       const completion = await WorkItem.findOne({ key: `completion-${sub.id}` });
       await run(completion); await run(completion);
-      const notice = await WorkItem.findOne({ key: `submission-notification-${sub.id}` });
-      await run(notice); await run(notice);
+      expect(await WorkItem.findOne({ key: `submission-notification-${sub.id}` })).toBeNull();
     }
     const stats = await StudentStats.findOne({ studentId: student.user._id });
-    expect(stats.xp).toBe(100); expect(stats.submissionCount).toBe(2); expect(stats.solvedCount).toBe(1);
-    expect(stats.achievements).toContain('first-solve');
-    expect(await Notification.countDocuments({ userId: student.user._id })).toBe(2);
+    expect(stats.submissionCount).toBe(2); expect(stats.solvedCount).toBe(1);
+    expect((await UserStats.findOne({ userId: student.user._id })).xp).toBe(100);
+    expect(await UserBadge.countDocuments({ userId: student.user._id })).toBe(1);
+    expect(await Notification.countDocuments({ userId: student.user._id })).toBe(0);
     const res = await request(app).get('/activity/progress').set('Authorization', auth(student));
     expect(res.body.progress.xp).toBe(100);
     const leaderboard = await request(app).get('/activity/leaderboard').set('Authorization', auth(student));
@@ -149,15 +152,18 @@ describe('grading, independent feedback and completion', () => {
       studentId: student.user._id, problemId: new mongoose.Types.ObjectId(), language: 'python', code: 'x',
       status: 'graded', passCount: 1, totalCount: 1, createdAt: new Date(now.getTime() - index * 86400000),
     }));
-    await Submission.insertMany([...rows,
+    const submissions = await Submission.insertMany([...rows,
       { ...rows[0], problemId: new mongoose.Types.ObjectId(), passCount: 0, totalCount: 0 },
       { ...rows[0], problemId: new mongoose.Types.ObjectId(), passCount: 0, totalCount: 1 }]);
+    for (const submission of submissions) await awardSubmission(submission.id, submission.createdAt);
     const stats = await rebuildStudentStats(student.user._id);
-    expect(stats.xp).toBe(1000);
+    const awards = await UserStats.findOne({ userId: student.user._id });
+    expect(awards.xp).toBe(1000);
     expect(stats.solvedCount).toBe(10);
     expect(stats.submissionCount).toBe(12);
-    expect(stats.longestStreak).toBe(10);
-    expect(stats.achievements).toEqual(['first-solve', 'five-solves', 'ten-solves', 'seven-day-streak']);
+    expect(awards.longestStreak).toBe(10);
+    const badges = await UserBadge.find({ userId: student.user._id }).populate('badgeId');
+    expect(badges.map((entry) => entry.badgeId.key).sort()).toEqual(['first-solve', 'five-solves', 'ten-solves', 'seven-day-streak'].sort());
   });
   it('calculates UTC streaks across duplicates, missing days and a stale last day', () => {
     expect(streaks(['2026-10-07', '2026-10-08', '2026-10-08', '2026-10-09'], new Date('2026-10-10T10:00:00Z'))).toEqual({ longestStreak: 3, currentStreak: 3 });

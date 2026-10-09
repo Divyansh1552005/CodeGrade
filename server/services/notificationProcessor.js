@@ -1,17 +1,12 @@
 import Notification from '../models/Notification.js';
-import Submission from '../models/Submission.js';
 import Answer from '../models/Answer.js';
 import Doubt from '../models/Doubt.js';
 
 export async function processNotification(job) {
   let values;
-  if (job.data.submissionId) {
-    const submission = await Submission.findById(job.data.submissionId);
-    if (!submission || submission.status !== 'graded') return;
-    values = { key: `submission-${submission.id}`, userId: submission.studentId,
-      message: `Grading complete: ${submission.passCount}/${submission.totalCount} tests passed.`,
-      href: `/submit/${submission.problemId}` };
-  } else if (job.data.answerId) {
+  // Retire grading notifications already queued by an older worker release.
+  if (job.data.submissionId) return;
+  if (job.data.answerId) {
     const answer = await Answer.findById(job.data.answerId);
     if (!answer || answer.state !== 'approved') return;
     const doubt = await Doubt.findById(answer.doubtId);
