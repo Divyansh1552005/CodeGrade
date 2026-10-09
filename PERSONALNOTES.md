@@ -422,3 +422,29 @@ saved grading alerts are hidden. Approved-answer alerts still work normally.
   unchanged. Restart recovery, ownership and Redis quotas also passed.
 - `git diff --check` passed. Redis still reports volatile-lru; production requires
   noeviction as already documented. Global Redis configuration was not changed.
+
+## Part 13 — Dependency security fixes
+
+`npm audit fix` updates compatible versions, but it cannot automatically cross
+major-version ranges. We ran it for both client and server, then upgraded the
+remaining affected package families and tested them. Axios is patched in both,
+LangChain's used packages are upgraded, Jest/Vitest are upgraded, and syntax
+highlighting uses patched Prism. The unused umbrella langchain package was removed.
+Use Node 22.12+; Node 22 LTS is the recommended baseline.
+
+An override is a specific instruction to npm for a nested dependency. The client
+forces patched DOMPurify. The server's Istanbul YAML config loader uses patched
+js-yaml 4 instead of 3, which removes unpatched sprintf-js through old argparse.
+The loader's `load()` call still works; it was verified with a sample YAML config.
+Do not remove these overrides without auditing the resulting dependency tree.
+
+Both full audits report zero vulnerabilities. All 52 currently open GitHub
+Dependabot advisories were checked against both local lockfiles, with no matching
+vulnerable versions left. The website will reflect the fixes only after the files
+are pushed to the default branch and rescanned. No alerts were dismissed manually.
+Keep package.json and package-lock.json together; use npm ci for reproducible installs.
+
+Dependency-upgrade validation: 126 backend tests, 14 frontend tests, production
+build and all nine live Redis/Judge0/AI smoke checks passed. Final backend and
+frontend audits both reported zero vulnerabilities; dependency-tree checks and
+`git diff --check` passed. No application flow changes were needed.

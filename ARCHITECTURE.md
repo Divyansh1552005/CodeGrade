@@ -763,3 +763,30 @@ privacy/cache behavior, and difficulty thresholds/latest-attempt sampling.
 Component tests cover progress-bar values, badges/streaks, topic switching and
 teacher presentation. Event projections scan history and need an archival or
 incremental design if scale makes this expensive.
+
+## 17. Dependency security baseline
+
+As of 10 October 2026, backend and frontend full npm audits (including development
+dependencies) report zero vulnerabilities. All 52 open Dependabot advisories were
+checked against every matching package path in both updated lockfiles; no resolved
+version remained in an advisory's vulnerable range. GitHub's server-side alerts
+remain open until updated manifests/lockfiles are pushed and rescanned.
+
+Runtime baseline: Node >=22.12.0. Axios is >=1.20.0; LangChain core is ^1.2.17,
+Google adapter ^2.3.2, Groq adapter ^1.3.1. Only the packages used directly remain;
+the unused `langchain` umbrella dependency and its extra dependency paths were
+removed. Jest is ^30.5.2 and Vitest ^5.0.3. Frontend highlighter ^16.1.2 resolves
+patched Prism; Vite's declared minimum is 6.4.3.
+
+Overrides are narrow and intentional: frontend DOMPurify ^3.4.16; backend
+@istanbuljs/load-nyc-config → js-yaml ^4.3.2. The latter retains the loader's
+`load()` interface while removing vulnerable argparse 1/sprintf-js. A direct
+coverage-config YAML parsing check passed. These are dependency graph fixes,
+not suppressed/dismissed security alerts. Revisit overrides when parent packages
+adopt the patched dependency versions. Lockfile-based `npm ci` preserves the
+verified graph on deployment.
+
+Dependency-upgrade validation: 126 backend tests, 14 frontend tests, production
+build and all nine live Redis/Judge0/AI smoke checks passed. Final backend and
+frontend audits both reported zero vulnerabilities; dependency-tree checks and
+`git diff --check` passed. No application flow changes were needed.

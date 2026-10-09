@@ -68,6 +68,8 @@ treated as the primary concern, on par with feature completeness.
 
 ## Getting started
 
+Use Node.js 22.12 or newer (Node 22 LTS recommended) for both packages.
+
 ### 1. Configure environment
 
 Copy `server/.env.example` to `server/.env` and fill in the values (MongoDB
@@ -689,3 +691,29 @@ Grading completion does not produce an in-app notification. Results and progress
 update through polling. Old queued grading-alert jobs are safely ignored, and old
 saved grading alerts are hidden from notification lists/read APIs. Approved-answer
 notifications remain enabled.
+
+## Dependency security updates — 10 October 2026
+
+Ran `npm audit fix` in both packages, then upgraded dependencies that required
+major-version changes. Axios is 1.20.0 in both; server LangChain core/Google/Groq
+are 1.2.17/2.3.2/1.3.1 and Jest is 30.5.2. The unused umbrella `langchain`
+dependency was removed. Frontend Vitest is 5.0.3, Vite's minimum is 6.4.3, and
+react-syntax-highlighter is 16.1.2. Both packages now require Node >=22.12.0.
+
+Two scoped security constraints remain deliberate: frontend overrides DOMPurify
+to >=3.4.16; backend overrides `@istanbuljs/load-nyc-config`'s js-yaml to >=4.3.2,
+removing its vulnerable argparse/sprintf-js dependency chain. Its YAML load API
+was checked for compatibility. Keep these overrides until upstream dependencies
+supply patched versions without them. Updated lockfiles are required for CI and
+deployment; install with `npm ci`.
+
+Both complete dependency trees report zero audit vulnerabilities, including dev
+dependencies. Every one of the 52 open GitHub Dependabot alerts was compared with
+the resolved lockfile versions: none still match a vulnerable package version.
+GitHub alerts clear after these files reach the default branch and GitHub rescans;
+this local change does not dismiss alerts or push a commit.
+
+Dependency-upgrade validation: 126 backend tests, 14 frontend tests, production
+build and all nine live Redis/Judge0/AI smoke checks passed. Final backend and
+frontend audits both reported zero vulnerabilities; dependency-tree checks and
+`git diff --check` passed. No application flow changes were needed.
