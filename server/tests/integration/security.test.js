@@ -23,6 +23,8 @@ jest.unstable_mockModule(svc('doubtDraftChain.js'), () => ({
   NotRelevantError: class NotRelevantError extends Error {},
 }));
 
+const WorkItem = (await import('../../models/WorkItem.js')).default;
+const { processWork } = await import('../../services/workProcessor.js');
 const { createApp } = await import('../../app.js');
 const Answer = (await import('../../models/Answer.js')).default;
 const { waitFor } = await import('../waitFor.js');
@@ -57,6 +59,8 @@ describe('Prompt injection resistance', () => {
     expect(res.status).toBe(201);
 
     // AI draft runs in the background — wait for it, then inspect.
+    const work = await WorkItem.findOne({ key: `draft-${res.body.doubt._id}` });
+    await processWork({ data: { workItemId: work.id }, attemptsMade: 0, opts: { attempts: 3 } });
     const answer = await waitFor(() => Answer.findOne({ doubtId: res.body.doubt._id }));
     // State is decided ONLY by our route code, never by model output.
     expect(answer.state).toBe('pending');

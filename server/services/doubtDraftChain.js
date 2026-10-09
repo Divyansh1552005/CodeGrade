@@ -90,7 +90,7 @@ export async function generateDraftAnswer({ title, body, model = getModel() }) {
     await chain.invoke({
       title: title ?? '',
       body: body ?? '',
-    })
+    }, { signal: AbortSignal.timeout(60000) })
   );
 
   if (raw === NOT_RELEVANT_SENTINEL) {

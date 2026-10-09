@@ -20,6 +20,13 @@ jest.unstable_mockModule(svc('aiFeedbackChain.js'), () => ({
   })),
 }));
 
+const enqueueSubmission = jest.fn(async () => {});
+jest.unstable_mockModule(svc('submissionQueue.js'), () => ({ enqueueSubmission }));
+const Submission = (await import('../../models/Submission.js')).default;
+const { generateFeedback } = await import('../../services/aiFeedbackChain.js');
+const WorkItem = (await import('../../models/WorkItem.js')).default;
+const { processWork } = await import('../../services/workProcessor.js');
+const { processSubmission, processFeedback } = await import('../../services/submissionProcessor.js');
 const { createApp } = await import('../../app.js');
 const User = (await import('../../models/User.js')).default;
 const Problem = (await import('../../models/Problem.js')).default;
@@ -41,6 +48,7 @@ async function registerStudent() {
 }
 
 beforeEach(() => {
+  enqueueSubmission.mockReset().mockResolvedValue(undefined);
   post.mockReset();
   get.mockReset();
 });
@@ -67,7 +75,13 @@ describe('POST /submissions', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({ problemId: problem._id.toString(), code: 'print(int(input())*2)', language: 'python' });
 
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(202);
+    expect(res.body.submission.status).toBe('queued');
+    expect(post).not.toHaveBeenCalled();
+    await processSubmission({ data: { submissionId: res.body.submissionId, testCases: problem.testCases } });
+    await processFeedback({ data: { submissionId: res.body.submissionId } });
+    const completed = await request(app).get(`/submissions/${res.body.submissionId}`).set('Authorization', `Bearer ${token}`);
+    res.body = completed.body;
     expect(res.body.submission.status).toBe('graded');
     expect(res.body.submission.language).toBe('python');
     expect(res.body.submission.passCount).toBe(2);
@@ -83,10 +97,12 @@ describe('POST /submissions', () => {
     });
     post.mockResolvedValueOnce({ data: { stdout: b64('4\n'), status: { id: 3 } } });
 
-    await request(app)
+    const accepted = await request(app)
       .post('/submissions')
       .set('Authorization', `Bearer ${token}`)
       .send({ problemId: problem._id.toString(), code: 'print(int(input())*2)', language: 'python' });
+
+    await processSubmission({ data: { submissionId: accepted.body.submissionId, testCases: problem.testCases } });
 
     // The problem now shows solved:true for this student.
     const list = await request(app).get('/problems').set('Authorization', `Bearer ${token}`);
@@ -115,11 +131,12 @@ describe('POST /submissions', () => {
       .mockResolvedValueOnce({ data: { stdout: b64('4\n'), status: { id: 3 } } })
       .mockResolvedValueOnce({ data: { stdout: b64('99\n'), status: { id: 3 } } });
 
-    await request(app)
+    const accepted = await request(app)
       .post('/submissions')
       .set('Authorization', `Bearer ${token}`)
       .send({ problemId: problem._id.toString(), code: 'x', language: 'python' });
 
+    await processSubmission({ data: { submissionId: accepted.body.submissionId, testCases: problem.testCases } });
     const list = await request(app).get('/problems').set('Authorization', `Bearer ${token}`);
     const found = list.body.problems.find((p) => p._id === problem._id.toString());
     expect(found.solved).toBe(false);
@@ -137,6 +154,37 @@ describe('POST /submissions', () => {
 
     expect(res.status).toBe(400);
     expect(post).not.toHaveBeenCalled();
+  });
+
+  it('returns 503 and marks the document error when enqueue fails', async () => {
+    const token = await registerStudent();
+    const problem = await Problem.create({ title: 'P', testCases: [] });
+    enqueueSubmission.mockRejectedValueOnce(new Error('Outbox unavailable'));
+    const res = await request(app).post('/submissions')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ problemId: problem.id, code: 'x', language: 'python' });
+    expect(res.status).toBe(503);
+    expect((await Submission.findOne({ problemId: problem.id })).status).toBe('error');
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('persists execution failure and skips regrading completed deliveries', async () => {
+    const student = await User.create({ name: 'Stu', email: 'worker@x.com', passwordHash: 'hash', role: 'student' });
+    const problem = await Problem.create({ title: 'P', testCases: [{ input: '', expectedOutput: '1' }] });
+    const submission = await Submission.create({ studentId: student.id, problemId: problem.id, code: 'x', language: 'python' });
+    const job = { data: { submissionId: submission.id, testCases: problem.testCases } };
+    post.mockRejectedValueOnce(new Error('Judge unavailable'));
+    await expect(processSubmission(job)).rejects.toThrow();
+    expect((await Submission.findById(submission.id)).status).toBe('error');
+    post.mockResolvedValueOnce({ data: { stdout: b64('1'), status: { id: 3 } } });
+    await processSubmission(job);
+    generateFeedback.mockRejectedValueOnce(new Error('AI unavailable'));
+    const feedbackWork = await WorkItem.findOne({ key: `feedback-${submission.id}` });
+    await expect(processWork({ data: { workItemId: feedbackWork.id }, attemptsMade: 0, opts: { attempts: 1 } })).rejects.toThrow('AI unavailable');
+    expect((await Submission.findById(submission.id)).feedbackStatus).toBe('failed');
+    expect((await Submission.findById(submission.id)).status).toBe('graded');
+    await processSubmission(job);
+    expect(post).toHaveBeenCalledTimes(2);
   });
 
   it('requires authentication', async () => {
@@ -163,16 +211,17 @@ describe('POST /submissions', () => {
         .send({ problemId: problem._id.toString(), code: 'print(4)', language: 'python' });
 
     const first = await submit();
-    expect(first.status).toBe(201);
+    expect(first.status).toBe(202);
 
     const second = await submit();
-    expect(second.status).toBe(201);
+    expect(second.status).toBe(202);
 
     const third = await submit();
     expect(third.status).toBe(429);
     expect(third.body.error).toMatch(/twice per minute/i);
     expect(third.headers['retry-after']).toBeDefined();
     // The 3rd request never reached Judge0 at all.
-    expect(post).toHaveBeenCalledTimes(2);
+    expect(post).not.toHaveBeenCalled();
+    expect(enqueueSubmission).toHaveBeenCalledTimes(2);
   });
 });

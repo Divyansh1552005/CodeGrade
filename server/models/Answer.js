@@ -47,6 +47,8 @@ const answerSchema = new mongoose.Schema(
     },
     reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     reviewNotes: { type: String },
+    generationKey: String,
+    notificationRecordedAt: Date,
     reviewedAt: { type: Date },
   },
   { timestamps: true }
@@ -101,6 +103,7 @@ answerSchema.set('toJSON', {
 
 // Speeds up GET /answers?state=pending (the teacher review queue).
 answerSchema.index({ state: 1 });
+answerSchema.index({ generationKey: 1 }, { unique: true, partialFilterExpression: { generationKey: { $type: 'string' } } });
 
 const Answer = mongoose.model('Answer', answerSchema);
 

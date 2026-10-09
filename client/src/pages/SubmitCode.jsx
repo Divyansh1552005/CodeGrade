@@ -29,6 +29,24 @@ export default function SubmitCode() {
   const [busy, setBusy] = useState(false);
   const [submissions, setSubmissions] = useState([]);
 
+  const pending = result && ['queued', 'running'].includes(result.status);
+  const pendingFeedback = result?.status === 'graded' && ['pending', 'running'].includes(result.feedbackStatus);
+  const polling = pending || pendingFeedback;
+  const { data: statusData, error: statusError } = useCachedQuery(
+    result ? `/submissions/${result._id}` : '',
+    { enabled: Boolean(polling), refetchInterval: polling ? 2000 : 0 }
+  );
+
+  useEffect(() => {
+    const updated = statusData?.submission;
+    if (!updated || updated._id !== result?._id) return;
+    setResult(updated);
+    if (['graded', 'error'].includes(updated.status)) {
+      invalidate();
+      loadSubmissions(problemId);
+    }
+  }, [statusData, result?._id, problemId]);
+
   const starterFor = (problem, lang) => problem?.starterCode?.[lang] || '';
 
   // Load this student's past submissions for the selected problem.
@@ -46,6 +64,14 @@ export default function SubmitCode() {
     if (problemId) loadSubmissions(problemId);
     else setSubmissions([]);
   }, [problemId]);
+
+  // Resume status refresh for pending history entries after revisiting the page.
+  const hasPendingHistory = submissions.some((s) => ['queued', 'running'].includes(s.status) || ['pending', 'running'].includes(s.feedbackStatus));
+  useEffect(() => {
+    if (!problemId || !hasPendingHistory) return;
+    const timer = setInterval(() => loadSubmissions(problemId), 2000);
+    return () => clearInterval(timer);
+  }, [problemId, hasPendingHistory]);
 
   // Locked: sync to the route problem. Generic: default to the first problem.
   useEffect(() => {
@@ -181,9 +207,9 @@ export default function SubmitCode() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <button className="btn flex items-center gap-2" disabled={busy || !problemId}>
+          <button className="btn flex items-center gap-2" disabled={busy || pending || !problemId}>
             {busy && <Spinner />}
-            {busy ? 'Running…' : 'Run & Grade'}
+            {busy ? 'Submitting…' : pending ? 'Grading…' : 'Run & Grade'}
           </button>
           <span className="text-xs text-slate-400 dark:text-slate-500">
             Limit: 2 submissions/minute, 20/day.
@@ -191,6 +217,11 @@ export default function SubmitCode() {
         </div>
       </form>
 
+      {polling && statusError && (
+        <p role="status" className="mt-3 text-sm text-amber-600">
+          Unable to refresh grading status. Retrying automatically…
+        </p>
+      )}
       {result && <Results submission={result} />}
 
       {submissions.length > 0 && <PastSubmissions submissions={submissions} />}
@@ -222,7 +253,7 @@ const PastSubmissions = memo(function PastSubmissions({ submissions }) {
                         : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400'
                     }`}
                   >
-                    {s.passCount}/{s.totalCount}
+                    {s.status === 'graded' ? `${s.passCount}/${s.totalCount}` : s.status}
                   </span>
                   <span className="pill">{LANGUAGE_LABELS[s.language] || s.language}</span>
                   <span className="text-slate-400 dark:text-slate-500">
@@ -256,7 +287,14 @@ const PastSubmissions = memo(function PastSubmissions({ submissions }) {
 
 const Results = memo(function Results({ submission }) {
   const { passCount, totalCount, testResults, aiFeedback, status } = submission;
-  const allPass = passCount === totalCount;
+  if (status === 'queued' || status === 'running') {
+    return <p role="status" className="mt-6 text-sm">{status === 'queued'
+      ? 'Submission queued. Waiting for grading…' : 'Grading your submission…'}</p>;
+  }
+  if (status === 'error') {
+    return <p role="alert" className="mt-6 text-sm text-red-600">{submission.error || 'Grading failed. Please resubmit.'}</p>;
+  }
+  const allPass = totalCount > 0 && passCount === totalCount;
   return (
     <div className="mt-6 border-t border-slate-200 pt-5 dark:border-slate-800">
       <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">
@@ -341,7 +379,7 @@ const Results = memo(function Results({ submission }) {
         </div>
       ) : (
         <p className="mt-4 text-sm text-slate-400 dark:text-slate-500">
-          AI feedback was not available for this submission.
+          {['pending', 'running'].includes(submission.feedbackStatus) ? 'AI feedback is being prepared. Your test results are ready.' : 'AI feedback was not available for this submission.'}
         </p>
       )}
     </div>

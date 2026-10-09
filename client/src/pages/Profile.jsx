@@ -46,7 +46,7 @@ export default function Profile() {
   // A problem counts as solved if any submission for it passed every test case.
   const solvedCount = new Set(
     submissions
-      .filter((s) => s.totalCount > 0 && s.passCount === s.totalCount)
+      .filter((s) => s.status === 'graded' && s.totalCount > 0 && s.passCount === s.totalCount)
       .map((s) => String(s.problemId?._id || s.problemId))
   ).size;
 

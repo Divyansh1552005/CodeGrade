@@ -13,6 +13,8 @@ import {
   setAuthHandlers,
 } from '../api/client.js';
 
+import { invalidate } from '../api/useCachedQuery.js';
+
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
@@ -42,6 +44,7 @@ export function AuthProvider({ children }) {
       onLogout: () => {
         tokenRef.current = null;
         setAccessToken(null);
+        invalidate();
         setUser(null);
       },
     });
@@ -54,10 +57,12 @@ export function AuthProvider({ children }) {
       try {
         await refreshAccessToken(); // updates state via onRefreshed
         const { data } = await api.get('/auth/me');
+        invalidate();
         setUser(data.user);
       } catch {
         tokenRef.current = null;
         setAccessToken(null);
+        invalidate();
         setUser(null);
       } finally {
         setLoading(false);
@@ -69,6 +74,7 @@ export function AuthProvider({ children }) {
     const { data } = await api.post('/auth/login', { email, password });
     tokenRef.current = data.accessToken;
     setAccessToken(data.accessToken);
+    invalidate();
     setUser(data.user);
     return data.user;
   }
@@ -77,6 +83,7 @@ export function AuthProvider({ children }) {
     const { data } = await api.post('/auth/register', payload);
     tokenRef.current = data.accessToken;
     setAccessToken(data.accessToken);
+    invalidate();
     setUser(data.user);
     return data.user;
   }
@@ -89,6 +96,7 @@ export function AuthProvider({ children }) {
     }
     tokenRef.current = null;
     setAccessToken(null);
+    invalidate();
     setUser(null);
   }
 

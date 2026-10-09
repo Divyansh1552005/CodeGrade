@@ -84,7 +84,7 @@ export async function generateFeedback({
     passCount: passCount ?? 0,
     totalCount: totalCount ?? 0,
     resultLines: summarizeResults(testResults),
-  });
+  }, { signal: AbortSignal.timeout(60000) });
 
   // Defense-in-depth: validate again on our side. withStructuredOutput already
   // parses, but we never trust the shape implicitly.

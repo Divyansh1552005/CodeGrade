@@ -14,6 +14,8 @@ const { createApp } = await import('../../app.js');
 const Answer = (await import('../../models/Answer.js')).default;
 const { waitFor } = await import('../waitFor.js');
 
+const WorkItem = (await import('../../models/WorkItem.js')).default;
+const { processWork } = await import('../../services/workProcessor.js');
 const app = createApp();
 
 async function register(role) {
@@ -31,7 +33,9 @@ async function createDoubt(token) {
     .post('/doubts')
     .set('Authorization', `Bearer ${token}`)
     .send({ title: 'Why is my loop slow?', body: 'It is O(n^2), how to fix?' });
-  // The AI draft is generated in the background — wait for it to land.
+  // Execute the queued draft explicitly; tests never connect to Redis.
+  const work = await WorkItem.findOne({ key: `draft-${res.body.doubt._id}` });
+  await processWork({ data: { workItemId: work.id }, attemptsMade: 0, opts: { attempts: 3 } });
   await waitFor(() => Answer.findOne({ doubtId: res.body.doubt._id }));
   return res.body.doubt;
 }

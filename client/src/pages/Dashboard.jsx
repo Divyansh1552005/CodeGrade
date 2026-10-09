@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../auth/AuthContext.jsx';
+import ActivityPanel from '../components/ActivityPanel.jsx';
 import { useCachedQuery } from '../api/useCachedQuery.js';
 
 const container = {
@@ -36,7 +37,7 @@ export default function Dashboard() {
   const submissions = subData?.submissions ?? [];
   const solvedCount = new Set(
     submissions
-      .filter((s) => s.totalCount > 0 && s.passCount === s.totalCount)
+      .filter((s) => s.status === 'graded' && s.totalCount > 0 && s.passCount === s.totalCount)
       .map((s) => String(s.problemId?._id || s.problemId))
   ).size;
   const pendingCount = pendingData?.answers?.length ?? 0;
@@ -56,6 +57,7 @@ export default function Dashboard() {
       body: 'Ask questions; an AI draft is prepared for teacher review.',
       icon: ChatIcon,
     },
+    isTeacher && { to: '/bulk-jobs', title: 'Imports & Reports', body: 'Import problems and generate reports in the background.', icon: CodeIcon },
     isTeacher && {
       to: '/review',
       title: 'Review Queue',
@@ -124,6 +126,8 @@ export default function Dashboard() {
           </motion.div>
         </motion.div>
       )}
+
+      <ActivityPanel isStudent={isStudent} userId={user._id} />
 
       {/* Actions */}
       <motion.div

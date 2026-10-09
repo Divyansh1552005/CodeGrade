@@ -7,8 +7,8 @@ import MarkdownEditor from '../components/MarkdownEditor.jsx';
 import LoadingSpinner from '../components/LoadingSpinner.jsx';
 
 export default function TeacherReview() {
-  const pending = useCachedQuery('/answers?state=pending', { key: 'answers:pending' });
-  const failed = useCachedQuery('/doubts/failed', { key: 'doubts:failed' });
+  const pending = useCachedQuery('/answers?state=pending', { key: 'answers:pending', refetchInterval: 5000 });
+  const failed = useCachedQuery('/doubts/failed', { key: 'doubts:failed', refetchInterval: 5000 });
 
   const answers = pending.data?.answers ?? [];
   const failedDoubts = failed.data?.doubts ?? [];

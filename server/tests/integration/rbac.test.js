@@ -24,6 +24,8 @@ jest.unstable_mockModule(svc('doubtDraftChain.js'), () => ({
   NotRelevantError: class NotRelevantError extends Error {},
 }));
 
+const enqueueSubmission = jest.fn(async () => {});
+jest.unstable_mockModule(svc('submissionQueue.js'), () => ({ enqueueSubmission }));
 const { createApp } = await import('../../app.js');
 const Problem = (await import('../../models/Problem.js')).default;
 
@@ -43,6 +45,7 @@ async function register(role) {
 }
 
 beforeEach(() => {
+  enqueueSubmission.mockReset().mockResolvedValue(undefined);
   post.mockReset();
   get.mockReset();
 });
@@ -83,7 +86,7 @@ describe('RBAC: POST /submissions is student-only', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
-  it('allows a student to submit code (201)', async () => {
+  it('allows a student to submit code (202)', async () => {
     const token = await register('student');
     const problem = await Problem.create({
       title: 'Echo',
@@ -96,8 +99,8 @@ describe('RBAC: POST /submissions is student-only', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({ problemId: problem._id.toString(), code: 'print(int(input())*2)', language: 'python' });
 
-    expect(res.status).toBe(201);
-    expect(res.body.submission.status).toBe('graded');
-    expect(res.body.submission.passCount).toBe(1);
+    expect(res.status).toBe(202);
+    expect(res.body.submission.status).toBe('queued');
+    expect(enqueueSubmission).toHaveBeenCalledTimes(1);
   });
 });

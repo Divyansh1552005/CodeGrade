@@ -17,14 +17,19 @@ const Doubt = (await import('../../models/Doubt.js')).default;
 const Answer = (await import('../../models/Answer.js')).default;
 const { waitFor } = await import('../waitFor.js');
 
+const WorkItem = (await import('../../models/WorkItem.js')).default;
+const { processWork } = await import('../../services/workProcessor.js');
 const app = createApp();
 
 // Wait for the background AI processing to resolve the doubt's status.
-const waitForStatus = (doubtId, status) =>
-  waitFor(async () => {
+const waitForStatus = async (doubtId, status) => {
+  const work = await WorkItem.findOne({ key: `draft-${doubtId}` });
+  await processWork({ data: { workItemId: work.id }, attemptsMade: 2, opts: { attempts: 3 } }).catch(() => {});
+  return waitFor(async () => {
     const d = await Doubt.findById(doubtId);
     return d && d.aiDraftStatus === status ? d : null;
   });
+};
 
 async function register(role) {
   const res = await request(app).post('/auth/register').send({

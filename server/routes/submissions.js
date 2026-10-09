@@ -10,8 +10,7 @@ import {
   submissionMinuteLimiter,
   submissionDailyLimiter,
 } from '../middleware/rateLimit.js';
-import { gradeSubmission } from '../services/gradingService.js';
-import { generateFeedback } from '../services/aiFeedbackChain.js';
+import { enqueueSubmission } from '../services/submissionQueue.js';
 import { assertRunnable } from '../services/judge0Client.js';
 import { createSubmissionSchema } from '../validation/schemas.js';
 
@@ -55,42 +54,25 @@ router.post(
         problemId: problem._id,
         code,
         language,
-        status: 'running',
+        status: 'queued',
+        testCasesSnapshot: problem.testCases,
       });
 
       try {
-        const graded = await gradeSubmission({
-          language,
-          code,
-          testCases: problem.testCases,
-        });
-        submission.testResults = graded.testResults;
-        submission.passCount = graded.passCount;
-        submission.totalCount = graded.totalCount;
-
-        // AI feedback is best-effort: a failure here should not fail grading.
-        try {
-          submission.aiFeedback = await generateFeedback({
-            language,
-            code,
-            passCount: graded.passCount,
-            totalCount: graded.totalCount,
-            testResults: graded.testResults,
-          });
-        } catch (aiErr) {
-          console.error('AI feedback failed:', aiErr.message);
-        }
-
-        submission.status = 'graded';
-        await submission.save();
-      } catch (execErr) {
-        submission.status = 'error';
-        submission.error = execErr.message;
-        await submission.save();
-        throw execErr;
+        await enqueueSubmission(submission._id.toString(), problem.testCases);
+      } catch (err) {
+        // Never leave a rejected enqueue looking like pending work.
+        await Submission.updateOne(
+          { _id: submission._id, status: 'queued' },
+          { $set: { status: 'error', error: 'Unable to queue grading. Please resubmit.' } }
+        );
+        console.error('Submission enqueue failed:', err.message);
+        throw httpError(503, 'Unable to queue grading. Please try again.');
       }
 
-      res.status(201).json({ submission });
+      const publicSubmission = submission.toObject();
+      delete publicSubmission.testCasesSnapshot;
+      res.status(202).json({ submissionId: submission._id, submission: publicSubmission });
     } catch (err) {
       next(err);
     }

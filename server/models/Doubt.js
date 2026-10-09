@@ -9,6 +9,7 @@ const doubtSchema = new mongoose.Schema(
     },
     title: { type: String, required: true, trim: true },
     body: { type: String, required: true },
+    aiDraftError: String,
     // Tracks the outcome of the AI draft generation for this doubt.
     aiDraftStatus: {
       type: String,

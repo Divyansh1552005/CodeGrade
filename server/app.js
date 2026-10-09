@@ -7,6 +7,8 @@ import problemRoutes from './routes/problems.js';
 import submissionRoutes from './routes/submissions.js';
 import doubtRoutes from './routes/doubts.js';
 import answerRoutes from './routes/answers.js';
+import activityRoutes from './routes/activity.js';
+import jobRoutes from './routes/jobs.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 /**
@@ -64,6 +66,8 @@ export function createApp() {
   app.use('/submissions', submissionRoutes);
   app.use('/doubts', doubtRoutes);
   app.use('/answers', answerRoutes);
+  app.use('/activity', activityRoutes);
+  app.use('/jobs', jobRoutes);
 
   app.use((req, res) => res.status(404).json({ error: 'Not found' }));
   app.use(errorHandler);

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import Answer from '../models/Answer.js';
 import Doubt from '../models/Doubt.js';
+import { recordAnswerNotification } from '../services/workService.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roleGuard.js';
 import { validate } from '../middleware/validate.js';
@@ -53,6 +54,8 @@ router.post(
       answer.reviewedAt = new Date();
       await answer.save();
 
+      // Recovery also records this event if the process exits after approval.
+      await recordAnswerNotification(answer);
       res.status(201).json({ answer });
     } catch (err) {
       next(err);
@@ -91,6 +94,7 @@ function review(targetState) {
       }
 
       await answer.save(); // throws on illegal transition
+      await recordAnswerNotification(answer);
       res.json({ answer });
     } catch (err) {
       next(err);

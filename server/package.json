@@ -1,7 +1,7 @@
 {
   "name": "code-grading-portal-server",
   "version": "1.0.0",
-  "description": "AI-Powered Code Grading & Doubt Resolution Portal — backend",
+  "description": "AI-Powered Code Grading & Doubt Resolution Portal \u2014 backend",
   "main": "server.js",
   "type": "module",
   "engines": {
@@ -11,7 +11,9 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "test": "cross-env NODE_ENV=test NODE_OPTIONS=--experimental-vm-modules jest --runInBand --detectOpenHandles",
-    "seed": "node scripts/seed.js"
+    "seed": "node scripts/seed.js",
+    "worker": "node worker.js",
+    "test:smoke": "node scripts/smokeJobs.js"
   },
   "jest": {
     "testEnvironment": "node",
@@ -27,6 +29,7 @@
     "@langchain/groq": "^0.2.3",
     "axios": "^1.7.9",
     "bcryptjs": "^2.4.3",
+    "bullmq": "^5.81.5",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",

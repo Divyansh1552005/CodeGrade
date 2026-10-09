@@ -145,6 +145,8 @@ dist
 *.md
 # ...but keep the README tracked
 !README.md
+!ARCHITECTURE.md
+!PERSONALNOTES.md
 
 .claude/
 

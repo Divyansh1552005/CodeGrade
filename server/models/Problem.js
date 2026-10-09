@@ -47,6 +47,7 @@ const problemSchema = new mongoose.Schema(
     topics: { type: [{ type: String, enum: TOPICS }], default: [] },
     starterCode: { type: starterCodeSchema, default: () => ({}) },
     testCases: { type: [testCaseSchema], default: [] },
+    importKey: { type: String, select: false },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     // Soft-delete marker: set true instead of removing when Submissions still
     // reference the problem, so submission history stays intact.
@@ -57,5 +58,6 @@ const problemSchema = new mongoose.Schema(
 
 // Speeds up the topics=a,b filter on GET /problems.
 problemSchema.index({ topics: 1 });
+problemSchema.index({ importKey: 1 }, { unique: true, partialFilterExpression: { importKey: { $type: 'string' } } });
 
 export default mongoose.model('Problem', problemSchema);

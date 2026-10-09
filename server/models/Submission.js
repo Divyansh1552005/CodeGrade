@@ -44,6 +44,11 @@ const submissionSchema = new mongoose.Schema(
       default: 'queued',
     },
     error: { type: String },
+    testCasesSnapshot: { type: [new mongoose.Schema({ input: String, expectedOutput: String }, { _id: false })], default: undefined, select: false },
+    feedbackStatus: { type: String, enum: ['pending', 'running', 'completed', 'failed'], default: 'completed' },
+    feedbackError: String,
+    gradedAt: Date,
+    completionRecordedAt: Date,
   },
   { timestamps: true }
 );
@@ -51,5 +56,6 @@ const submissionSchema = new mongoose.Schema(
 // Speeds up "this student's submissions for this problem" lookups (solved
 // badges, submission history) — the dominant query shape on this collection.
 submissionSchema.index({ studentId: 1, problemId: 1 });
+submissionSchema.index({ status: 1, completionRecordedAt: 1 });
 
 export default mongoose.model('Submission', submissionSchema);

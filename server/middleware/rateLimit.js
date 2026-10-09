@@ -16,17 +16,18 @@ function makeLimiter({ keyPrefix, points, duration }) {
   let real;
   function ensure() {
     if (real) return real;
+    const prefix = process.env.RATE_LIMIT_PREFIX ? `${process.env.RATE_LIMIT_PREFIX}:${keyPrefix}` : keyPrefix;
     real = isTest
-      ? new RateLimiterMemory({ keyPrefix, points, duration })
+      ? new RateLimiterMemory({ keyPrefix: prefix, points, duration })
       : new RateLimiterRedis({
           storeClient: getRedisClient(),
-          keyPrefix,
+          keyPrefix: prefix,
           points,
           duration,
           // If Redis itself is unreachable, fail OPEN via an in-memory
           // fallback rather than locking every authenticated user out.
           insuranceLimiter: new RateLimiterMemory({
-            keyPrefix: `ins:${keyPrefix}`,
+            keyPrefix: `ins:${prefix}`,
             points,
             duration,
           }),

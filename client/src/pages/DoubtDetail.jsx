@@ -1,38 +1,16 @@
-import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { api } from '../api/client.js';
+import { useCachedQuery } from '../api/useCachedQuery.js';
 import Markdown from '../components/Markdown.jsx';
 import LoadingSpinner from '../components/LoadingSpinner.jsx';
 
 export default function DoubtDetail() {
   const { id } = useParams();
-  const [doubt, setDoubt] = useState(null);
-  const [answer, setAnswer] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      setLoading(true);
-      try {
-        const [d, a] = await Promise.all([
-          api.get(`/doubts/${id}`),
-          api.get(`/doubts/${id}/answer`),
-        ]);
-        if (!active) return;
-        setDoubt(d.data.doubt);
-        setAnswer(a.data.answer); // null if no approved answer yet
-      } catch (err) {
-        if (active) setError(err.response?.data?.error || 'Failed to load doubt');
-      } finally {
-        if (active) setLoading(false);
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [id]);
+  const doubtQuery = useCachedQuery(`/doubts/${id}`, { refetchInterval: 5000 });
+  const answerQuery = useCachedQuery(`/doubts/${id}/answer`, { refetchInterval: 5000 });
+  const doubt = doubtQuery.data?.doubt;
+  const answer = answerQuery.data?.answer;
+  const loading = doubtQuery.loading || answerQuery.loading;
+  const error = doubtQuery.error || answerQuery.error;
 
   if (loading) return <LoadingSpinner full />;
   if (error) return <p className="text-sm text-red-600 dark:text-red-400">{error}</p>;
@@ -96,7 +74,7 @@ export default function DoubtDetail() {
               AI failed to generate a draft answer — awaiting a manual answer from a teacher.
             </p>
           ) : (
-            <p className="text-sm text-slate-500 dark:text-slate-400">Awaiting teacher response.</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">{doubt.aiDraftStatus === 'pending' ? 'Preparing an AI draft for teacher review…' : 'Awaiting teacher response.'}</p>
           )}
         </div>
       )}

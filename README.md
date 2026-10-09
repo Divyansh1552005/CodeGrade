@@ -11,7 +11,7 @@ treated as the primary concern, on par with feature completeness.
 
 > For the full architectural record, see `ARCHITECTURE.md`. For a plain-English,
 > file-by-file walkthrough of the whole system, see `PERSONALNOTES.md`
-> (gitignored, local-only).
+> (tracked alongside this document).
 
 ---
 
@@ -23,7 +23,7 @@ treated as the primary concern, on par with feature completeness.
 | Backend | Node.js + Express (ES modules) |
 | Database | MongoDB + Mongoose |
 | Validation | Zod (request bodies, backend) |
-| Rate limiting | Redis + `rate-limiter-flexible` |
+| Rate limiting / grading queue | Redis + `rate-limiter-flexible` + BullMQ |
 | AI orchestration | LangChain (JS) with Zod structured output |
 | LLM provider | Google Gemini (default) or Groq — switchable via `LLM_PROVIDER` |
 | Code execution | Judge0 CE (hosted, via RapidAPI), base64 transport |
@@ -38,9 +38,10 @@ treated as the primary concern, on par with feature completeness.
 /server
   /config        db.js (MongoDB), redis.js (lazy ioredis client)
   /constants     topics.js (fixed problem-tag list, mirrored on the client)
-  /models        User, Problem, Submission, Doubt, Answer, RefreshToken
-  /routes        auth, problems, submissions, doubts, answers
-  /services      judge0Client, gradingService, aiFeedbackChain, doubtDraftChain, tokenService, llm, languageMap
+  /models        User, Problem, Submission, Doubt, Answer, RefreshToken, WorkItem, StudentStats, Notification
+  /routes        auth, problems, submissions, doubts, answers, activity, jobs
+  /services      execution/AI chains, processors, durable work/outbox dispatch, recovery, progress, tokenService
+  worker.js      separate BullMQ consumers + recurring recovery
   /middleware    auth (+ general rate limit), roleGuard, errorHandler, validate (zod), rateLimit
   /validation    schemas.js — zod schemas for every route body
   /utils         sanitize (length caps), cookies
@@ -106,11 +107,14 @@ npm run dev      # → http://localhost:5173  (proxies /api to :5000)
 ### 4. Tests
 
 ```bash
-cd server  && npm test              # 88 tests: unit + integration + security
-cd client  && npm run test:frontend
+cd server  && npm test              # 113 tests: unit + integration + security
+cd client  && npm run test:frontend  # 11 UI/hook tests
+cd client  && npm run build
+# Optional live checks with server/.env Redis, Judge0 and AI credentials:
+cd server  && npm run test:smoke
 ```
 
-The test suite does **not** require a live Redis connection — rate limiting
+The normal `npm test` suite does **not** require a live Redis connection — rate limiting
 falls back to an in-memory limiter with the identical API when
 `NODE_ENV=test`, so `npm test` never touches the real Redis instance or its
 counters.
@@ -263,6 +267,125 @@ in the route handlers — Zod only owns shape/type validation. On failure, the
 middleware throws a 400 with a single clear `field[index].sub: message`
 string rather than dumping the full Zod error tree.
 
+### Background jobs: BullMQ + MongoDB outbox
+
+Run the API and worker as separate processes, with the same MongoDB and Redis
+configuration:
+
+```bash
+cd server
+npm run dev       # API, terminal 1
+npm run worker    # all background consumers, terminal 2
+```
+
+For deployment, provision a separate Node background worker: build `npm ci`,
+start `npm run worker`, root directory `server`. Copy `MONGODB_URI`, `REDIS_URL`,
+Judge0 credentials and AI provider variables from the API environment. The existing
+Render blueprint provisions the API only; the worker needs its own service.
+No new infrastructure service is required: BullMQ uses the existing Redis service.
+Use Redis persistence and `maxmemory-policy=noeviction`.
+
+The API saves a **WorkItem outbox record in MongoDB**, rather than contacting
+Redis from the handler. A worker dispatcher checks up to 100 pending records every
+two seconds and sends them to Redis with the WorkItem ID as a stable job ID.
+Redis outages leave work pending and do not prevent job acceptance (existing
+rate-limit middleware still attempts Redis and falls back to memory on failure).
+Jobs cannot run until Redis connects. The worker logs repeated connection errors
+at most once every 30 seconds per identical message.
+
+| Work | Queue | Behavior |
+|---|---|---|
+| Code execution | `submission-grading` | POST returns 202 with `{ submissionId, submission }`; worker runs Judge0 and publishes results immediately |
+| Doubt drafting | `doubt-drafts` | POST returns 201 with pending doubt; worker creates one AI answer for teacher review |
+| Code feedback | `ai-feedback` | Independent AI retries; test results remain available even when feedback fails |
+| Analytics, XP, streaks, achievements | `submission-completion` | Rebuilds each student's progress after grading; then records a notification job |
+| In-app alerts | `notifications` | Grading-complete and answer-approved messages, deduplicated per source event |
+| Imports / exports / reports | `bulk-jobs` | Teacher-owned problem import, problem export, and grading-report export |
+| Recovery | `queue-maintenance` | Startup scan and recurring reconciliation every 60 seconds |
+
+Jobs get up to **three attempts** with exponential delays starting at five seconds.
+Each AI-chain invocation receives a 60-second abort deadline.
+Attempt counts survive Redis job loss. Exhaustion marks the WorkItem failed and
+updates its domain status; off-topic doubts finish as `irrelevant` without retries.
+Each queue has concurrency two per worker process except bulk jobs and maintenance
+(concurrency one). BullMQ's recurring [Job Scheduler](https://docs.bullmq.io/guide/job-schedulers/)
+creates recovery jobs; scan timing may slip if maintenance is busy.
+
+`Submission.status` remains `queued → running → graded/error`.
+`feedbackStatus` separately tracks `pending → running → completed/failed`.
+The browser polls submission/feedback status every two seconds until both finish,
+including pending history on revisits. Doubt detail and teacher review refresh
+at five-second intervals. The dashboard refreshes progress and notifications every
+ten seconds and the leaderboard every 30 seconds. Cached private data is cleared
+on account changes; notifications and bulk-job lists also use per-user cache keys.
+
+**Replay safety and recovery:** new submissions store their original test cases
+in a private snapshot. Recovery reconstructs missing outbox records for queued
+submissions, pending doubts, feedback, graded completion events, and approved
+answer notifications. It checks Redis state before re-enqueueing a missing job,
+so an old active job is not duplicated merely because it is old. Unique work keys,
+AI-generation keys, import-row keys and notification keys guard repeated delivery.
+No AI failure deletes a teacher answer. Stats are rebuilt from immutable graded
+submissions rather than incrementing XP during retries. These processors follow
+[BullMQ's idempotent-job guidance](https://docs.bullmq.io/patterns/idempotent-jobs).
+
+**Progress rules:** award 100 XP for each unique problem solved (all tests pass,
+nonempty test set). Repeated solves add no XP. A day with at least one eventually
+graded submission counts toward the streak using its submission date in UTC.
+A current streak survives through the following day; after that it becomes zero.
+Achievements: first solve, five solves, ten solves, and seven consecutive days.
+Leaderboard lists the top 20 students by XP, then solved count and student ID.
+Progress includes graded submission count, total/passed tests, solved count and
+longest/current streak. Historical graded submissions are backfilled on recovery.
+
+**Teacher tools:** Dashboard → Imports & Reports (`/bulk-jobs`). Paste a JSON array
+of problems or `{ "problems": [...] }` using the same fields as the create-problem
+form. The whole batch is validated before job creation. Import limits: 100 problems
+and the existing 1 MB request cap. Each imported row has a stable import key, so a
+retry resumes without duplicating saved rows. Imports are additive; partial rows
+remain if retries fail. Exports include only the requesting teacher's own problems,
+including archived ones, and grading reports summarize submission/graded/error/
+all-tests-passed counts per owned problem. Results download as JSON. Exports are
+limited to 1000 problems / 8 MB; larger banks fail explicitly. Up to three active
+bulk jobs are accepted per teacher (a best-effort request-time cap). Recent history
+lists 20 jobs; detail/results require ownership. In-app notifications list the
+latest 30 messages; only their recipient may mark them read. No email or external
+messaging service is connected.
+
+**Operational limits:** MongoDB domain/outbox writes are separate, not a
+transaction. Startup and periodic recovery repair the known domain-to-outbox gaps;
+a caller may still see an error after a domain write has committed. After a job
+exhausts its retry budget, recovery does not automatically reset it. Students can
+resubmit failed grading; teachers can answer failed drafts manually. Completed
+outbox records/results are retained in MongoDB for audit and deduplication (no
+automatic cleanup); Redis retains bounded completed/failed history. Plan an archive
+policy before long-term production use. Recovery scans active domain/work records
+and initially backfills historical completions. Progress rebuilds scan that
+student's graded history; larger installations may need incremental projections.
+Existing authentication, rate limiting, ordinary CRUD, approval decisions, and
+MongoDB TTL cleanup stay synchronous. One-off seed/cleanup CLI scripts stay manual.
+Workers drain active consumers on SIGINT/SIGTERM; unfinished outbox dispatch is
+recovered on restart.
+
+**Redis troubleshooting:** `getaddrinfo ENOTFOUND` means DNS cannot resolve the
+configured hostname. Copy a current connection URL from the Redis provider into
+`server/.env` and restart the worker/API. A `punycode` deprecation warning is unrelated
+to connectivity. Tests use fake queue transport and real temporary MongoDB; they
+do not use live providers. `npm run test:smoke` separately checks real hosted
+Redis, Judge0, AI feedback/drafts, approval visibility, notifications, analytics,
+XP/streaks, imports/exports/reports, worker restart recovery and the Redis-backed
+rate limiter. It spawns the actual API/worker processes against a temporary MongoDB
+and unique queue/rate-limit namespaces, then stops those processes and deletes
+only its own Redis keys. Results are written to `/tmp/codegrade-smoke-results.json`.
+It consumes a small number of real Judge0/AI requests. `QUEUE_PREFIX` (default
+`bull`) and optional `RATE_LIMIT_PREFIX` allow environment isolation; workers
+sharing one Mongo database must share the same queue prefix.
+
+Final validation: 113 backend tests, 11 frontend tests, production build, and all
+eight live smoke checks passed. The live Redis instance reported `volatile-lru`;
+change its maxmemory-policy to `noeviction` before production, as required by
+[BullMQ production guidance](https://docs.bullmq.io/guide/going-to-production).
+
 ### Rate limiting — Redis + `rate-limiter-flexible`
 
 - **General limiter** (all authenticated routes): 120 requests/60s per user,
@@ -305,7 +428,7 @@ chat model (`services/llm.js`) so provider selection happens in one place
   contains fenced code blocks, which breaks JSON-mode parsers).
 
 The LLM's output is **never trusted to set `state`, `role`, or any
-privileged field**. The doubt chain returns only a `content` string; route
+privileged field**. The doubt chain returns only a `content` string; application
 code is the sole writer of `state`. AI feedback is best-effort — a model
 failure never fails grading.
 
@@ -380,10 +503,16 @@ A hybrid model chosen for security:
 | GET | `/problems` `?topics=a,b` | auth | list problems, optional topic filter, stable numbering |
 | GET | `/problems/stats/counts` | auth | global + per-topic problem counts |
 | GET/POST/PATCH/DELETE | `/problems/:id` | any / teacher | read / create / edit / archive-or-delete |
-| POST | `/submissions` | student | grade code + AI feedback (rate-limited: 2/min, 20/day) |
+| POST | `/submissions` | student | persist queued grading work, return 202 + submission ID (rate-limited: 2/min, 20/day) |
 | GET | `/submissions` `/submissions/:id` | auth | own (student) / all (teacher) |
 | POST/GET | `/doubts` `?mine=1` | auth | post doubt (AI draft) / list board (or just your own) |
 | GET | `/doubts/:id/answer` | auth | **approved** answer only |
+| GET | `/activity/progress` | auth | own analytics, XP, streaks and achievements |
+| GET | `/activity/leaderboard` | auth | top 20 students; public names and scores |
+| GET | `/activity/notifications` | auth | latest 30 own notifications |
+| PATCH | `/activity/notifications/:id/read` | recipient | mark own notification read |
+| POST | `/jobs` | teacher | queue `problem-import`, `problem-export` or `report-export`; returns 202 |
+| GET | `/jobs` `/jobs/:id` | owner teacher | bulk-job history, status and JSON result |
 | GET | `/answers?state=pending` | teacher | review queue |
 | PATCH | `/answers/:id/approve` `/reject` | teacher | approve / reject |
 
@@ -394,7 +523,7 @@ per-user rate limit (enforced inside `requireAuth`, not listed per-row).
 
 ## Testing summary
 
-Backend (88 tests): Answer state-machine unit tests (valid + all illegal
+Backend (113 tests): Answer state-machine unit tests (valid + all illegal
 transitions), Judge0 client (timeout + non-2xx + base64 round-trip + Unicode
 regression), rate-limit middleware (wrapper logic + both submission quotas +
 live route wiring), Zod validation (every required/invalid field per route),
@@ -404,7 +533,12 @@ draft → approval workflow, role guards (student 403 on teacher routes), and
 the security cases (prompt injection, oversized code, invalid language
 rejected before Judge0).
 
-Frontend: form rendering + happy-path login submit.
+Frontend (11 tests): login rendering/submit, cached-query polling and stale-response
+protection, bulk-job JSON validation, acceptance/status rendering, and server errors; submission
+queued/results/feedback rendering, terminal-error polling stop, and pending-history
+refresh on revisit.
+Backend background-job tests additionally cover retries/recovery, replay safety,
+analytics/XP/streaks, notification ownership, and teacher-only imports/exports.
 
 ---
 
@@ -453,7 +587,7 @@ larger/longer-running project would probably revisit:
   the database. Simple and fast to ship; the cost is that adding a topic
   means editing two files by hand instead of an admin UI, and the two lists
   can drift if one is edited without the other.
-- **Backend test depth over frontend test depth.** 88 backend tests vs. 2
+- **Backend test depth over frontend test depth.** 113 backend tests vs. 11
   frontend tests, deliberately — the assignment explicitly weights backend
   correctness (safe execution, approval-state correctness,
   prompt-injection resistance) at least as heavily as feature completeness,
@@ -492,7 +626,7 @@ Things I'd do next, roughly in the order I'd prioritize them:
 5. **Pagination** on the problems list and doubt board — both currently do
    an unbounded `find()`, fine at demo scale, not at real class-roster scale.
 6. **Push updates instead of polling** — a doubt's AI draft finishing, or a
-   teacher approving an answer, currently only shows up on the next fetch;
+   teacher approving an answer, is now refreshed by short polling intervals;
    WebSockets/SSE would make that live.
 7. **Move to a single-domain deployment** (both frontend and backend behind
    one reverse-proxied domain) to drop `SameSite=None` in favor of
@@ -501,9 +635,8 @@ Things I'd do next, roughly in the order I'd prioritize them:
    pass/fail per case with a simple count; weighted or partial-credit
    scoring would be a natural extension given `testResults` already stores
    a per-case result.
-9. **Per-teacher analytics** — class-wide solve rates and common failure
-   patterns, feasible without new data collection since `Submission`
-   already captures every per-test-case result.
+9. **Richer per-teacher analytics** — queued grading reports now expose per-problem
+   totals; add class cohorts and common failure patterns as follow-up features.
 10. **Password reset / email verification** — registration and login work,
     but there's no email delivery integration yet for account recovery.
 

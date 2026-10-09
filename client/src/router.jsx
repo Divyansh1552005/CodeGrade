@@ -15,6 +15,7 @@ const DoubtDetail = lazy(() => import('./pages/DoubtDetail.jsx'));
 const TeacherReview = lazy(() => import('./pages/TeacherReview.jsx'));
 const ProblemList = lazy(() => import('./pages/ProblemList.jsx'));
 const CreateProblem = lazy(() => import('./pages/CreateProblem.jsx'));
+const BulkJobs = lazy(() => import('./pages/BulkJobs.jsx'));
 const Profile = lazy(() => import('./pages/Profile.jsx'));
 
 // Route table lives here, separate from the shell (RootLayout) and the
@@ -105,6 +106,7 @@ const routes = [
       </ProtectedRoute>
     ),
   },
+  { path: '/bulk-jobs', element: <ProtectedRoute role="teacher"><BulkJobs /></ProtectedRoute> },
   { path: '*', element: <Navigate to="/" replace /> },
 ];
 
