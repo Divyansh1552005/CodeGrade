@@ -7,12 +7,12 @@ import Markdown from './Markdown.jsx';
  * Sections are rendered only when the problem has them, so problems authored
  * before these fields became mandatory still display cleanly.
  */
-export default function ProblemStatement({ problem }) {
+export default function ProblemStatement({ problem, embedded = false }) {
   if (!problem) return null;
   const samples = problem.sampleCases?.filter((s) => s?.input || s?.output) ?? [];
 
   return (
-    <div className="mb-5 space-y-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4 dark:border-slate-800 dark:bg-slate-900/40">
+    <div className={embedded ? "space-y-6" : "mb-5 space-y-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4 dark:border-slate-800 dark:bg-slate-900/40"}>
       <p className="text-sm capitalize">{problem.difficulty || 'easy'} · {{ easy: 100, medium: 200, hard: 300 }[problem.difficulty || 'easy']} XP for your first solve</p>
       {problem.topics?.length > 0 && (
         <div className="flex flex-wrap gap-1">

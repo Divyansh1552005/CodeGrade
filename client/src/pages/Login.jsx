@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast';
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -19,9 +20,12 @@ export default function Login() {
     setBusy(true);
     try {
       await login(email, password);
+      toast.success('Welcome back.');
       navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.error || 'Login failed');
+      const message = err.response?.data?.error || 'Login failed';
+      setError(message);
+      toast.error(message);
     } finally {
       setBusy(false);
     }
@@ -37,6 +41,8 @@ export default function Login() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             type="email"
+            autoComplete="email"
+            placeholder="you@example.com"
             required
           />
         </motion.label>
@@ -47,6 +53,7 @@ export default function Login() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             type="password"
+            autoComplete="current-password"
             required
           />
         </motion.label>

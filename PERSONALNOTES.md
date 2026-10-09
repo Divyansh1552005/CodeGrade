@@ -448,3 +448,52 @@ Dependency-upgrade validation: 126 backend tests, 14 frontend tests, production
 build and all nine live Redis/Judge0/AI smoke checks passed. Final backend and
 frontend audits both reported zero vulnerabilities; dependency-tree checks and
 `git diff --check` passed. No application flow changes were needed.
+
+## Part 14 — Making the interface consistent
+
+The app now has one visual language instead of separate-looking pages: indigo
+buttons, a light slate background, predictable spacing, rounded cards and readable
+forms. Tailwind still does the styling. No new package or external font is needed.
+Light and dark versions use the same layout and matching contrast-aware colors.
+
+Desktop users navigate from a sidebar. On a phone, use the menu button in the top
+bar. Teachers see review/import tools; students see learning actions. Login and
+registration have their own quieter layout. The landing page explains the learning
+loop and uses a clearly labelled example workspace, not fake usage statistics.
+
+Every main page has a title, context and a sensible primary action. Empty libraries,
+questions and job histories explain what to do next. Errors are visible; retry
+buttons are provided where a fetch can be retried. The dashboard connects practice,
+questions and progress. Profile now distinguishes unfinished/failed submissions.
+
+The coding page puts the statement beside the editor on a wide display and stacks
+it on smaller displays. Result tables scroll inside their container. Authoring is
+split into problem details, statement/examples, and starter code/tests; sample I/O
+stacks on phones. Each textarea and remove button has a useful accessible label.
+Questions, reviews and reports share the same form/button/status treatment.
+
+Keyboard users get visible focus, a skip link, navigation focus and a proper modal
+focus loop. Opening a confirmation focuses its cancel control; Tab stays inside;
+closing restores focus. Busy confirmations stay open while the action runs.
+Motion follows reduced-motion preferences. Loading status is announced, markdown
+preview exposes its selected state, and the code editor has an accessible name.
+Broken links and rendering failures now have friendly recovery pages.
+
+`UI.jsx` holds reusable page/state/icon components; `styles.css` defines the visual
+system; NavBar/RootLayout define the shell. New Workspace and Pages tests cover
+interactions and rendering in both themes. Frontend tests total 54 across seven
+files, including existing grading/polling and bulk-job controls. Production build
+and diff whitespace checks passed. Browser preview was unavailable in this session,
+so actual desktop/mobile visual inspection still needs a real browser. Component
+tests prove rendering and behavior, not pixel-perfect layout or real-device fit.
+
+
+### Coding workspace and action feedback
+
+The submission page now uses a LeetCode-inspired split workspace: independently scrolling problem description / submission history on the left, Monaco editor and a public-example / results console on the right. It stacks on smaller screens and supports light and dark themes. The real Submit solution action queues grading; Ctrl/Cmd + Enter runs that same action. Public examples are reference data, not a separate execution endpoint.
+
+Language-specific drafts are preserved in memory per problem while the workspace remains mounted; navigating away or refreshing clears them. Direct problem links initialize starter code correctly. Reset requires confirmation; Copy reports clipboard success or failure. Submission history continues polling queued work on revisits.
+
+Global action toasts are themed and dismissible. Login, registration, queued submissions, clipboard/reset actions, and bulk job starts/downloads provide transient feedback alongside existing create/delete/review toasts. Grading completion remains in the results pane without a completion notification. Background polling errors stay inline to avoid repeated toasts.
+
+Validation: 57 frontend tests cover both themes, page rendering, polling, starter-code initialization, language-draft preservation, public examples, reset confirmation, and absence of grading-completion toasts. Production build passes. Visual review is left to the user as requested.

@@ -18,12 +18,12 @@ export function ErrorBanner({ children }) {
   return (
     <AnimatePresence>
       {children && (
-        <motion.p
+        <motion.p role="alert"
           initial={{ opacity: 0, height: 0, y: -4 }}
           animate={{ opacity: 1, height: 'auto', y: 0, x: [0, -6, 6, -3, 0] }}
           exit={{ opacity: 0, height: 0, y: -4 }}
           transition={{ duration: 0.3 }}
-          className="mb-3 overflow-hidden text-sm text-red-600 dark:text-red-400"
+          className="error-state overflow-hidden"
         >
           {children}
         </motion.p>

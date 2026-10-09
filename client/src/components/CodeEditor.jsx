@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import Editor from '@monaco-editor/react';
 import { useTheme } from '../theme/ThemeContext.jsx';
 import LoadingSpinner from './LoadingSpinner.jsx';
@@ -25,11 +26,15 @@ export default function CodeEditor({
   onChange,
   height = '400px',
   readOnly = false,
+  onSubmit,
 }) {
+  const submitRef = useRef(onSubmit);
+  submitRef.current = onSubmit;
   const { theme } = useTheme();
   return (
-    <div className="overflow-hidden rounded-md border border-slate-300 dark:border-slate-700">
+    <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
       <Editor
+        onMount={(editor, monaco) => { if (onSubmit) editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => submitRef.current?.()); }}
         height={height}
         language={MONACO_LANG[language] || 'plaintext'}
         theme={theme === 'dark' ? 'vs-dark' : 'light'}
@@ -39,7 +44,11 @@ export default function CodeEditor({
         options={{
           automaticLayout: true, // responsive: relayout on container resize
           minimap: { enabled: false },
-          fontSize: 13,
+          fontSize: 14,
+          fontFamily: 'JetBrains Mono, SFMono-Regular, Consolas, monospace',
+          padding: { top: 16, bottom: 16 },
+          accessibilitySupport: 'on',
+          ariaLabel: 'Solution code editor',
           tabSize: 4,
           scrollBeyondLastLine: false,
           readOnly,

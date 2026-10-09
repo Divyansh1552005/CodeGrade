@@ -1,4 +1,5 @@
-import { memo, useEffect, useMemo, useState } from 'react';
+import { PageHeader, EmptyState, ErrorState } from '../components/UI.jsx';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { api } from '../api/client.js';
@@ -6,6 +7,7 @@ import { useCachedQuery, invalidate } from '../api/useCachedQuery.js';
 import Markdown from '../components/Markdown.jsx';
 import CodeEditor from '../components/CodeEditor.jsx';
 import ProblemStatement from '../components/ProblemStatement.jsx';
+import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import LoadingSpinner from '../components/LoadingSpinner.jsx';
 import { Spinner } from '../components/FormMotion.jsx';
 import { LANGUAGE_LABELS } from '../data/starterTemplates.js';
@@ -28,6 +30,13 @@ export default function SubmitCode() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [submissions, setSubmissions] = useState([]);
+  const [pane, setPane] = useState('Description');
+  const [consolePane, setConsolePane] = useState('Results');
+  const [resetOpen, setResetOpen] = useState(false);
+  const drafts = useRef(new Map());
+  const activeProblem = useRef(problemId);
+  activeProblem.current = problemId;
+  const initialized = useRef('');
 
   const pending = result && ['queued', 'running'].includes(result.status);
   const pendingFeedback = result?.status === 'graded' && ['pending', 'running'].includes(result.feedbackStatus);
@@ -54,7 +63,7 @@ export default function SubmitCode() {
     if (!pid) return;
     try {
       const res = await api.get(`/submissions?problemId=${pid}`);
-      setSubmissions(res.data.submissions);
+      if (activeProblem.current === pid) setSubmissions(res.data.submissions);
     } catch {
       /* non-critical */
     }
@@ -73,18 +82,14 @@ export default function SubmitCode() {
     return () => clearInterval(timer);
   }, [problemId, hasPendingHistory]);
 
-  // Locked: sync to the route problem. Generic: default to the first problem.
   useEffect(() => {
-    if (locked) {
-      const p = problems.find((x) => x._id === routeProblemId);
-      if (p && problemId !== routeProblemId) {
-        setProblemId(routeProblemId);
-        setCode(starterFor(p, language));
-      }
-    } else if (!problemId && problems[0]) {
-      setProblemId(problems[0]._id);
-      setCode(starterFor(problems[0], language));
-    }
+    const id = locked ? routeProblemId : problemId || problems[0]?._id;
+    const problem = problems.find((item) => item._id === id);
+    if (!problem || initialized.current === id) return;
+    initialized.current = id;
+    setProblemId(id);
+    setResult(null);
+    setCode(drafts.current.get(`${id}:${language}`) ?? starterFor(problem, language));
   }, [locked, routeProblemId, problems, problemId, language]);
 
   const selected = useMemo(
@@ -93,22 +98,38 @@ export default function SubmitCode() {
   );
 
   // Locked to a problem id that doesn't exist (bad link / archived).
-  const notFound = locked && !loading && problems.length > 0 && !selected;
+  const notFound = locked && !loading && !loadError && !selected;
+
+  function updateCode(value) {
+    drafts.current.set(`${problemId}:${language}`, value);
+    setCode(value);
+  }
 
   function onSelectProblem(id) {
+    drafts.current.set(`${problemId}:${language}`, code);
     setProblemId(id);
-    setResult(null);
-    setCode(starterFor(problems.find((x) => x._id === id), language));
+    setSubmissions([]);
+    setError('');
   }
 
   function onSelectLanguage(lang) {
+    drafts.current.set(`${problemId}:${language}`, code);
     setLanguage(lang);
-    // Auto-fill the editor with this language's starter code (or blank).
-    setCode(starterFor(selected, lang));
+    setCode(drafts.current.get(`${problemId}:${lang}`) ?? starterFor(selected, lang));
+  }
+
+  async function copyCode() {
+    try {
+      await navigator.clipboard.writeText(code);
+      toast.success('Code copied to clipboard.');
+    } catch {
+      toast.error('Unable to copy. Select the code and copy it manually.');
+    }
   }
 
   async function onSubmit(e) {
-    e.preventDefault();
+    e?.preventDefault();
+    if (busy || pending || !problemId) return;
     if (!code.trim()) {
       const msg = 'Code cannot be empty.';
       setError(msg);
@@ -120,7 +141,10 @@ export default function SubmitCode() {
     setBusy(true);
     try {
       const res = await api.post('/submissions', { problemId, code, language });
+      if (activeProblem.current !== problemId) return;
       setResult(res.data.submission);
+      setConsolePane('Results');
+      toast.success('Submission queued.', { id: 'submission-queued' });
       loadSubmissions(problemId); // refresh the history
       invalidate('/problems'); // so the "Solved" badge updates on the list
     } catch (err) {
@@ -135,25 +159,13 @@ export default function SubmitCode() {
   }
 
   return (
-    <div className="card">
-      {locked && (
-        <div className="mb-3">
-          <Link
-            to="/problems"
-            className="text-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
-          >
-            ← Back to problems
-          </Link>
-        </div>
-      )}
-      <h1 className="mb-4 text-xl font-semibold">
-        {locked && selected ? selected.title : 'Submit Code'}
-      </h1>
+    <div className="space-y-6">
+      <PageHeader eyebrow="Coding workspace" title={locked && selected ? selected.title : 'Submit code'} description="Read the challenge, build your solution, and learn from each test run." backTo={locked ? '/problems' : undefined} backLabel="Problem library" />
       {loading && <LoadingSpinner label="Loading problems…" />}
       {(error || loadError) && (
-        <p className="mb-3 text-sm text-red-600 dark:text-red-400">{error || loadError}</p>
+        <ErrorState message={error || loadError} />
       )}
-      {notFound && <p className="text-sm text-red-600 dark:text-red-400">Problem not found.</p>}
+      {notFound && <EmptyState icon="code" title="Problem not found" description="This problem may no longer be available. Choose another challenge from the library." action={<Link className="btn" to="/problems">Browse problems</Link>} />}
 
       {!locked && !loading && problems.length === 0 && (
         <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -161,70 +173,42 @@ export default function SubmitCode() {
         </p>
       )}
 
-      <form onSubmit={onSubmit} hidden={notFound || (!locked && problems.length === 0)}>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {/* Locked mode hides the problem picker — the student is solving one problem. */}
-          {!locked && (
-            <label className="field">
-              Problem
-              <select
-                className="input"
-                value={problemId}
-                onChange={(e) => onSelectProblem(e.target.value)}
-              >
-                {problems.map((p) => (
-                  <option key={p._id} value={p._id}>
-                    {p.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-
-          <label className="field">
-            Language
-            <select
-              className="input"
-              value={language}
-              onChange={(e) => onSelectLanguage(e.target.value)}
-            >
-              {LANGUAGES.map((lang) => (
-                <option key={lang} value={lang}>
-                  {LANGUAGE_LABELS[lang]}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        {selected && <ProblemStatement problem={selected} />}
-
-        <div className="field">
-          <span>
-            Code <span className="pill">{LANGUAGE_LABELS[language]}</span>
-          </span>
-          <CodeEditor language={language} value={code} onChange={setCode} height="400px" />
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <button className="btn flex items-center gap-2" disabled={busy || pending || !problemId}>
-            {busy && <Spinner />}
-            {busy ? 'Submitting…' : pending ? 'Grading…' : 'Run & Grade'}
-          </button>
-          <span className="text-xs text-slate-400 dark:text-slate-500">
-            Limit: 2 submissions/minute, 20/day.
-          </span>
+      <form className="coding-workspace" onSubmit={onSubmit} hidden={notFound || (!locked && problems.length === 0)}>
+        <section className="workspace-panel workspace-statement" aria-label="Problem workspace">
+          <div className="workspace-toolbar">
+            {['Description', 'Submissions'].map((item) => <button type="button" key={item} className="workspace-tab" aria-pressed={pane === item} onClick={() => setPane(item)}>{item}{item === 'Submissions' ? ` (${submissions.length})` : ''}</button>)}
+          </div>
+          <div className="workspace-scroll p-5">
+            {!locked && <label className="field">Problem<select className="input" value={problemId} disabled={busy || pending} onChange={(e) => onSelectProblem(e.target.value)}>{problems.map((p) => <option key={p._id} value={p._id}>{p.title}</option>)}</select></label>}
+            {pane === 'Description' ? selected && <ProblemStatement problem={selected} embedded /> : submissions.length ? <PastSubmissions submissions={submissions} /> : <EmptyState icon="clock" title="No submissions yet" description="Your submitted solutions and results will appear here." />}
+          </div>
+        </section>
+        <div className="min-w-0 space-y-3">
+          <section className="workspace-panel" aria-label="Solution editor">
+            <div className="workspace-toolbar justify-between">
+              <label className="flex items-center gap-2 text-xs font-medium">Language<select className="workspace-language" value={language} disabled={busy || pending} onChange={(e) => onSelectLanguage(e.target.value)}>{LANGUAGES.map((lang) => <option key={lang} value={lang}>{LANGUAGE_LABELS[lang]}</option>)}</select></label>
+              <div className="flex gap-1">
+                <button type="button" className="btn-ghost btn-sm" onClick={copyCode} disabled={!code}>Copy</button>
+                <button type="button" className="btn-ghost btn-sm" onClick={() => setResetOpen(true)} disabled={busy || pending}>Reset</button>
+              </div>
+            </div>
+            <CodeEditor language={language} value={code} onChange={updateCode} height="420px" onSubmit={onSubmit} />
+            <div className="workspace-toolbar justify-between">
+              <span className="text-xs text-slate-500 dark:text-slate-400">Ctrl / ⌘ + Enter to submit</span>
+              <button className="btn flex items-center gap-2" disabled={busy || pending || !problemId}>{busy && <Spinner />}{busy ? 'Submitting…' : pending ? 'Grading…' : 'Submit solution'}</button>
+            </div>
+          </section>
+          <section className="workspace-panel" aria-label="Execution console">
+            <div className="workspace-toolbar">{['Testcases', 'Results'].map((item) => <button type="button" key={item} className="workspace-tab" aria-pressed={consolePane === item} onClick={() => setConsolePane(item)}>{item}</button>)}</div>
+            <div className="workspace-console p-4">
+              {polling && statusError && <p role="status" className="mb-3 text-sm text-amber-600">Unable to refresh grading status. Retrying automatically…</p>}
+              {consolePane === 'Results' ? result ? <Results submission={result} /> : <EmptyState icon="code" title="Ready when you are" description="Submit your solution to run the test suite and receive feedback." /> : selected?.sampleCases?.length ? <div className="space-y-4">{selected.sampleCases.map((sample, index) => <div key={index}><h3 className="mb-2 text-sm font-semibold">Example {index + 1}</h3><div className="grid gap-3 sm:grid-cols-2"><ConsoleValue label="Input" value={sample.input} /><ConsoleValue label="Expected output" value={sample.output} /></div></div>)}</div> : <p className="text-sm text-slate-500">No public examples are available for this problem. Submit to run the test suite.</p>}
+            </div>
+          </section>
+          <p className="px-1 text-xs text-slate-500 dark:text-slate-400">2 submissions per minute · 20 per day. Language drafts stay available while this workspace is open.</p>
         </div>
       </form>
-
-      {polling && statusError && (
-        <p role="status" className="mt-3 text-sm text-amber-600">
-          Unable to refresh grading status. Retrying automatically…
-        </p>
-      )}
-      {result && <Results submission={result} />}
-
-      {submissions.length > 0 && <PastSubmissions submissions={submissions} />}
+      <ConfirmDialog open={resetOpen} onClose={() => setResetOpen(false)} onConfirm={() => { updateCode(starterFor(selected, language)); setResetOpen(false); toast.success('Starter code restored.'); }} title="Reset your solution?" message="This replaces your current language draft with the problem’s starter code." confirmLabel="Reset code" />
     </div>
   );
 }
@@ -232,7 +216,7 @@ export default function SubmitCode() {
 const PastSubmissions = memo(function PastSubmissions({ submissions }) {
   const [openId, setOpenId] = useState(null);
   return (
-    <div className="mt-6 border-t border-slate-200 pt-5 dark:border-slate-800">
+    <div className="space-y-4">
       <h2 className="mb-3 text-lg font-semibold">Your submissions</h2>
       <div className="space-y-2">
         {submissions.map((s) => {
@@ -242,10 +226,11 @@ const PastSubmissions = memo(function PastSubmissions({ submissions }) {
             <div key={s._id} className="rounded-lg border border-slate-200 dark:border-slate-800">
               <button
                 type="button"
-                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
+                aria-expanded={open}
+                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
                 onClick={() => setOpenId(open ? null : s._id)}
               >
-                <span className="flex items-center gap-2 text-sm">
+                <span className="flex flex-wrap items-center gap-2 text-sm">
                   <span
                     className={`badge ${
                       solved
@@ -288,16 +273,16 @@ const PastSubmissions = memo(function PastSubmissions({ submissions }) {
 const Results = memo(function Results({ submission }) {
   const { passCount, totalCount, testResults, aiFeedback, status } = submission;
   if (status === 'queued' || status === 'running') {
-    return <p role="status" className="mt-6 text-sm">{status === 'queued'
+    return <p role="status" className="rounded-xl border border-indigo-100 bg-indigo-50 p-5 text-sm text-indigo-700 dark:border-indigo-900 dark:bg-indigo-500/10 dark:text-indigo-300">{status === 'queued'
       ? 'Submission queued. Waiting for grading…' : 'Grading your submission…'}</p>;
   }
   if (status === 'error') {
-    return <p role="alert" className="mt-6 text-sm text-red-600">{submission.error || 'Grading failed. Please resubmit.'}</p>;
+    return <p role="alert" className="error-state">{submission.error || 'Grading failed. Please resubmit.'}</p>;
   }
   const allPass = totalCount > 0 && passCount === totalCount;
   return (
-    <div className="mt-6 border-t border-slate-200 pt-5 dark:border-slate-800">
-      <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">
+    <div className="space-y-4">
+      <h2 className="mb-5 flex flex-wrap items-center gap-2 text-lg font-semibold">
         Results
         <span
           className={`badge ${
@@ -311,8 +296,8 @@ const Results = memo(function Results({ submission }) {
         <span className="badge">{status}</span>
       </h2>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
+      <div className="table-shell">
+        <table className="data-table">
           <thead className="text-slate-500 dark:text-slate-400">
             <tr>
               <th className="p-2">#</th>
@@ -323,7 +308,7 @@ const Results = memo(function Results({ submission }) {
             </tr>
           </thead>
           <tbody>
-            {testResults.map((r, i) => (
+            {(testResults || []).map((r, i) => (
               <tr key={i} className="border-t border-slate-100 align-top dark:border-slate-800">
                 <td className="p-2">{i + 1}</td>
                 <td className="p-2"><pre className="whitespace-pre-wrap">{r.input}</pre></td>
@@ -417,3 +402,5 @@ function FeedbackList({ title, items, tone, empty }) {
     </div>
   );
 }
+
+function ConsoleValue({ label, value }) { return <div><p className="mb-2 text-xs font-medium text-slate-500">{label}</p><pre className="rounded-lg bg-slate-100 p-3 text-sm whitespace-pre-wrap break-words dark:bg-slate-800">{value || "(empty)"}</pre></div>; }

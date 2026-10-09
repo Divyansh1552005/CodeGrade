@@ -1,198 +1,38 @@
+import { useEffect } from 'react';
 import { Link, Navigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { useAuth } from '../auth/AuthContext.jsx';
+import { Icon } from '../components/UI.jsx';
 import LoadingSpinner from '../components/LoadingSpinner.jsx';
-
-const fadeUp = {
-  hidden: { opacity: 0, y: 14 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.35 } },
-};
-const container = {
-  hidden: {},
-  show: { transition: { staggerChildren: 0.1, delayChildren: 0.1 } },
-};
-
-const STEPS = [
-  {
-    title: 'Solve a problem',
-    body: 'Pick a problem from the bank, write your solution in the built-in editor, in whichever supported language you like.',
-    icon: CodeIcon,
-  },
-  {
-    title: 'Get graded instantly',
-    body: 'Your code runs against every test case in a sandboxed judge, and an AI reviewer adds feedback on correctness and complexity.',
-    icon: CheckIcon,
-  },
-  {
-    title: 'Ask when you’re stuck',
-    body: 'Post a doubt and get an AI-drafted answer right away — a teacher reviews and approves it before you ever see it.',
-    icon: ChatIcon,
-  },
-];
 
 export default function LandingPage() {
   const { isAuthed, loading } = useAuth();
-
+  useEffect(() => { document.title = 'CodeGrade — Practice with purpose'; }, []);
   if (loading) return <LoadingSpinner full />;
   if (isAuthed) return <Navigate to="/dashboard" replace />;
-
-  return (
-    <div className="space-y-20 pb-8">
-      {/* Hero */}
-      <motion.section
-        variants={container}
-        initial="hidden"
-        animate="show"
-        className="pt-6 text-center"
-      >
-        <motion.div
-          variants={fadeUp}
-          className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-xl bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
-        >
-          <BracketIcon />
-        </motion.div>
-        <motion.h1 variants={fadeUp} className="text-3xl font-bold tracking-tight sm:text-4xl">
-          CodeGrade
-        </motion.h1>
-        <motion.p
-          variants={fadeUp}
-          className="mx-auto mt-3 max-w-xl text-base text-slate-500 dark:text-slate-400"
-        >
-          Solve coding problems, get instant automated grading with AI feedback, and get your
-          doubts answered — all in one place, built for classrooms.
-        </motion.p>
-        <motion.div variants={fadeUp} className="mt-6 flex justify-center gap-3">
-          <Link className="btn" to="/register">
-            Get started
-          </Link>
-          <Link className="btn-ghost" to="/login">
-            Log in
-          </Link>
-        </motion.div>
-      </motion.section>
-
-      {/* What is CodeGrade */}
-      <motion.section
-        initial={{ opacity: 0, y: 14 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: 0.4 }}
-        transition={{ duration: 0.35 }}
-        className="card mx-auto max-w-2xl"
-      >
-        <h2 className="mb-2 text-lg font-semibold">What is CodeGrade?</h2>
-        <p className="text-sm text-slate-600 dark:text-slate-400">
-          CodeGrade is an AI-assisted coding portal for classrooms. Teachers publish coding
-          problems, tagged by topic, with sample I/O and hidden test cases; students submit
-          solutions in the language of their choice and get graded automatically. When a
-          student is stuck, they can ask a doubt — an AI drafts an answer immediately, and a
-          teacher reviews it before it's published, so nothing reaches a student unchecked.
-        </p>
-      </motion.section>
-
-      {/* How it works */}
-      <section>
-        <motion.h2
-          initial={{ opacity: 0, y: 10 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.6 }}
-          className="mb-6 text-center text-lg font-semibold"
-        >
-          How it works
-        </motion.h2>
-        <motion.div
-          variants={container}
-          initial="hidden"
-          whileInView="show"
-          viewport={{ once: true, amount: 0.3 }}
-          className="grid gap-4 sm:grid-cols-3"
-        >
-          {STEPS.map((step, i) => (
-            <motion.div key={step.title} variants={fadeUp} className="card">
-              <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                <step.icon />
-              </div>
-              <h3 className="font-semibold">
-                {i + 1}. {step.title}
-              </h3>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{step.body}</p>
-            </motion.div>
-          ))}
-        </motion.div>
-      </section>
-
-      {/* Footer */}
-      <footer className="border-t border-slate-200 pt-6 text-center text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-        <p>CodeGrade — an AI-powered code grading & doubt resolution portal.</p>
-        <p className="mt-1">&copy; {new Date().getFullYear()} CodeGrade. Built for classrooms.</p>
-      </footer>
-    </div>
-  );
-}
-
-function BracketIcon() {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-7 w-7"
-    >
-      <path d="M9 18 3 12l6-6M15 6l6 6-6 6" />
-    </svg>
-  );
-}
-
-function CodeIcon() {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-5 w-5"
-    >
-      <path d="M8 17 3 12l5-5M16 7l5 5-5 5" />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-5 w-5"
-    >
-      <path d="m5 13 4 4L19 7" />
-    </svg>
-  );
-}
-
-function ChatIcon() {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-5 w-5"
-    >
-      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-    </svg>
-  );
+  return <div className="space-y-16 pb-6 sm:space-y-24">
+    <section className="grid items-center gap-12 py-7 lg:grid-cols-[1.1fr_1fr] lg:py-14">
+      <div>
+        <span className="badge !bg-indigo-50 !text-indigo-700 dark:!bg-indigo-500/10 dark:!text-indigo-300"><span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />Built for better learning</span>
+        <h1 className="mt-6 text-4xl font-bold leading-[1.08] tracking-[-0.045em] sm:text-6xl">Practice with purpose.<br /><span className="text-indigo-600 dark:text-indigo-400">Grow with every solve.</span></h1>
+        <p className="mt-6 max-w-lg text-base leading-8 text-slate-500 dark:text-slate-400">A calmer way to learn code. Solve meaningful problems, get actionable feedback, and find support from your teachers—all in one workspace.</p>
+        <div className="mt-8 flex flex-wrap gap-3"><Link className="btn" to="/register">Start your journey <Icon name="arrow" className="h-4 w-4" /></Link><Link className="btn-secondary" to="/login">Log in to your workspace</Link></div>
+        <p className="mt-5 text-xs text-slate-500 dark:text-slate-400">Python · JavaScript · Java · C++</p>
+      </div>
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_24px_60px_-24px_rgba(15,23,42,0.25)] dark:border-slate-700 dark:bg-slate-900" aria-label="Example coding workspace">
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800"><span className="flex items-center gap-2 text-sm font-semibold"><Icon name="code" className="h-4 w-4 text-indigo-500" />Example workspace</span><span className="pill">Python</span></div>
+        <div className="p-6"><p className="eyebrow">Practice problem</p><h2 className="text-xl font-semibold">Find the sum of two numbers</h2><p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">Read two integers and print their sum.</p></div>
+        <pre className="mx-5 overflow-x-auto rounded-xl bg-[#151c36] p-5 text-sm leading-8 text-slate-200"><code><span className="text-slate-500"># Your solution</span>{'\n'}<span className="text-indigo-300">a, b</span> = map(int, input().split()){'\n'}print(a + b)</code></pre>
+        <div className="mx-5 my-5 flex items-start gap-3 rounded-xl bg-emerald-50 p-4 dark:bg-emerald-500/10"><span className="text-emerald-600 dark:text-emerald-300"><Icon name="check" /></span><div><p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">A clear solution. A useful next step.</p><p className="mt-1 text-xs leading-5 text-emerald-700 dark:text-emerald-400">Test your approach, review feedback, and keep learning.</p></div></div>
+      </div>
+    </section>
+    <section><div className="mb-8 max-w-xl"><p className="eyebrow">A thoughtful learning loop</p><h2 className="text-3xl font-bold sm:text-4xl">Less friction. More understanding.</h2></div>
+      <div className="grid gap-5 md:grid-cols-3">{[
+        ['01', 'code', 'Make practice a habit', 'Explore problems by topic and difficulty. Write code in the language that feels right for you.'],
+        ['02', 'check', 'Understand your results', 'See which tests passed, then use AI feedback to strengthen your reasoning and code.'],
+        ['03', 'chat', 'Get unstuck, together', 'Ask a programming question. Your teacher reviews every answer before it reaches you.'],
+      ].map(([step, icon, title, body]) => <article className="card" key={step}><div className="mb-6 flex items-center justify-between"><span className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300"><Icon name={icon} /></span><span className="font-mono text-xs text-slate-400">{step}</span></div><h3 className="text-lg font-semibold">{title}</h3><p className="mt-3 text-sm leading-7 text-slate-500 dark:text-slate-400">{body}</p></article>)}</div>
+    </section>
+    <section className="flex flex-col justify-between gap-6 rounded-3xl bg-[#151c36] p-7 text-white sm:p-10 md:flex-row md:items-center"><div><p className="text-xs font-semibold uppercase tracking-widest text-indigo-300">For students and teachers</p><h2 className="mt-3 text-2xl font-semibold sm:text-3xl">One workspace. Shared progress.</h2><p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">Build your problem library, support your students, and celebrate the small wins that add up.</p></div><Link className="btn shrink-0" to="/register">Create your account <Icon name="arrow" className="h-4 w-4" /></Link></section>
+    <footer className="flex flex-wrap justify-between gap-3 border-t border-slate-200 pt-6 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400"><span>© {new Date().getFullYear()} CodeGrade</span><span>A focused place to learn and teach code.</span></footer>
+  </div>;
 }

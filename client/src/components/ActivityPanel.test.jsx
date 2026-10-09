@@ -18,7 +18,7 @@ it('renders level progress, streak flame and earned badge shelf', async () => {
   expect(await screen.findByText('Level 2 · 300 XP')).toBeInTheDocument();
   expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '67');
   expect(screen.getByText(/2 day streak · 5 day best/)).toBeInTheDocument();
-  expect(screen.getByText(/First solve/)).toBeInTheDocument();
+  expect(screen.getByTitle('Solve your first problem.')).toBeInTheDocument();
   expect(await screen.findByText('1. Alex')).toBeInTheDocument();
 });
 it('switches mini-leaderboard to a chosen topic', async () => {

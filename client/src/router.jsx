@@ -1,5 +1,6 @@
 import { lazy } from 'react';
-import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { createBrowserRouter } from 'react-router-dom';
+import RouteError from './pages/RouteError.jsx';
 import RootLayout from './layouts/RootLayout.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 
@@ -16,6 +17,7 @@ const TeacherReview = lazy(() => import('./pages/TeacherReview.jsx'));
 const ProblemList = lazy(() => import('./pages/ProblemList.jsx'));
 const CreateProblem = lazy(() => import('./pages/CreateProblem.jsx'));
 const BulkJobs = lazy(() => import('./pages/BulkJobs.jsx'));
+const NotFound = lazy(() => import('./pages/NotFound.jsx'));
 const Profile = lazy(() => import('./pages/Profile.jsx'));
 
 // Route table lives here, separate from the shell (RootLayout) and the
@@ -107,7 +109,7 @@ const routes = [
     ),
   },
   { path: '/bulk-jobs', element: <ProtectedRoute role="teacher"><BulkJobs /></ProtectedRoute> },
-  { path: '*', element: <Navigate to="/" replace /> },
+  { path: '*', element: <NotFound /> },
 ];
 
 // Data router (createBrowserRouter/RouterProvider) — the router.dev
@@ -115,6 +117,7 @@ const routes = [
 export const router = createBrowserRouter([
   {
     element: <RootLayout />,
+    errorElement: <RouteError />,
     children: routes,
   },
 ]);

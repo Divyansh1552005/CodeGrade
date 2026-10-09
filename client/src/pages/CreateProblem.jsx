@@ -1,3 +1,4 @@
+import { PageHeader, ErrorState } from '../components/UI.jsx';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -12,7 +13,7 @@ const emptySample = () => ({ input: '', output: '', explanation: '' });
 const LANGUAGES = ['javascript', 'python', 'java', 'cpp'];
 const emptyStarter = () => ({ javascript: '', python: '', java: '', cpp: '' });
 
-const tabBase = 'rounded-md px-3 py-1 text-xs font-medium transition';
+const tabBase = 'min-h-10 rounded-lg px-3 py-2 text-xs font-medium transition';
 const tabActive = `${tabBase} bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900`;
 const tabIdle = `${tabBase} text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800`;
 
@@ -126,11 +127,11 @@ export default function CreateProblem() {
   }
 
   return (
-    <div className="card">
-      <h1 className="mb-4 text-xl font-semibold">
-        {isEdit ? 'Edit Problem' : 'Create Problem'}
-      </h1>
+    <div className="mx-auto max-w-4xl">
+      <PageHeader eyebrow="Problem authoring" title={isEdit ? 'Edit problem' : 'Create a problem'} description="Build a clear challenge with a complete statement, worked examples, and reliable tests." backTo="/problems" backLabel="Problem library" />
+      <div className="card">
       <form onSubmit={onSubmit}>
+        <h2 className="section-title mb-5">1. Problem details</h2>
         <label className="field">
           Title
           <input className="input" value={form.title} onChange={setField('title')} required />
@@ -161,7 +162,7 @@ export default function CreateProblem() {
           <TopicSelect selected={topics} onChange={setTopics} />
         </div>
 
-        {/* Statement sections students rely on — all mandatory. */}
+        <h2 className="section-title mb-5 mt-8 border-t border-slate-100 pt-6 dark:border-slate-800">2. Statement & examples</h2>
         <label className="field">
           Input format
           <textarea
@@ -216,6 +217,7 @@ export default function CreateProblem() {
                   <button
                     type="button"
                     className="btn-ghost btn-sm text-red-600 dark:text-red-400"
+                    aria-label={`Remove example ${i + 1}`}
                     onClick={() => removeSample(i)}
                     disabled={sampleCases.length === 1}
                     title="Remove"
@@ -223,9 +225,10 @@ export default function CreateProblem() {
                     ✕
                   </button>
                 </div>
-                <div className="flex items-start gap-2">
+                <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-start">
                   <textarea
                     className="input flex-1 font-mono text-sm"
+                    aria-label={`Example ${i + 1} input`}
                     placeholder="sample input"
                     value={s.input}
                     onChange={(e) => updateSample(i, 'input', e.target.value)}
@@ -234,6 +237,7 @@ export default function CreateProblem() {
                   />
                   <textarea
                     className="input flex-1 font-mono text-sm"
+                    aria-label={`Example ${i + 1} output`}
                     placeholder="sample output"
                     value={s.output}
                     onChange={(e) => updateSample(i, 'output', e.target.value)}
@@ -243,6 +247,7 @@ export default function CreateProblem() {
                 </div>
                 <textarea
                   className="input mt-2 w-full text-sm"
+                  aria-label={`Example ${i + 1} explanation`}
                   placeholder="explanation (optional)"
                   value={s.explanation}
                   onChange={(e) => updateSample(i, 'explanation', e.target.value)}
@@ -253,16 +258,18 @@ export default function CreateProblem() {
           </div>
         </div>
 
+        <h2 className="section-title mb-5 mt-8 border-t border-slate-100 pt-6 dark:border-slate-800">3. Starter code & test cases</h2>
         {/* Optional starter code per language. Test cases are language-agnostic;
             starter code is just convenience boilerplate students can start from. */}
         <div className="field">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span>Starter code (optional, per language)</span>
-            <div className="flex gap-1">
+            <div className="flex flex-wrap gap-1">
               {LANGUAGES.map((lang) => (
                 <button
                   key={lang}
                   type="button"
+                  aria-pressed={activeLang === lang}
                   className={activeLang === lang ? tabActive : tabIdle}
                   onClick={() => setActiveLang(lang)}
                 >
@@ -299,9 +306,10 @@ export default function CreateProblem() {
           </div>
           <div className="space-y-2">
             {testCases.map((tc, i) => (
-              <div key={i} className="flex items-start gap-2">
+              <div key={i} className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-start">
                 <textarea
                   className="input flex-1 font-mono text-sm"
+                  aria-label={`Test case ${i + 1} input`}
                   placeholder="input (stdin)"
                   value={tc.input}
                   onChange={(e) => updateCase(i, 'input', e.target.value)}
@@ -309,6 +317,7 @@ export default function CreateProblem() {
                 />
                 <textarea
                   className="input flex-1 font-mono text-sm"
+                  aria-label={`Test case ${i + 1} expected output`}
                   placeholder="expected output"
                   value={tc.expectedOutput}
                   onChange={(e) => updateCase(i, 'expectedOutput', e.target.value)}
@@ -317,6 +326,7 @@ export default function CreateProblem() {
                 <button
                   type="button"
                   className="btn-ghost btn-sm text-red-600 dark:text-red-400"
+                  aria-label={`Remove test case ${i + 1}`}
                   onClick={() => removeCase(i)}
                   disabled={testCases.length === 1}
                   title="Remove"
@@ -328,11 +338,12 @@ export default function CreateProblem() {
           </div>
         </div>
 
-        {error && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
+        {error && <ErrorState message={error} />}
         <button className="btn" disabled={busy}>
           {busy ? 'Saving…' : isEdit ? 'Save changes' : 'Create problem'}
         </button>
       </form>
+      </div>
     </div>
   );
 }

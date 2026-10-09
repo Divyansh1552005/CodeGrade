@@ -1,207 +1,37 @@
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { useAuth } from '../auth/AuthContext.jsx';
 import ActivityPanel from '../components/ActivityPanel.jsx';
 import { useCachedQuery } from '../api/useCachedQuery.js';
-
-const container = {
-  hidden: {},
-  show: { transition: { staggerChildren: 0.08, delayChildren: 0.15 } },
-};
-const item = {
-  hidden: { opacity: 0, y: 12 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.3 } },
-};
+import { PageHeader, Icon, ErrorState } from '../components/UI.jsx';
 
 function greeting() {
-  const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 18) return 'Good afternoon';
-  return 'Good evening';
+  const hour = new Date().getHours();
+  return hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
 }
-
 export default function Dashboard() {
   const { user } = useAuth();
   const isStudent = user.role === 'student';
   const isTeacher = user.role === 'teacher';
-
-  const { data: stats } = useCachedQuery('/problems/stats/counts');
-  const { data: subData, loading: subLoading } = useCachedQuery('/submissions', {
-    enabled: isStudent,
-  });
-  const { data: pendingData, loading: pendingLoading } = useCachedQuery(
-    '/answers?state=pending',
-    { key: 'answers:pending', enabled: isTeacher }
-  );
-
-  const submissions = subData?.submissions ?? [];
-  const solvedCount = new Set(
-    submissions
-      .filter((s) => s.status === 'graded' && s.totalCount > 0 && s.passCount === s.totalCount)
-      .map((s) => String(s.problemId?._id || s.problemId))
-  ).size;
-  const pendingCount = pendingData?.answers?.length ?? 0;
-
+  const library = useCachedQuery('/problems/stats/counts');
+  const history = useCachedQuery('/submissions', { key: `dashboard-submissions:${user._id}`, enabled: isStudent, refetchInterval: 10000 });
+  const pending = useCachedQuery('/answers?state=pending', { key: 'answers:pending', enabled: isTeacher, refetchInterval: 10000 });
+  const submissions = history.data?.submissions ?? [];
+  const solvedCount = new Set(submissions.filter((s) => s.status === 'graded' && s.totalCount > 0 && s.passCount === s.totalCount).map((s) => String(s.problemId?._id || s.problemId))).size;
+  const metrics = [
+    { label: isStudent ? 'Problems solved' : 'Awaiting review', value: isStudent ? history.loading || history.error ? '—' : solvedCount : pending.loading || pending.error ? '—' : pending.data?.answers?.length ?? 0, icon: isStudent ? 'check' : 'chat', note: isStudent ? 'Every solve is a step forward' : 'Add your expertise to AI drafts' },
+    { label: 'Problems in the library', value: library.data?.total ?? '—', icon: 'book', note: 'New challenges to explore' },
+    { label: isStudent ? 'Your submissions' : 'Your workspace', value: isStudent ? history.loading || history.error ? '—' : submissions.length : 'Teacher', icon: 'code', note: isStudent ? 'Practice, refine, repeat' : 'Create, review, and support' },
+  ];
   const tiles = [
-    {
-      to: '/problems',
-      title: 'Problems',
-      body: isStudent
-        ? 'Browse problems and solve them — run against test cases and get AI feedback.'
-        : 'Create and manage coding problems for students.',
-      icon: CodeIcon,
-    },
-    {
-      to: '/doubts',
-      title: 'Doubt Board',
-      body: 'Ask questions; an AI draft is prepared for teacher review.',
-      icon: ChatIcon,
-    },
-    isTeacher && { to: '/bulk-jobs', title: 'Imports & Reports', body: 'Import problems and generate reports in the background.', icon: CodeIcon },
-    isTeacher && {
-      to: '/review',
-      title: 'Review Queue',
-      body: 'Approve, edit, or reject AI-drafted answers.',
-      icon: CheckIcon,
-    },
-  ].filter(Boolean);
-
-  return (
-    <div className="space-y-8">
-      {/* Hero */}
-      <motion.div
-        initial={{ opacity: 0, y: -8 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="card flex flex-wrap items-center gap-4"
-      >
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-slate-900 text-lg font-semibold text-white dark:bg-slate-100 dark:text-slate-900">
-          {user.name?.[0]?.toUpperCase() || '?'}
-        </div>
-        <div>
-          <h1 className="text-2xl font-semibold">
-            {greeting()}, {user.name}
-          </h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            You are signed in as a <strong className="font-medium">{user.role}</strong>.
-          </p>
-        </div>
-      </motion.div>
-
-      {/* Quick stats */}
-      {(isStudent || isTeacher) && (
-        <motion.div
-          variants={container}
-          initial="hidden"
-          animate="show"
-          className="grid gap-4 sm:grid-cols-2"
-        >
-          {isStudent && (
-            <motion.div variants={item} className="card">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Problems solved
-              </p>
-              <p className="mt-1 text-3xl font-semibold">
-                {subLoading ? '—' : solvedCount}
-                <span className="text-slate-400 dark:text-slate-500">
-                  /{stats?.total ?? '—'}
-                </span>
-              </p>
-            </motion.div>
-          )}
-          {isTeacher && (
-            <motion.div variants={item} className="card">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Awaiting your review
-              </p>
-              <p className="mt-1 text-3xl font-semibold">
-                {pendingLoading ? '—' : pendingCount}
-              </p>
-            </motion.div>
-          )}
-          <motion.div variants={item} className="card">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Problems in the bank
-            </p>
-            <p className="mt-1 text-3xl font-semibold">{stats?.total ?? '—'}</p>
-          </motion.div>
-        </motion.div>
-      )}
-
-      <ActivityPanel isStudent={isStudent} userId={user._id} />
-
-      {/* Actions */}
-      <motion.div
-        variants={container}
-        initial="hidden"
-        animate="show"
-        className={`grid gap-4 ${isTeacher ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}
-      >
-        {tiles.map((tile) => (
-          <motion.div key={tile.to} variants={item} whileHover={{ y: -2 }} className="h-full">
-            <Link
-              to={tile.to}
-              className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-400 hover:shadow dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-600"
-            >
-              <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                <tile.icon />
-              </div>
-              <h3 className="font-semibold">{tile.title}</h3>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{tile.body}</p>
-            </Link>
-          </motion.div>
-        ))}
-      </motion.div>
-    </div>
-  );
-}
-
-function CodeIcon() {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-5 w-5"
-    >
-      <path d="M8 17 3 12l5-5M16 7l5 5-5 5" />
-    </svg>
-  );
-}
-
-function ChatIcon() {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-5 w-5"
-    >
-      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-5 w-5"
-    >
-      <path d="m5 13 4 4L19 7" />
-    </svg>
-  );
+    { to: '/problems', title: 'Explore the library', body: isStudent ? 'Find a challenge and make your next breakthrough.' : 'Create and manage problems for your students.', icon: 'code' },
+    { to: '/doubts', title: 'Visit the doubt board', body: 'Keep the conversation going with thoughtful questions and answers.', icon: 'chat' },
+    ...(isTeacher ? [{ to: '/review', title: 'Review answers', body: 'Help turn AI drafts into clear, reliable guidance.', icon: 'check' }, { to: '/bulk-jobs', title: 'Imports & reports', body: 'Manage your problem library and review grading reports.', icon: 'upload' }] : []),
+  ];
+  return <div className="space-y-7">
+    <PageHeader eyebrow={isStudent ? 'Your learning, at a glance' : 'Your classroom, at a glance'} title={`${greeting()}, ${user.name?.split(' ')[0] || 'there'}`} description={isStudent ? 'Small steps lead to better solutions. What will you work on today?' : 'Create a thoughtful challenge, review a question, and keep your students moving forward.'} action={<Link className="btn" to={isStudent ? '/problems' : '/problems/new'}>{isStudent ? 'Find a challenge' : 'Create a problem'}<Icon name="arrow" className="h-4 w-4" /></Link>} />
+    {(library.error || history.error || pending.error) && <ErrorState message={library.error || history.error || pending.error} />}
+    <div className="grid gap-4 sm:grid-cols-3">{metrics.map((metric) => <section className="card" key={metric.label}><div className="flex items-center justify-between gap-2"><p className="text-xs font-medium text-slate-500 dark:text-slate-400">{metric.label}</p><span className="text-indigo-500"><Icon name={metric.icon} className="h-4 w-4" /></span></div><p className="mt-4 text-3xl font-bold tabular-nums">{metric.value}</p><p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{metric.note}</p></section>)}</div>
+    <section><div className="mb-4 flex items-center justify-between"><h2 className="section-title">Make your next move</h2><span className="text-xs text-slate-500 dark:text-slate-400">Your workspace shortcuts</span></div><div className={`grid gap-4 ${isTeacher ? 'sm:grid-cols-2 xl:grid-cols-4' : 'sm:grid-cols-2'}`}>{tiles.map((tile) => <Link className="list-row group flex items-start gap-4 !p-5" to={tile.to} key={tile.to}><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300"><Icon name={tile.icon} /></span><div className="min-w-0"><h3 className="text-sm font-semibold">{tile.title}</h3><p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">{tile.body}</p></div><Icon name="arrow" className="ml-auto h-4 w-4 shrink-0 text-slate-400 transition group-hover:translate-x-1" /></Link>)}</div></section>
+    <ActivityPanel isStudent={isStudent} userId={user._id} />
+  </div>;
 }

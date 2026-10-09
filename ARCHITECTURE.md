@@ -486,7 +486,7 @@ oversized/invalid-language submissions rejected before Judge0, topic
 filtering + stable problem numbering, and the rate limiter's exact quotas
 (2/min, 20/day) including the real route wiring via a live `429` assertion.
 
-**Frontend — 14 tests**: login rendering/submit, cached polling/stale responses,
+**Frontend — 54 tests**: login rendering/submit, cached polling/stale responses,
 bulk-job validation/status/error behavior and submission status/feedback/history
 polling, plus level/XP-bar, streak/badge and leaderboard-scope widgets (Vitest + RTL). UI
 polish (animations, theming, layout) is verified manually — see
@@ -790,3 +790,55 @@ Dependency-upgrade validation: 126 backend tests, 14 frontend tests, production
 build and all nine live Redis/Judge0/AI smoke checks passed. Final backend and
 frontend audits both reported zero vulnerabilities; dependency-tree checks and
 `git diff --check` passed. No application flow changes were needed.
+
+## 18. Shared UI system and page refresh
+
+Tailwind v4 remains the styling foundation. `styles.css` defines shared component
+classes (primary/secondary/ghost buttons, cards, inputs, badges, page headers,
+empty/error states, list rows and tables), system-font fallbacks, readable Markdown
+and dark-mode/reduced-motion rules. `UI.jsx` supplies small reusable Icon,
+PageHeader, EmptyState, ErrorState and StatusBadge components. Icons are inline SVG
+and require no added dependency. Page headers set descriptive browser titles.
+
+RootLayout uses a wider workspace container, a 256px authenticated sidebar offset,
+a larger coding viewport, skip link, main-content focus on route changes, router
+scroll restoration and MotionConfig reducedMotion=user. NavBar contains role-aware
+desktop navigation and a collapsible mobile menu, theme switch and reliable logout
+error handling. Compact branding prevents crowded narrow-screen headers.
+
+All public/student/teacher pages were refreshed. Landing/auth screens use split
+layouts; dashboard cards link to genuine role actions; coding uses a responsive
+statement/editor grid; tables contain horizontal scrolling; authoring uses numbered
+sections and labelled samples/test cases; list actions/statuses wrap on mobile.
+Review keeps explicit approve/reject controls and never exposes pending drafts.
+Reports retain owner-scoped JSON downloads and job polling. Profile shows queued
+and error states rather than a misleading pass count for unfinished submissions.
+
+Modal traps Tab/Shift-Tab, moves initial focus, restores its trigger, makes the app
+root inert, locks scroll and supports Escape/backdrop dismissal. ConfirmDialog
+passes busy state so an in-flight destructive action cannot be dismissed. Markdown
+inputs have accessible labels and write/preview selected state. Monaco has an
+accessible name, larger font and padding. Shared loaders announce their state.
+
+The router has a NotFound page and a friendly RouteError fallback. Errors do not
+display internal stacks to users. These are presentation improvements; backend
+queues, authorization and data models are unchanged.
+
+Frontend validation now includes 54 tests across seven files: all page renders in
+both themes (including create/edit, both dashboard roles and error pages), mobile
+navigation/role links, logout failure, dialog focus/escape/busy behavior, Markdown
+preview and existing login/bulk jobs/submission polling/progress tests. Production
+build passes. Live browser surfaces are unavailable in this session; no claim of
+pixel-level or real-device visual QA is made. No backend rerun was needed for this
+frontend-only change; prior backend/live-provider results remain recorded above.
+
+
+### Coding workspace and action feedback
+
+The submission page now uses a LeetCode-inspired split workspace: independently scrolling problem description / submission history on the left, Monaco editor and a public-example / results console on the right. It stacks on smaller screens and supports light and dark themes. The real Submit solution action queues grading; Ctrl/Cmd + Enter runs that same action. Public examples are reference data, not a separate execution endpoint.
+
+Language-specific drafts are preserved in memory per problem while the workspace remains mounted; navigating away or refreshing clears them. Direct problem links initialize starter code correctly. Reset requires confirmation; Copy reports clipboard success or failure. Submission history continues polling queued work on revisits.
+
+Global action toasts are themed and dismissible. Login, registration, queued submissions, clipboard/reset actions, and bulk job starts/downloads provide transient feedback alongside existing create/delete/review toasts. Grading completion remains in the results pane without a completion notification. Background polling errors stay inline to avoid repeated toasts.
+
+Validation: 57 frontend tests cover both themes, page rendering, polling, starter-code initialization, language-draft preservation, public examples, reset confirmation, and absence of grading-completion toasts. Production build passes. Visual review is left to the user as requested.

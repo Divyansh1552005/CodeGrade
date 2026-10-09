@@ -1,4 +1,5 @@
-import { useParams, Link } from 'react-router-dom';
+import { PageHeader, ErrorState } from '../components/UI.jsx';
+import { useParams } from 'react-router-dom';
 import { useCachedQuery } from '../api/useCachedQuery.js';
 import Markdown from '../components/Markdown.jsx';
 import LoadingSpinner from '../components/LoadingSpinner.jsx';
@@ -13,29 +14,18 @@ export default function DoubtDetail() {
   const error = doubtQuery.error || answerQuery.error;
 
   if (loading) return <LoadingSpinner full />;
-  if (error) return <p className="text-sm text-red-600 dark:text-red-400">{error}</p>;
+  if (error) return <ErrorState message={error} onRetry={() => { doubtQuery.refetch(); answerQuery.refetch(); }} />;
   if (!doubt) return null;
 
   const failed = doubt.aiDraftStatus === 'failed';
   const irrelevant = doubt.aiDraftStatus === 'irrelevant';
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <div>
-        <Link
-          to="/doubts"
-          className="text-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
-        >
-          ← Back to board
-        </Link>
-      </div>
-
+    <div className="mx-auto max-w-3xl space-y-5">
+      <PageHeader eyebrow="Conversation" title={doubt.title} description={`Asked by ${doubt.studentId?.name || 'student'}`} backTo="/doubts" backLabel="Doubt board" />
       {/* The doubt */}
       <div className="card">
-        <h1 className="text-2xl font-semibold">{doubt.title}</h1>
-        <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-          Asked by {doubt.studentId?.name || 'student'}
-        </p>
+        <h2 className="section-title mb-4">The question</h2>
         <div className="mt-3">
           <Markdown>{doubt.body}</Markdown>
         </div>

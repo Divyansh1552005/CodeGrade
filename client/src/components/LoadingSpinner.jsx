@@ -7,8 +7,8 @@ import { Spinner } from './FormMotion.jsx';
  */
 export default function LoadingSpinner({ label = 'Loading…', full = false }) {
   return (
-    <div
-      className={`flex items-center justify-center gap-2 text-slate-400 dark:text-slate-500 ${
+    <div role="status" aria-live="polite"
+      className={`flex items-center justify-center gap-2 text-slate-500 dark:text-slate-400 ${
         full ? 'py-16' : 'py-6'
       }`}
     >

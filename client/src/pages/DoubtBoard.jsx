@@ -1,3 +1,4 @@
+import { PageHeader, EmptyState, ErrorState, Icon } from '../components/UI.jsx';
 import { memo } from 'react';
 import { Link } from 'react-router-dom';
 import { usePaginatedQuery } from '../api/usePaginatedQuery.js';
@@ -46,20 +47,10 @@ export default function DoubtBoard() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Doubt Board</h1>
-        {isStudent && (
-          <Link className="btn btn-sm" to="/doubts/new">
-            + Ask a Doubt
-          </Link>
-        )}
-      </div>
-
+      <PageHeader eyebrow="Learn together" title="Doubt board" description="Good questions move learning forward. Explore questions and teacher-reviewed answers." action={isStudent && <Link className="btn" to="/doubts/new"><Icon name="chat" className="h-4 w-4" />Ask a doubt</Link>} />
       {loading && <LoadingSpinner />}
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-      {!loading && doubts.length === 0 && (
-        <p className="text-sm text-slate-400 dark:text-slate-500">No doubts yet.</p>
-      )}
+      {error && <ErrorState message={error} />}
+      {!loading && !error && doubts.length === 0 && <EmptyState icon="chat" title="Start a conversation" description="Share the programming question you're working through. A teacher will help you find the next step." action={isStudent && <Link className="btn" to="/doubts/new">Ask your first doubt</Link>} />}
 
       <div className="space-y-3">
         {doubts.map((d) => (
@@ -83,10 +74,10 @@ const DoubtRow = memo(function DoubtRow({ doubt }) {
   return (
     <Link
       to={`/doubts/${doubt._id}`}
-      className="block rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-400 hover:shadow dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-600"
+      className="list-row block !p-5"
     >
-      <div className="flex items-start justify-between gap-3">
-        <h3 className="font-semibold text-slate-800 dark:text-slate-100">{doubt.title}</h3>
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row">
+        <h3 className="break-words font-semibold text-slate-800 dark:text-slate-100">{doubt.title}</h3>
         <span className={`badge shrink-0 ${status.cls}`}>{status.label}</span>
       </div>
       <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{excerpt(doubt.body)}</p>

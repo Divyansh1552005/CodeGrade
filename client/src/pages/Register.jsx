@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast';
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -20,9 +21,12 @@ export default function Register() {
     setBusy(true);
     try {
       await register(form);
+      toast.success('Account created.');
       navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.error || 'Registration failed');
+      const message = err.response?.data?.error || 'Registration failed';
+      setError(message);
+      toast.error(message);
     } finally {
       setBusy(false);
     }
@@ -33,7 +37,7 @@ export default function Register() {
       <motion.form variants={formContainer} initial="hidden" animate="show" onSubmit={onSubmit}>
         <motion.label variants={formItem} className="field">
           Name
-          <input className="input" value={form.name} onChange={set('name')} required />
+          <input className="input" autoComplete="name" placeholder="Your full name" value={form.name} onChange={set('name')} required />
         </motion.label>
         <motion.label variants={formItem} className="field">
           Email
@@ -42,6 +46,8 @@ export default function Register() {
             value={form.email}
             onChange={set('email')}
             type="email"
+            autoComplete="email"
+            placeholder="you@example.com"
             required
           />
         </motion.label>
@@ -52,6 +58,7 @@ export default function Register() {
             value={form.password}
             onChange={set('password')}
             type="password"
+            autoComplete="new-password"
             minLength={6}
             required
           />

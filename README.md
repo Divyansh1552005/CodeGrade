@@ -110,7 +110,7 @@ npm run dev      # → http://localhost:5173  (proxies /api to :5000)
 
 ```bash
 cd server  && npm test              # 126 tests: unit + integration + security
-cd client  && npm run test:frontend  # 14 UI/hook tests
+cd client  && npm run test:frontend  # 54 UI/hook tests
 cd client  && npm run build
 # Optional live checks with server/.env Redis, Judge0 and AI credentials:
 cd server  && npm run test:smoke
@@ -560,7 +560,7 @@ draft → approval workflow, role guards (student 403 on teacher routes), and
 the security cases (prompt injection, oversized code, invalid language
 rejected before Judge0).
 
-Frontend (14 tests): login rendering/submit, cached-query polling and stale-response
+Frontend (54 tests): login rendering/submit, cached-query polling and stale-response
 protection, bulk-job JSON validation, acceptance/status rendering, and server errors; submission
 queued/results/feedback rendering, terminal-error polling stop, and pending-history
 refresh on revisit, plus XP-bar/streak/badge rendering and leaderboard scope switching.
@@ -614,7 +614,7 @@ larger/longer-running project would probably revisit:
   the database. Simple and fast to ship; the cost is that adding a topic
   means editing two files by hand instead of an admin UI, and the two lists
   can drift if one is edited without the other.
-- **Backend test depth over frontend test depth.** 126 backend tests vs. 14
+- **Backend test depth over frontend test depth.** 126 backend tests vs. 54
   frontend tests, deliberately — the assignment explicitly weights backend
   correctness (safe execution, approval-state correctness,
   prompt-injection resistance) at least as heavily as feature completeness,
@@ -717,3 +717,51 @@ Dependency-upgrade validation: 126 backend tests, 14 frontend tests, production
 build and all nine live Redis/Judge0/AI smoke checks passed. Final backend and
 frontend audits both reported zero vulnerabilities; dependency-tree checks and
 `git diff --check` passed. No application flow changes were needed.
+
+## UI / UX refresh
+
+Every screen now uses one Tailwind v4 workspace design: indigo actions, a quiet
+slate canvas, consistent typography, cards, fields, badges and feedback states.
+Signed-in desktop users have a role-aware sidebar; mobile users have a collapsible
+navigation menu. Public pages use a separate top bar and split landing/auth layouts.
+No new dependencies, fonts fetched from external services, or API changes were
+introduced for this redesign.
+
+- Landing, login and registration: clearer hierarchy, useful product context,
+  autocomplete fields and responsive account forms.
+- Dashboard/profile: role-specific shortcuts, readable metrics, improved progress,
+  streak/badge/leaderboard panels and accurate queued/error submission labels.
+- Problem library and doubt board: consistent page headers, wrapping rows/actions,
+  topic controls, helpful empty states and visible fetch errors.
+- Coding: wide-screen statement/editor split, mobile stacking, readable results
+  tables with contained horizontal scroll, labelled editor and submission history.
+- Problem authoring: three clearly numbered sections, stacked sample/test inputs
+  on phones, labelled input/output fields and descriptive remove controls.
+- Questions/review/reports: contextual instructions, consistent forms, clear
+  approval and job status, readable history, retry controls and friendly empty states.
+- Missing/error routes: useful recovery screens instead of silent redirects or
+  raw router error output.
+
+Accessibility improvements include visible keyboard focus, a skip link, route-focus
+and scroll restoration, reduced-motion preferences, live loading announcements,
+labelled markdown/code inputs, selected-state controls and dialog focus trapping/
+restoration. A running destructive action cannot be dismissed with Escape/backdrop.
+Dark mode applies across the entire system. Existing polling, grading, approval,
+gamification and notification behavior remains intact.
+
+Validation: 54 frontend tests cover all page renders in light/dark modes, student/
+teacher dashboards, navigation, dialogs, markdown preview and existing form/polling
+flows. Production build and `git diff --check` passed. Browser surfaces were not
+available in this session, so pixel-level desktop/mobile visual QA remains to be
+performed in a real browser; component tests do not verify rendered layout geometry.
+
+
+### Coding workspace and action feedback
+
+The submission page now uses a LeetCode-inspired split workspace: independently scrolling problem description / submission history on the left, Monaco editor and a public-example / results console on the right. It stacks on smaller screens and supports light and dark themes. The real Submit solution action queues grading; Ctrl/Cmd + Enter runs that same action. Public examples are reference data, not a separate execution endpoint.
+
+Language-specific drafts are preserved in memory per problem while the workspace remains mounted; navigating away or refreshing clears them. Direct problem links initialize starter code correctly. Reset requires confirmation; Copy reports clipboard success or failure. Submission history continues polling queued work on revisits.
+
+Global action toasts are themed and dismissible. Login, registration, queued submissions, clipboard/reset actions, and bulk job starts/downloads provide transient feedback alongside existing create/delete/review toasts. Grading completion remains in the results pane without a completion notification. Background polling errors stay inline to avoid repeated toasts.
+
+Validation: 57 frontend tests cover both themes, page rendering, polling, starter-code initialization, language-draft preservation, public examples, reset confirmation, and absence of grading-completion toasts. Production build passes. Visual review is left to the user as requested.

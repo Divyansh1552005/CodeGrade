@@ -1,3 +1,4 @@
+import { PageHeader, ErrorState } from '../components/UI.jsx';
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -36,16 +37,8 @@ export default function AskDoubt() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <div className="mb-3">
-        <Link
-          to="/doubts"
-          className="text-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
-        >
-          ← Back to board
-        </Link>
-      </div>
+      <PageHeader eyebrow="Get unstuck" title="Ask a doubt" description="Tell us what you tried and where you got stuck. Clear questions lead to helpful answers." backTo="/doubts" backLabel="Doubt board" />
       <div className="card">
-        <h1 className="mb-4 text-xl font-semibold">Ask a Doubt</h1>
         <form onSubmit={onSubmit}>
           <label className="field">
             Title
@@ -53,6 +46,8 @@ export default function AskDoubt() {
               className="input"
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
+              placeholder="e.g. Why does my loop skip the last element?"
+              maxLength={200}
               required
             />
           </label>
@@ -63,10 +58,12 @@ export default function AskDoubt() {
               onChange={(v) => setForm({ ...form, body: v })}
               placeholder="Describe your doubt. You can use **markdown**, lists, and ```code``` blocks."
               autoGrow
-              minH="min-h-48"
+              minH="min-h-64"
+              label="Question details"
             />
           </div>
-          {error && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
+          {error && <ErrorState message={error} />}
+          <p className="mb-5 text-xs leading-5 text-slate-500 dark:text-slate-400">Answers are reviewed by a teacher before they are shared with you.</p>
           <button className="btn" disabled={busy}>
             {busy ? 'Posting…' : 'Post Doubt'}
           </button>

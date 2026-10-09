@@ -20,6 +20,7 @@ export default function ConfirmDialog({
       open={open}
       onClose={onClose}
       title={title}
+      busy={busy}
       footer={
         <>
           <button type="button" className="btn-ghost btn-sm" onClick={onClose} disabled={busy}>

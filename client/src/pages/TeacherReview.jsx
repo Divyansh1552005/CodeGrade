@@ -1,3 +1,4 @@
+import { PageHeader, EmptyState, ErrorState } from '../components/UI.jsx';
 import { memo, useCallback, useState } from 'react';
 import toast from 'react-hot-toast';
 import { api } from '../api/client.js';
@@ -27,7 +28,8 @@ export default function TeacherReview() {
 
   return (
     <div>
-      <h1 className="mb-4 text-xl font-semibold">Review Queue</h1>
+      <PageHeader eyebrow="Teaching workspace" title="Review queue" description="Add your expertise to every answer. Review drafts carefully before publishing them to students." action={<span className="badge badge-warning">{answers.length} awaiting review</span>} />
+      {(pending.error || failed.error) && <ErrorState message={pending.error || failed.error} onRetry={() => { pending.refetch(); failed.refetch(); }} />}
       {loading && <LoadingSpinner />}
 
       {/* AI drafts awaiting approval */}
@@ -42,8 +44,8 @@ export default function TeacherReview() {
           {answers.map((a) => (
             <ReviewCard key={a._id} answer={a} onReviewed={afterReview} />
           ))}
-          {!pending.loading && answers.length === 0 && (
-            <p className="text-sm text-slate-400 dark:text-slate-500">Nothing pending. 🎉</p>
+          {!pending.loading && !pending.error && answers.length === 0 && (
+            <EmptyState icon="check" title="You’re all caught up" description="New drafts will appear here when students ask questions." />
           )}
         </div>
       </section>
@@ -57,8 +59,8 @@ export default function TeacherReview() {
           {failedDoubts.map((d) => (
             <FailedDoubtCard key={d._id} doubt={d} onAnswered={afterManualAnswer} />
           ))}
-          {!failed.loading && failedDoubts.length === 0 && (
-            <p className="text-sm text-slate-400 dark:text-slate-500">No AI failures to handle.</p>
+          {!failed.loading && !failed.error && failedDoubts.length === 0 && (
+            <EmptyState icon="chat" title="No questions need a manual answer" description="Questions that need your direct support will appear here." />
           )}
         </div>
       </section>
@@ -108,20 +110,20 @@ const ReviewCard = memo(function ReviewCard({ answer, onReviewed }) {
 
       <div className="field mt-3">
         <span>Draft answer (editable, markdown)</span>
-        <MarkdownEditor value={content} onChange={setContent} minH="min-h-28" autoGrow />
+        <MarkdownEditor value={content} onChange={setContent} label="Answer content" minH="min-h-28" autoGrow />
       </div>
       <label className="field">
         Review notes (optional)
         <input className="input" value={notes} onChange={(e) => setNotes(e.target.value)} />
       </label>
 
-      {err && <p className="mb-2 text-sm text-red-600 dark:text-red-400">{err}</p>}
+      {err && <ErrorState message={err} />}
       <div className="flex gap-2">
         <button className="btn" disabled={busy} onClick={() => doreview('approve')}>
           Approve
         </button>
         <button
-          className="btn bg-red-600 text-white hover:bg-red-500 dark:bg-red-600 dark:text-white dark:hover:bg-red-500"
+          className="btn-secondary !border-rose-200 !text-rose-600 hover:!bg-rose-50 dark:!border-rose-900 dark:!text-rose-300 dark:hover:!bg-rose-500/10"
           disabled={busy}
           onClick={() => doreview('reject')}
         >
@@ -188,10 +190,10 @@ const FailedDoubtCard = memo(function FailedDoubtCard({ doubt, onAnswered }) {
 
       <div className="field mt-2">
         <span>Your answer (markdown)</span>
-        <MarkdownEditor value={content} onChange={setContent} minH="min-h-28" autoGrow />
+        <MarkdownEditor value={content} onChange={setContent} label="Answer content" minH="min-h-28" autoGrow />
       </div>
 
-      {err && <p className="mb-2 text-sm text-red-600 dark:text-red-400">{err}</p>}
+      {err && <ErrorState message={err} />}
       <button className="btn" disabled={busy} onClick={submit}>
         {busy ? 'Publishing…' : 'Write Answer Manually'}
       </button>
