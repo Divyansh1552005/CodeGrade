@@ -20,4 +20,9 @@ const doubtSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Supports the shared board's descending keyset page and the same ordering
+// within one student's own doubts.
+doubtSchema.index({ createdAt: -1, _id: -1 });
+doubtSchema.index({ studentId: 1, createdAt: -1, _id: -1 });
+
 export default mongoose.model('Doubt', doubtSchema);

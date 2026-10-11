@@ -1,5 +1,8 @@
 import { runOnce } from './judge0Client.js';
 
+const MAX_STORED_OUTPUT_BYTES = 4096;
+const OUTPUT_TRUNCATION_MARKER = '\n...[output truncated]';
+
 /**
  * Normalize program output for comparison: trim trailing whitespace on each
  * line and drop trailing blank lines, so a stray newline doesn't fail a case.
@@ -11,6 +14,20 @@ function normalizeOutput(str) {
     .map((line) => line.replace(/\s+$/, ''))
     .join('\n')
     .replace(/\n+$/, '');
+}
+
+function capStoredOutput(output) {
+  const bytes = Buffer.from(output, 'utf8');
+  if (bytes.length <= MAX_STORED_OUTPUT_BYTES) return output;
+
+  const marker = Buffer.from(OUTPUT_TRUNCATION_MARKER, 'utf8');
+  let prefix = bytes.subarray(0, MAX_STORED_OUTPUT_BYTES - marker.length).toString('utf8');
+  // Avoid leaving a replacement character when the byte boundary splits a
+  // multi-byte UTF-8 code point.
+  while (Buffer.byteLength(prefix, 'utf8') > MAX_STORED_OUTPUT_BYTES - marker.length) {
+    prefix = prefix.slice(0, -1);
+  }
+  return `${prefix}${OUTPUT_TRUNCATION_MARKER}`;
 }
 
 /**
@@ -38,10 +55,11 @@ export async function gradeSubmission({ language, code, testCases }) {
       result.statusId === 3 && // Accepted
       normalizeOutput(actualOutput) === normalizeOutput(tc.expectedOutput);
 
+    const normalizedActualOutput = normalizeOutput(actualOutput);
     testResults.push({
       input: tc.input ?? '',
       expectedOutput: tc.expectedOutput ?? '',
-      actualOutput: normalizeOutput(actualOutput),
+      actualOutput: capStoredOutput(normalizedActualOutput),
       passed,
     });
   }

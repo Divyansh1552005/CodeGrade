@@ -47,16 +47,19 @@ router.post(
 // `mine`) just the requesting user's own doubts — used by the profile page.
 // Each doubt is annotated with `hasApprovedAnswer` so the list can render a
 // status badge without N+1 calls.
-// Pagination is opt-in: pass `limit` to get a page back (cursor-based, sorted
-// by createdAt/_id descending) plus a `nextCursor` to fetch the next page;
-// omit it to get the full list as before.
+// The board is cursor-paginated by default. Callers may choose a smaller or
+// larger page (up to MAX_PAGE_LIMIT), then pass nextCursor to continue.
 router.get('/', requireAuth, async (req, res, next) => {
   try {
     const filter = req.query.mine ? { studentId: req.user._id } : {};
 
     let query = Doubt.find(filter).sort({ createdAt: -1, _id: -1 });
 
-    const limit = req.query.limit ? Math.min(Number(req.query.limit) || 0, MAX_PAGE_LIMIT) : null;
+    // Keep the profile's legacy own-doubts response intact unless it opts into
+    // pagination. The shared board is always paged to bound its response size.
+    const paginate = !req.query.mine || req.query.limit !== undefined;
+    const requestedLimit = req.query.limit === undefined ? 20 : Number(req.query.limit);
+    const limit = paginate ? Math.min(Math.max(requestedLimit || 20, 1), MAX_PAGE_LIMIT) : null;
     let nextCursor = null;
     if (limit) {
       const cursor = decodeCursor(req.query.cursor);

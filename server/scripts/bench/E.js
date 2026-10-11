@@ -1,0 +1,30 @@
+import { context, runSection, models, ok, ms } from './common.js';
+await runSection('E',['E1','E2','E3','E4'],async test=>{
+ const ctx=await context({delay:300});
+ try{
+ await ctx.api({NODE_ENV:'test'});const teacher=await ctx.register('teacher'),problem=await ctx.problem(teacher);
+ const {ensureWork,recordAnswerNotification}=await import('../../services/workService.js');const {processWork}=await import('../../services/workProcessor.js');
+ const {processCompletion}=await import('../../services/progressService.js');const {awardSubmission}=await import('../../services/gamificationService.js');const {processNotification}=await import('../../services/notificationProcessor.js');
+ await test('E1',async()=>{
+   const actor=await ctx.register();const post=await ctx.submit(actor,problem,'e1');const id=post.data.submissionId;const work=await models.WorkItem.findOne({key:`grading-${id}`});const writes=[];const collection=models.Submission.collection;
+   const originals={updateOne:collection.updateOne,findOneAndUpdate:collection.findOneAndUpdate};
+   for(const op of Object.keys(originals))collection[op]=async function(...args){const result=await originals[op].apply(this,args);if(String(args[0]._id)===id)writes.push({operation:op,set:args[1]?.$set,matchedCount:result?.matchedCount??(result?1:0),modifiedCount:result?.modifiedCount??(result?1:0)});return result;};
+   const run=()=>processWork({data:{workItemId:work.id},attemptsMade:0,opts:{attempts:3}});let concurrent;
+   try{concurrent=await Promise.allSettled([run(),run()]);for(let i=0;i<5;i++)await run();}finally{Object.assign(collection,originals);}
+   const calls=ctx.calls.filter(c=>c.marker==='e1');const gradeWrites=writes.filter(w=>w.set?.status==='graded');
+   const m={concurrentInvocations:2,sequentialReplays:5,concurrentOutcomes:concurrent.map(x=>x.status),gradedDocuments:await models.Submission.countDocuments({_id:id,status:'graded'}),mockJudgeCalls:calls.length,duplicateJudgeCalls:Math.max(0,calls.length-1),submissionUpdateAttempts:writes.length,submissionUpdatesModified:writes.filter(w=>w.modifiedCount>0).length,gradingCommitAttempts:gradeWrites.length,effectiveGradingCommits:gradeWrites.filter(w=>w.modifiedCount>0).length,duplicateStartUpdates:Math.max(0,writes.filter(w=>w.set?.status==='running'&&w.modifiedCount>0).length-1),writes};
+   return ok(m,m.gradedDocuments===1&&m.duplicateJudgeCalls===0&&m.effectiveGradingCommits===1,'Direct processor delivery, not BullMQ delivery. Driver writes instrumented in benchmark process only. Repeated completionRecordedAt writes reported separately from grade commits.');
+ });
+ await test('E2',async()=>{
+   const actor=await ctx.register(),submission=await models.Submission.create({studentId:actor.user._id,problemId:problem._id,language:'python',code:'x',status:'graded',passCount:1,totalCount:1,rewardDifficulty:'easy',rewardTopics:['Arrays']});
+   const start=ms();const outcomes=await Promise.allSettled(Array.from({length:50},()=>processCompletion({data:{submissionId:submission.id}})));
+   const raw=await models.UserStats.findOne({userId:actor.user._id}).lean();const keys=['xp','level','solvedCount','eventCount','currentStreak','longestStreak'];const stats=Object.fromEntries(keys.map(k=>[k,raw?.[k]]));stats.topicXp=raw?.topicXp;
+   const expected={xp:100,level:2,solvedCount:1,eventCount:1,currentStreak:1,longestStreak:1,topicXp:[{topic:'Arrays',xp:100}]};
+   const badges=await models.UserBadge.find({userId:actor.user._id}).lean();const duplicates=badges.length-new Set(badges.map(b=>String(b.badgeId))).size;
+   const m={concurrentInvocations:50,fulfilled:outcomes.filter(x=>x.status==='fulfilled').length,rejected:outcomes.filter(x=>x.status==='rejected').length,errors:outcomes.filter(x=>x.status==='rejected').map(x=>x.reason.message),durationMs:ms()-start,xp:raw?.xp,gamificationEvents:await models.GamificationEvent.countDocuments({submissionId:submission.id}),badgeCount:badges.length,badgeDuplicates:duplicates,stats,expected,statsMatch:JSON.stringify(stats)===JSON.stringify(expected)};
+   return ok(m,m.fulfilled===50&&m.gamificationEvents===1&&m.badgeDuplicates===0&&m.statsMatch,'Real Mongo unique indexes and production completion code; one process, one successful easy solve; no queue transport.');
+ });
+ await test('E3',async()=>{const actor=await ctx.register(),d=await models.Doubt.create({studentId:actor.user._id,title:'Notification',body:'Question'}),a=await models.Answer.create({doubtId:d.id,content:'Answer',source:'teacher',state:'pending'});a.state='approved';await a.save();const outcomes=await Promise.allSettled(Array.from({length:10},async()=>{await recordAnswerNotification(a);await processNotification({data:{answerId:a.id}});}));const m={triggers:10,fulfilled:outcomes.filter(x=>x.status==='fulfilled').length,notificationDocuments:await models.Notification.countDocuments({key:`answer-${a.id}`}),outboxDocuments:await models.WorkItem.countDocuments({key:`answer-notification-${a.id}`})};return ok(m,m.fulfilled===10&&m.notificationDocuments===1&&m.outboxDocuments===1,'Concurrent direct approved-answer notification path; real MongoDB.');});
+ await test('E4',async()=>{const actor=await ctx.register(),rows=[];for(const [name,date,expected]of [['first','2026-10-01T10:00:00Z',1],['same-day','2026-10-01T20:00:00Z',1],['next-day','2026-10-02T10:00:00Z',2],['two-day-gap','2026-10-04T10:00:00Z',1]]){const p=await models.Problem.create({title:name,topics:['Arrays']}),s=await models.Submission.create({studentId:actor.user._id,problemId:p.id,language:'python',code:'x',status:'graded',passCount:1,totalCount:1});await awardSubmission(s.id,new Date(date));const stats=await models.UserStats.findOne({userId:actor.user._id}).lean();rows.push({name,date,currentStreak:stats.currentStreak,longestStreak:stats.longestStreak,expected});}return ok({rows},rows.every(x=>x.currentStreak===x.expected),'Deterministic award timestamps, UTC; real event projection. No waiting across real calendar days.');});
+ }finally{await ctx.close();}
+});

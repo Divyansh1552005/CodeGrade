@@ -39,7 +39,9 @@ function buildCorsOrigin() {
     // No Origin header (curl, server-to-server calls, same-origin) — allow.
     if (!origin) return callback(null, true);
     if (patterns.some((re) => re.test(origin))) return callback(null, true);
-    return callback(new Error(`CORS: origin ${origin} not allowed`));
+    const error = new Error(`CORS: origin ${origin} not allowed`);
+    error.status = 403;
+    return callback(error);
   };
 }
 
