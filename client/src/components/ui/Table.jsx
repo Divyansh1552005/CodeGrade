@@ -13,8 +13,8 @@ export const THead = (props) => <thead className="sticky top-0 z-10 bg-subtle" {
 export const TBody = (props) => <tbody className="divide-y divide-border" {...props} />;
 export const Tr = ({ className, ...props }) => <tr className={cn('transition-colors hover:bg-subtle', className)} {...props} />;
 export const Th = ({ className, numeric, ...props }) => (
-  <th scope="col" className={cn('h-10 whitespace-nowrap border-b border-border px-4 text-xs font-medium text-fg-muted', numeric && 'text-right', className)} {...props} />
+  <th scope="col" className={cn('h-10 whitespace-nowrap border-b border-border px-3 text-xs sm:px-4 font-medium text-fg-muted', numeric && 'text-right', className)} {...props} />
 );
 export const Td = ({ className, numeric, ...props }) => (
-  <td className={cn('h-11 px-4 align-middle', numeric && 'text-right tabular-nums', className)} {...props} />
+  <td className={cn('h-11 px-3 align-middle sm:px-4', numeric && 'text-right tabular-nums', className)} {...props} />
 );

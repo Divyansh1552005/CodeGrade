@@ -1,9 +1,10 @@
-import { PageHeader, EmptyState, ErrorState, Icon } from '../components/UI.jsx';
 import { memo } from 'react';
 import { Link } from 'react-router-dom';
+import { MessagesSquare, Plus } from 'lucide-react';
 import { usePaginatedQuery } from '../api/usePaginatedQuery.js';
 import { useAuth } from '../auth/AuthContext.jsx';
-import LoadingSpinner from '../components/LoadingSpinner.jsx';
+import { doubtStatus } from '../lib/doubtStatus.js';
+import { Badge, Button, EmptyState, ErrorState, Icon, PageHeader, TBody, Table, TableSkeleton, Td, Th, THead, Tr } from '../components/ui/index.js';
 
 // Plain-text excerpt of a markdown body, truncated for the list view.
 function excerpt(body, max = 100) {
@@ -14,55 +15,45 @@ function excerpt(body, max = 100) {
   return text.length > max ? `${text.slice(0, max).trimEnd()}…` : text;
 }
 
-function statusFor(doubt) {
-  if (doubt.hasApprovedAnswer)
-    return {
-      label: 'approved',
-      cls: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400',
-    };
-  if (doubt.aiDraftStatus === 'irrelevant')
-    return {
-      label: 'flagged as off-topic',
-      cls: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400',
-    };
-  if (doubt.aiDraftStatus === 'failed')
-    return {
-      label: 'awaiting teacher response',
-      cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400',
-    };
-  return { label: 'awaiting review', cls: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400' };
-}
-
 export default function DoubtBoard() {
   const { user } = useAuth();
   const isStudent = user.role === 'student';
-  const {
-    items: doubts,
-    loading,
-    loadingMore,
-    hasMore,
-    error,
-    loadMore,
-  } = usePaginatedQuery('/doubts', 'doubts');
+  const { items: doubts, loading, loadingMore, hasMore, error, loadMore, refetch } = usePaginatedQuery('/doubts', 'doubts');
 
   return (
     <div>
-      <PageHeader eyebrow="Learn together" title="Doubt board" description="Good questions move learning forward. Explore questions and teacher-reviewed answers." action={isStudent && <Link className="btn" to="/doubts/new"><Icon name="chat" className="h-4 w-4" />Ask a doubt</Link>} />
-      {loading && <LoadingSpinner />}
-      {error && <ErrorState message={error} />}
-      {!loading && !error && doubts.length === 0 && <EmptyState icon="chat" title="Start a conversation" description="Share the programming question you're working through. A teacher will help you find the next step." action={isStudent && <Link className="btn" to="/doubts/new">Ask your first doubt</Link>} />}
-
-      <div className="space-y-3">
-        {doubts.map((d) => (
-          <DoubtRow key={d._id} doubt={d} />
-        ))}
-      </div>
-
-      {hasMore && (
-        <div className="mt-4 flex justify-center">
-          <button className="btn-ghost btn-sm" onClick={loadMore} disabled={loadingMore}>
-            {loadingMore ? 'Loading…' : 'Load more'}
-          </button>
+      <PageHeader
+        title="Doubts"
+        action={isStudent && <Button variant="primary" to="/doubts/new"><Icon as={Plus} />Ask a doubt</Button>}
+      />
+      {error && <ErrorState message={error} onRetry={refetch} />}
+      {loading && <TableSkeleton rows={6} columns={3} />}
+      {!loading && !error && doubts.length === 0 && (
+        <EmptyState
+          icon={MessagesSquare}
+          title="No doubts yet"
+          description={isStudent ? 'Ask a programming question. A teacher reviews every answer before it is shared.' : 'Doubts students ask will appear here.'}
+          action={isStudent ? <Button variant="primary" to="/doubts/new">Ask a doubt</Button> : undefined}
+        />
+      )}
+      {!loading && doubts.length > 0 && (
+        <Table aria-label="Doubts">
+          <THead>
+            <Tr className="hover:bg-transparent">
+              <Th>Doubt</Th>
+              <Th>Status</Th>
+              <Th className="hidden sm:table-cell">Asked by</Th>
+              <Th className="hidden md:table-cell">Asked</Th>
+            </Tr>
+          </THead>
+          <TBody>
+            {doubts.map((d) => <DoubtRow key={d._id} doubt={d} />)}
+          </TBody>
+        </Table>
+      )}
+      {hasMore && !loading && (
+        <div className="mt-3 flex justify-center">
+          <Button onClick={loadMore} loading={loadingMore}>Load more</Button>
         </div>
       )}
     </div>
@@ -70,23 +61,18 @@ export default function DoubtBoard() {
 }
 
 const DoubtRow = memo(function DoubtRow({ doubt }) {
-  const status = statusFor(doubt);
+  const status = doubtStatus(doubt);
   return (
-    <Link
-      to={`/doubts/${doubt._id}`}
-      className="list-row block !p-5"
-    >
-      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row">
-        <h3 className="break-words font-semibold text-slate-800 dark:text-slate-100">{doubt.title}</h3>
-        <span className={`badge shrink-0 ${status.cls}`}>{status.label}</span>
-      </div>
-      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{excerpt(doubt.body)}</p>
-      <div className="mt-2 flex items-center justify-between">
-        <span className="text-xs text-slate-400 dark:text-slate-500">
-          by {doubt.studentId?.name || 'student'}
-        </span>
-        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">View →</span>
-      </div>
-    </Link>
+    <Tr>
+      <Td className="h-auto py-2">
+        <Link to={`/doubts/${doubt._id}`} className="block max-w-xs rounded-sm sm:max-w-md lg:max-w-xl">
+          <span className="block truncate font-medium hover:text-accent-text hover:underline">{doubt.title}</span>
+          <span className="block truncate text-sm text-fg-muted">{excerpt(doubt.body)}</span>
+        </Link>
+      </Td>
+      <Td><Badge tone={status.tone}>{status.label}</Badge></Td>
+      <Td className="hidden whitespace-nowrap text-fg-muted sm:table-cell">{doubt.studentId?.name || 'Student'}</Td>
+      <Td className="hidden whitespace-nowrap text-fg-muted md:table-cell">{doubt.createdAt ? new Date(doubt.createdAt).toLocaleDateString() : ''}</Td>
+    </Tr>
   );
 });

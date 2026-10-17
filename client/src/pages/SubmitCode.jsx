@@ -1,15 +1,19 @@
-import { PageHeader, EmptyState, ErrorState } from '../components/UI.jsx';
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { ArrowLeft, Code2, Copy, FileSearch, RotateCcw, Send, Terminal } from 'lucide-react';
 import { api } from '../api/client.js';
 import { useCachedQuery, invalidate } from '../api/useCachedQuery.js';
-import Markdown from '../components/Markdown.jsx';
 import CodeEditor from '../components/CodeEditor.jsx';
 import ProblemStatement from '../components/ProblemStatement.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
-import LoadingSpinner from '../components/LoadingSpinner.jsx';
-import { Spinner } from '../components/FormMotion.jsx';
+import SubmissionResult from '../components/workspace/SubmissionResult.jsx';
+import SubmissionHistory from '../components/workspace/SubmissionHistory.jsx';
+import {
+  Button, CodeBlock, DifficultyBadge, EmptyState, ErrorState, Field, Icon, ResizableGroup, ResizeHandle, ResizablePanel, Select,
+  Skeleton, Tabs, TabsContent, TabsList, TabsTrigger,
+} from '../components/ui/index.js';
+import { useMediaQuery } from '../lib/useMediaQuery.js';
 import { LANGUAGE_LABELS } from '../data/starterTemplates.js';
 
 // Student-selectable languages, in the order shown in the dropdown.
@@ -30,8 +34,10 @@ export default function SubmitCode() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [submissions, setSubmissions] = useState([]);
-  const [pane, setPane] = useState('Description');
-  const [consolePane, setConsolePane] = useState('Results');
+  const [pane, setPane] = useState('description');
+  const [consolePane, setConsolePane] = useState('results');
+  const [mobileTab, setMobileTab] = useState('description');
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
   const [resetOpen, setResetOpen] = useState(false);
   const drafts = useRef(new Map());
   const activeProblem = useRef(problemId);
@@ -143,7 +149,8 @@ export default function SubmitCode() {
       const res = await api.post('/submissions', { problemId, code, language });
       if (activeProblem.current !== problemId) return;
       setResult(res.data.submission);
-      setConsolePane('Results');
+      setConsolePane('results');
+      setMobileTab('results');
       toast.success('Submission queued.', { id: 'submission-queued' });
       loadSubmissions(problemId); // refresh the history
       invalidate('/problems'); // so the "Solved" badge updates on the list
@@ -158,249 +165,147 @@ export default function SubmitCode() {
     }
   }
 
-  return (
-    <div className="space-y-6">
-      <PageHeader eyebrow="Coding workspace" title={locked && selected ? selected.title : 'Submit code'} description="Read the challenge, build your solution, and learn from each test run." backTo={locked ? '/problems' : undefined} backLabel="Problem library" />
-      {loading && <LoadingSpinner label="Loading problems…" />}
-      {(error || loadError) && (
-        <ErrorState message={error || loadError} />
-      )}
-      {notFound && <EmptyState icon="code" title="Problem not found" description="This problem may no longer be available. Choose another challenge from the library." action={<Link className="btn" to="/problems">Browse problems</Link>} />}
+  const title = locked && selected ? selected.title : 'Submit code';
+  useEffect(() => { document.title = `${title} - CodeGrade`; }, [title]);
+  const showWorkspace = !notFound && (locked || problems.length > 0);
+  const samples = selected?.sampleCases ?? [];
 
+  const descriptionPane = (
+    <div className="space-y-4 p-4">
+      {!locked && (
+        <Field label="Problem">
+          <Select value={problemId} disabled={busy || pending} onChange={(e) => onSelectProblem(e.target.value)}>
+            {problems.map((p) => <option key={p._id} value={p._id}>{p.title}</option>)}
+          </Select>
+        </Field>
+      )}
+      {selected && <ProblemStatement problem={selected} />}
+    </div>
+  );
+
+  const historyPane = <div className="p-4"><SubmissionHistory submissions={submissions} /></div>;
+
+  const editorPane = (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-3 py-2">
+        <div className="w-36">
+          <Select aria-label="Language" className="h-8 text-sm" value={language} disabled={busy || pending} onChange={(e) => onSelectLanguage(e.target.value)}>
+            {LANGUAGES.map((lang) => <option key={lang} value={lang}>{LANGUAGE_LABELS[lang]}</option>)}
+          </Select>
+        </div>
+        <Button variant="ghost" size="sm" aria-label="Copy" onClick={copyCode} disabled={!code}><Icon as={Copy} /><span className="hidden sm:inline">Copy</span></Button>
+        <Button variant="ghost" size="sm" aria-label="Reset" onClick={() => setResetOpen(true)} disabled={busy || pending}><Icon as={RotateCcw} /><span className="hidden sm:inline">Reset</span></Button>
+        <span className="ml-auto hidden text-sm text-fg-muted 2xl:inline">Ctrl+Enter to submit</span>
+        <Button type="submit" variant="primary" size="sm" className="ml-auto 2xl:ml-0" loading={busy || pending} disabled={!problemId}><Icon as={Send} />Submit solution</Button>
+      </div>
+      <div className="relative min-h-0 flex-1">
+        <CodeEditor language={language} value={code} onChange={updateCode} onSubmit={onSubmit} />
+      </div>
+    </div>
+  );
+
+  const testcasesPane = samples.length ? (
+    <div className="space-y-4">
+      {samples.map((sample, index) => (
+        <div key={index}>
+          <h3 className="mb-2 text-base font-medium">Example {index + 1}</h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <CodeBlock label="Input">{sample.input}</CodeBlock>
+            <CodeBlock label="Expected output">{sample.output}</CodeBlock>
+          </div>
+        </div>
+      ))}
+    </div>
+  ) : (
+    <p className="text-base text-fg-muted">No public examples are available for this problem. Submit to run the test suite.</p>
+  );
+
+  const resultsPane = (
+    <>
+      {polling && statusError && <p role="status" className="mb-3 text-sm text-warning">Unable to refresh grading status. Retrying automatically…</p>}
+      {result ? <SubmissionResult submission={result} /> : (
+        <EmptyState icon={Terminal} title="No results yet" description="Submit your solution to run the test suite and get feedback. Limits are 2 submissions per minute and 20 per day." />
+      )}
+    </>
+  );
+
+  const consolePanel = (
+    <Tabs value={consolePane} onValueChange={setConsolePane} className="flex h-full min-h-0 flex-col" aria-label="Execution console">
+      <TabsList className="shrink-0">
+        <TabsTrigger value="testcases">Testcases</TabsTrigger>
+        <TabsTrigger value="results">Results</TabsTrigger>
+      </TabsList>
+      <TabsContent value="testcases" className="min-h-0 flex-1 overflow-auto p-4">{testcasesPane}</TabsContent>
+      <TabsContent value="results" className="min-h-0 flex-1 overflow-auto p-4">{resultsPane}</TabsContent>
+    </Tabs>
+  );
+
+  const surface = 'h-full min-w-0 overflow-hidden rounded-lg border border-border bg-surface';
+
+  const desktop = (
+    <ResizableGroup id="workspace-main" orientation="horizontal" panelIds={['statement', 'work']} className="absolute inset-0">
+      <ResizablePanel id="statement" defaultSize="42%" minSize="25%">
+        <Tabs value={pane} onValueChange={setPane} className={`${surface} flex flex-col`}>
+          <TabsList className="shrink-0">
+            <TabsTrigger value="description">Description</TabsTrigger>
+            <TabsTrigger value="submissions">Submissions ({submissions.length})</TabsTrigger>
+          </TabsList>
+          <TabsContent value="description" className="min-h-0 flex-1 overflow-y-auto">{descriptionPane}</TabsContent>
+          <TabsContent value="submissions" className="min-h-0 flex-1 overflow-y-auto">{historyPane}</TabsContent>
+        </Tabs>
+      </ResizablePanel>
+      <ResizeHandle orientation="horizontal" />
+      <ResizablePanel id="work" minSize="35%">
+        <ResizableGroup id="workspace-work" orientation="vertical" panelIds={['editor', 'console']} className="h-full">
+          <ResizablePanel id="editor" defaultSize="62%" minSize="25%">
+            <section aria-label="Solution editor" className={surface}>{editorPane}</section>
+          </ResizablePanel>
+          <ResizeHandle orientation="vertical" />
+          <ResizablePanel id="console" defaultSize="38%" minSize="15%">
+            <section aria-label="Execution console" className={surface}>{consolePanel}</section>
+          </ResizablePanel>
+        </ResizableGroup>
+      </ResizablePanel>
+    </ResizableGroup>
+  );
+
+  // Below lg the panes become tabs. The editor stays mounted so Monaco keeps its state.
+  const mobile = (
+    <Tabs value={mobileTab} onValueChange={setMobileTab} className={`${surface} absolute inset-0 flex flex-col`}>
+      <TabsList className="shrink-0">
+        <TabsTrigger value="description">Description</TabsTrigger>
+        <TabsTrigger value="code">Code</TabsTrigger>
+        <TabsTrigger value="results">Results</TabsTrigger>
+        <TabsTrigger value="submissions">Submissions</TabsTrigger>
+      </TabsList>
+      <TabsContent value="description" className="min-h-0 flex-1 overflow-y-auto">{descriptionPane}</TabsContent>
+      <TabsContent value="code" forceMount className="min-h-0 flex-1 data-[state=inactive]:hidden">{editorPane}</TabsContent>
+      <TabsContent value="results" className="min-h-0 flex-1">{consolePanel}</TabsContent>
+      <TabsContent value="submissions" className="min-h-0 flex-1 overflow-y-auto">{historyPane}</TabsContent>
+    </Tabs>
+  );
+
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      <header className="flex min-w-0 shrink-0 items-center gap-2">
+        <Button to={locked ? '/problems' : '/dashboard'} variant="ghost" size="sm" iconOnly aria-label={locked ? 'Back to problems' : 'Back to dashboard'}><Icon as={ArrowLeft} /></Button>
+        <h1 className="min-w-0 truncate text-md font-semibold" title={title}>{title}</h1>
+        {selected && <DifficultyBadge level={selected.difficulty || 'easy'} />}
+      </header>
+      {loading && <div role="status" aria-label="Loading problems" className="space-y-3"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-64 w-full" /></div>}
+      {(error || loadError) && <ErrorState message={error || loadError} />}
+      {notFound && (
+        <EmptyState icon={FileSearch} title="Problem not found" description="This problem may no longer be available. Choose another problem from the list." action={<Button variant="primary" to="/problems">Browse problems</Button>} />
+      )}
       {!locked && !loading && problems.length === 0 && (
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          No problems are available to solve yet. Check back once a teacher adds one.
-        </p>
+        <EmptyState icon={Code2} title="No problems yet" description="Problems appear here once a teacher adds one." />
       )}
-
-      <form className="coding-workspace" onSubmit={onSubmit} hidden={notFound || (!locked && problems.length === 0)}>
-        <section className="workspace-panel workspace-statement" aria-label="Problem workspace">
-          <div className="workspace-toolbar">
-            {['Description', 'Submissions'].map((item) => <button type="button" key={item} className="workspace-tab" aria-pressed={pane === item} onClick={() => setPane(item)}>{item}{item === 'Submissions' ? ` (${submissions.length})` : ''}</button>)}
-          </div>
-          <div className="workspace-scroll p-5">
-            {!locked && <label className="field">Problem<select className="input" value={problemId} disabled={busy || pending} onChange={(e) => onSelectProblem(e.target.value)}>{problems.map((p) => <option key={p._id} value={p._id}>{p.title}</option>)}</select></label>}
-            {pane === 'Description' ? selected && <ProblemStatement problem={selected} embedded /> : submissions.length ? <PastSubmissions submissions={submissions} /> : <EmptyState icon="clock" title="No submissions yet" description="Your submitted solutions and results will appear here." />}
-          </div>
-        </section>
-        <div className="min-w-0 space-y-3">
-          <section className="workspace-panel" aria-label="Solution editor">
-            <div className="workspace-toolbar justify-between">
-              <label className="flex items-center gap-2 text-xs font-medium">Language<select className="workspace-language" value={language} disabled={busy || pending} onChange={(e) => onSelectLanguage(e.target.value)}>{LANGUAGES.map((lang) => <option key={lang} value={lang}>{LANGUAGE_LABELS[lang]}</option>)}</select></label>
-              <div className="flex gap-1">
-                <button type="button" className="btn-ghost btn-sm" onClick={copyCode} disabled={!code}>Copy</button>
-                <button type="button" className="btn-ghost btn-sm" onClick={() => setResetOpen(true)} disabled={busy || pending}>Reset</button>
-              </div>
-            </div>
-            <CodeEditor language={language} value={code} onChange={updateCode} height="420px" onSubmit={onSubmit} />
-            <div className="workspace-toolbar justify-between">
-              <span className="text-xs text-slate-500 dark:text-slate-400">Ctrl / ⌘ + Enter to submit</span>
-              <button className="btn flex items-center gap-2" disabled={busy || pending || !problemId}>{busy && <Spinner />}{busy ? 'Submitting…' : pending ? 'Grading…' : 'Submit solution'}</button>
-            </div>
-          </section>
-          <section className="workspace-panel" aria-label="Execution console">
-            <div className="workspace-toolbar">{['Testcases', 'Results'].map((item) => <button type="button" key={item} className="workspace-tab" aria-pressed={consolePane === item} onClick={() => setConsolePane(item)}>{item}</button>)}</div>
-            <div className="workspace-console p-4">
-              {polling && statusError && <p role="status" className="mb-3 text-sm text-amber-600">Unable to refresh grading status. Retrying automatically…</p>}
-              {consolePane === 'Results' ? result ? <Results submission={result} /> : <EmptyState icon="code" title="Ready when you are" description="Submit your solution to run the test suite and receive feedback." /> : selected?.sampleCases?.length ? <div className="space-y-4">{selected.sampleCases.map((sample, index) => <div key={index}><h3 className="mb-2 text-sm font-semibold">Example {index + 1}</h3><div className="grid gap-3 sm:grid-cols-2"><ConsoleValue label="Input" value={sample.input} /><ConsoleValue label="Expected output" value={sample.output} /></div></div>)}</div> : <p className="text-sm text-slate-500">No public examples are available for this problem. Submit to run the test suite.</p>}
-            </div>
-          </section>
-          <p className="px-1 text-xs text-slate-500 dark:text-slate-400">2 submissions per minute · 20 per day. Language drafts stay available while this workspace is open.</p>
-        </div>
-      </form>
-      <ConfirmDialog open={resetOpen} onClose={() => setResetOpen(false)} onConfirm={() => { updateCode(starterFor(selected, language)); setResetOpen(false); toast.success('Starter code restored.'); }} title="Reset your solution?" message="This replaces your current language draft with the problem’s starter code." confirmLabel="Reset code" />
+      {showWorkspace && (
+        <form className="relative min-h-0 flex-1" onSubmit={onSubmit}>
+          {isDesktop ? desktop : mobile}
+        </form>
+      )}
+      <ConfirmDialog open={resetOpen} onClose={() => setResetOpen(false)} onConfirm={() => { updateCode(starterFor(selected, language)); setResetOpen(false); toast.success('Starter code restored.'); }} title="Reset your solution?" message="This replaces your current draft in this language with the starter code." confirmLabel="Reset code" />
     </div>
   );
 }
-
-const PastSubmissions = memo(function PastSubmissions({ submissions }) {
-  const [openId, setOpenId] = useState(null);
-  return (
-    <div className="space-y-4">
-      <h2 className="mb-3 text-lg font-semibold">Your submissions</h2>
-      <div className="space-y-2">
-        {submissions.map((s) => {
-          const solved = s.totalCount > 0 && s.passCount === s.totalCount;
-          const open = openId === s._id;
-          return (
-            <div key={s._id} className="rounded-lg border border-slate-200 dark:border-slate-800">
-              <button
-                type="button"
-                aria-expanded={open}
-                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
-                onClick={() => setOpenId(open ? null : s._id)}
-              >
-                <span className="flex flex-wrap items-center gap-2 text-sm">
-                  <span
-                    className={`badge ${
-                      solved
-                        ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
-                        : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400'
-                    }`}
-                  >
-                    {s.status === 'graded' ? `${s.passCount}/${s.totalCount}` : s.status}
-                  </span>
-                  <span className="pill">{LANGUAGE_LABELS[s.language] || s.language}</span>
-                  <span className="text-slate-400 dark:text-slate-500">
-                    {new Date(s.createdAt).toLocaleString()}
-                  </span>
-                </span>
-                <span className="text-xs text-slate-400 dark:text-slate-500">
-                  {open ? 'Hide' : 'View'}
-                </span>
-              </button>
-              {open && (
-                <div className="border-t border-slate-100 px-3 pb-3 dark:border-slate-800">
-                  <div className="mt-3">
-                    <p className="mb-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
-                      Submitted code
-                    </p>
-                    <pre className="max-h-64 overflow-auto rounded-md bg-slate-900 p-3 text-xs text-slate-100">
-                      {s.code}
-                    </pre>
-                  </div>
-                  <Results submission={s} />
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-});
-
-const Results = memo(function Results({ submission }) {
-  const { passCount, totalCount, testResults, aiFeedback, status } = submission;
-  if (status === 'queued' || status === 'running') {
-    return <p role="status" className="rounded-xl border border-indigo-100 bg-indigo-50 p-5 text-sm text-indigo-700 dark:border-indigo-900 dark:bg-indigo-500/10 dark:text-indigo-300">{status === 'queued'
-      ? 'Submission queued. Waiting for grading…' : 'Grading your submission…'}</p>;
-  }
-  if (status === 'error') {
-    return <p role="alert" className="error-state">{submission.error || 'Grading failed. Please resubmit.'}</p>;
-  }
-  const allPass = totalCount > 0 && passCount === totalCount;
-  return (
-    <div className="space-y-4">
-      <h2 className="mb-5 flex flex-wrap items-center gap-2 text-lg font-semibold">
-        Results
-        <span
-          className={`badge ${
-            allPass
-              ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
-              : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400'
-          }`}
-        >
-          {passCount}/{totalCount} passed
-        </span>
-        <span className="badge">{status}</span>
-      </h2>
-
-      <div className="table-shell">
-        <table className="data-table">
-          <thead className="text-slate-500 dark:text-slate-400">
-            <tr>
-              <th className="p-2">#</th>
-              <th className="p-2">Input</th>
-              <th className="p-2">Expected</th>
-              <th className="p-2">Actual</th>
-              <th className="p-2">Result</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(testResults || []).map((r, i) => (
-              <tr key={i} className="border-t border-slate-100 align-top dark:border-slate-800">
-                <td className="p-2">{i + 1}</td>
-                <td className="p-2"><pre className="whitespace-pre-wrap">{r.input}</pre></td>
-                <td className="p-2"><pre className="whitespace-pre-wrap">{r.expectedOutput}</pre></td>
-                <td className="p-2"><pre className="whitespace-pre-wrap">{r.actualOutput}</pre></td>
-                <td className="p-2">{r.passed ? '✅' : '❌'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {aiFeedback ? (
-        <div className="mt-5 overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-800/60">
-            <h3 className="font-semibold text-slate-800 dark:text-slate-100">AI Feedback</h3>
-          </div>
-
-          <div className="space-y-4 p-4">
-            {/* Summary */}
-            <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800">
-              <Markdown>{aiFeedback.summary}</Markdown>
-            </div>
-
-            {/* Strengths + improvements */}
-            <div className="grid gap-3 sm:grid-cols-2">
-              <FeedbackList
-                title="Strengths"
-                items={aiFeedback.strengths}
-                tone="green"
-                empty="No specific strengths noted."
-              />
-              <FeedbackList
-                title="Improvements"
-                items={aiFeedback.improvements}
-                tone="amber"
-                empty="No improvements suggested."
-              />
-            </div>
-
-            {/* Complexity */}
-            {aiFeedback.complexityNote && (
-              <div className="flex flex-wrap items-baseline gap-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800">
-                <span className="badge bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400">
-                  Complexity
-                </span>
-                <div className="text-sm text-slate-600 dark:text-slate-400">
-                  <Markdown>{aiFeedback.complexityNote}</Markdown>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      ) : (
-        <p className="mt-4 text-sm text-slate-400 dark:text-slate-500">
-          {['pending', 'running'].includes(submission.feedbackStatus) ? 'AI feedback is being prepared. Your test results are ready.' : 'AI feedback was not available for this submission.'}
-        </p>
-      )}
-    </div>
-  );
-});
-
-const TONES = {
-  green: 'border-green-200 bg-green-50 dark:border-green-900/60 dark:bg-green-950/30',
-  amber: 'border-amber-200 bg-amber-50 dark:border-amber-900/60 dark:bg-amber-950/30',
-};
-
-function FeedbackList({ title, items, tone, empty }) {
-  const list = Array.isArray(items) ? items.filter(Boolean) : [];
-  return (
-    <div
-      className={`rounded-lg border p-3 ${
-        TONES[tone] || 'border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800'
-      }`}
-    >
-      <h4 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">{title}</h4>
-      {list.length === 0 ? (
-        <p className="text-sm text-slate-400 dark:text-slate-500">{empty}</p>
-      ) : (
-        <ul className="space-y-1.5">
-          {list.map((s, i) => (
-            <li key={i} className="flex gap-2 text-sm text-slate-700 dark:text-slate-300">
-              <span className="mt-1 text-slate-400 dark:text-slate-500">•</span>
-              <div className="min-w-0 flex-1">
-                <Markdown>{s}</Markdown>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function ConsoleValue({ label, value }) { return <div><p className="mb-2 text-xs font-medium text-slate-500">{label}</p><pre className="rounded-lg bg-slate-100 p-3 text-sm whitespace-pre-wrap break-words dark:bg-slate-800">{value || "(empty)"}</pre></div>; }

@@ -1,25 +1,34 @@
 import { useEffect } from 'react';
-import { Icon } from './UI.jsx';
 
-export default function AuthCard({ title, subtitle, children }) {
-  useEffect(() => { document.title = `${title} · CodeGrade`; }, [title]);
-  return <div className="mx-auto grid min-h-[72vh] max-w-5xl items-center gap-10 py-5 lg:grid-cols-2 lg:gap-16">
-    <section className="hidden rounded-3xl bg-[#151c36] p-10 text-white lg:block">
-      <span className="mb-10 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500"><Icon name="code" /></span>
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-300">Learn with intention</p>
-      <h2 className="mt-4 text-4xl font-bold leading-tight">Your next breakthrough starts here.</h2>
-      <p className="mt-5 text-sm leading-7 text-slate-300">A focused space to practice, understand your mistakes, and build confidence with every solution.</p>
-      <div className="mt-10 space-y-5">{[
-        ['code', 'Practice that makes progress', 'Work through problems in your preferred language.'],
-        ['check', 'Feedback you can act on', 'Understand test results and improve your approach.'],
-        ['chat', 'Support when you need it', 'Get answers reviewed by your teachers.'],
-      ].map(([icon, heading, copy]) => <div key={heading} className="flex gap-4"><span className="mt-1 text-indigo-300"><Icon name={icon} /></span><div><p className="text-sm font-semibold">{heading}</p><p className="mt-1 text-xs leading-5 text-slate-400">{copy}</p></div></div>)}</div>
-    </section>
-    <section className="card mx-auto w-full max-w-md !p-7 sm:!p-9">
-      <p className="eyebrow">Your CodeGrade account</p>
-      <h1 className="mt-3 text-3xl font-bold">{title}</h1>
-      {subtitle && <p className="mt-3 mb-8 text-sm leading-6 text-slate-500 dark:text-slate-400">{subtitle}</p>}
-      {children}
-    </section>
-  </div>;
+/**
+ * Single centered form on a plain background.
+ *
+ * Planned additions slot in without moving anything that is already on screen:
+ *  - `providers`: buttons such as "Continue with Google". Rendered above the form with an "or" divider.
+ *  - AuthChallenge: wrap a bot-check widget (Turnstile) placed inside the form, above the submit button.
+ *    It reserves the widget's height so the button does not jump when the widget loads.
+ */
+export default function AuthCard({ title, subtitle, providers, footer, children }) {
+  useEffect(() => { document.title = `${title} - CodeGrade`; }, [title]);
+  return (
+    <div className="mx-auto w-full max-w-sm pt-4 sm:pt-16">
+      <h1 className="text-lg font-semibold">{title}</h1>
+      {subtitle && <p className="mt-1 text-base text-fg-muted">{subtitle}</p>}
+      {providers && (
+        <>
+          <div className="mt-6 space-y-2">{providers}</div>
+          <div className="my-6 flex items-center gap-3 text-sm text-fg-muted" role="separator">
+            <span className="h-px flex-1 bg-border" />or<span className="h-px flex-1 bg-border" />
+          </div>
+        </>
+      )}
+      <div className={providers ? '' : 'mt-6'}>{children}</div>
+      {footer && <p className="mt-6 text-base text-fg-muted">{footer}</p>}
+    </div>
+  );
+}
+
+/** Reserves the height of a bot-check widget (about 65px) so loading it causes no layout shift. */
+export function AuthChallenge({ children }) {
+  return <div className="min-h-16">{children}</div>;
 }

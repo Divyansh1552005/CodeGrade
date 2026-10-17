@@ -11,9 +11,9 @@ const tones = {
   info: 'border-info-border bg-info-bg text-info',
 };
 
-export function Badge({ tone = 'neutral', icon, className, children }) {
+export function Badge({ tone = 'neutral', icon, className, children, ...props }) {
   return (
-    <span className={cn('inline-flex h-5 items-center gap-1 whitespace-nowrap rounded-full border px-2 text-xs font-medium', tones[tone], className)}>
+    <span className={cn('inline-flex h-5 items-center gap-1 whitespace-nowrap rounded-full border px-2 text-xs font-medium', tones[tone], className)} {...props}>
       {icon && <Icon as={icon} className="size-3" />}
       {children}
     </span>

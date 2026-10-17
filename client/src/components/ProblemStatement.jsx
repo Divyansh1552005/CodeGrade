@@ -1,4 +1,7 @@
 import Markdown from './Markdown.jsx';
+import { Badge, CodeBlock } from './ui/index.js';
+
+const FIRST_SOLVE_XP = { easy: 100, medium: 200, hard: 300 };
 
 /**
  * The student-facing problem statement: description, input/output format,
@@ -7,101 +10,57 @@ import Markdown from './Markdown.jsx';
  * Sections are rendered only when the problem has them, so problems authored
  * before these fields became mandatory still display cleanly.
  */
-export default function ProblemStatement({ problem, embedded = false }) {
+export default function ProblemStatement({ problem }) {
   if (!problem) return null;
+  const difficulty = problem.difficulty || 'easy';
   const samples = problem.sampleCases?.filter((s) => s?.input || s?.output) ?? [];
 
   return (
-    <div className={embedded ? "space-y-6" : "mb-5 space-y-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4 dark:border-slate-800 dark:bg-slate-900/40"}>
-      <p className="text-sm capitalize">{problem.difficulty || 'easy'} · {{ easy: 100, medium: 200, hard: 300 }[problem.difficulty || 'easy']} XP for your first solve</p>
-      {problem.topics?.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {problem.topics.map((topic) => (
-            <span key={topic} className="pill">
-              {topic}
-            </span>
-          ))}
-        </div>
-      )}
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center gap-2">
+        {problem.topics?.map((topic) => <Badge key={topic}>{topic}</Badge>)}
+        <span className="text-sm text-fg-muted">{FIRST_SOLVE_XP[difficulty]} XP for your first solve</span>
+      </div>
 
-      {problem.description && (
-        <Section title="Problem">
-          <Markdown>{problem.description}</Markdown>
-        </Section>
-      )}
+      {problem.description && <Markdown>{problem.description}</Markdown>}
 
       {problem.inputFormat && (
-        <Section title="Input format">
-          <Markdown>{problem.inputFormat}</Markdown>
-        </Section>
+        <Section title="Input format"><Markdown>{problem.inputFormat}</Markdown></Section>
       )}
 
       {problem.outputFormat && (
-        <Section title="Output format">
-          <Markdown>{problem.outputFormat}</Markdown>
-        </Section>
+        <Section title="Output format"><Markdown>{problem.outputFormat}</Markdown></Section>
       )}
 
       {problem.constraints && (
         <Section title="Constraints">
-          <pre className="whitespace-pre-wrap rounded-md border border-slate-200 bg-white p-3 font-mono text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-            {problem.constraints}
-          </pre>
+          <pre className="overflow-x-auto whitespace-pre-wrap rounded-sm border border-border bg-subtle p-3 text-sm">{problem.constraints}</pre>
         </Section>
       )}
 
-      {samples.length > 0 && (
-        <Section title={samples.length > 1 ? 'Sample examples' : 'Sample example'}>
-          <div className="space-y-3">
-            {samples.map((s, i) => (
-              <div
-                key={i}
-                className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800"
-              >
-                {samples.length > 1 && (
-                  <p className="mb-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
-                    Example {i + 1}
-                  </p>
-                )}
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <SampleBlock label="Input" value={s.input} />
-                  <SampleBlock label="Output" value={s.output} />
-                </div>
-                {s.explanation && (
-                  <div className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                      Explanation:{' '}
-                    </span>
-                    <Markdown>{s.explanation}</Markdown>
-                  </div>
-                )}
-              </div>
-            ))}
+      {samples.map((s, i) => (
+        <Section key={i} title={samples.length > 1 ? `Example ${i + 1}` : 'Example'}>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <CodeBlock label="Input">{s.input}</CodeBlock>
+            <CodeBlock label="Output">{s.output}</CodeBlock>
           </div>
+          {s.explanation && (
+            <div className="mt-3">
+              <p className="mb-1 text-sm font-medium">Explanation</p>
+              <Markdown>{s.explanation}</Markdown>
+            </div>
+          )}
         </Section>
-      )}
+      ))}
     </div>
   );
 }
 
 function Section({ title, children }) {
   return (
-    <div>
-      <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-        {title}
-      </h3>
-      <div className="text-sm text-slate-700 dark:text-slate-300">{children}</div>
-    </div>
-  );
-}
-
-function SampleBlock({ label, value }) {
-  return (
-    <div>
-      <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
-      <pre className="overflow-x-auto whitespace-pre-wrap rounded-md bg-slate-900 p-3 font-mono text-xs text-slate-100">
-        {value}
-      </pre>
-    </div>
+    <section>
+      <h2 className="mb-2 text-base font-semibold">{title}</h2>
+      {children}
+    </section>
   );
 }

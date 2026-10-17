@@ -14,6 +14,7 @@ import AskDoubt from './AskDoubt.jsx';
 import DoubtDetail from './DoubtDetail.jsx';
 import TeacherReview from './TeacherReview.jsx';
 import Profile from './Profile.jsx';
+import Leaderboard from './Leaderboard.jsx';
 import NotFound from './NotFound.jsx';
 import RouteError from './RouteError.jsx';
 import BulkJobs from './BulkJobs.jsx';
@@ -36,21 +37,22 @@ const responses = {
 };
 beforeEach(() => { session.role = 'student'; session.isAuthed = true; });
 const pages = [
-  ['landing', LandingPage, '/', '/', /Practice with purpose/, 'public'],
-  ['login', Login, '/login', '/login', 'Welcome back', 'public'],
+  ['landing', LandingPage, '/', '/', 'Practice coding and get help when you are stuck', 'public'],
+  ['login', Login, '/login', '/login', 'Log in', 'public'],
   ['register', Register, '/register', '/register', 'Create account', 'public'],
-  ['student dashboard', Dashboard, '/dashboard', '/dashboard', /Alex/, 'student'],
-  ['teacher dashboard', Dashboard, '/dashboard', '/dashboard', /Alex/, 'teacher'],
-  ['problem library', ProblemList, '/problems', '/problems', 'Problem library', 'student'],
+  ['student dashboard', Dashboard, '/dashboard', '/dashboard', 'Dashboard', 'student'],
+  ['teacher dashboard', Dashboard, '/dashboard', '/dashboard', 'Dashboard', 'teacher'],
+  ['problems', ProblemList, '/problems', '/problems', 'Problems', 'student'],
   ['create problem', CreateProblem, '/problems/new', '/problems/new', 'Create a problem', 'teacher'],
   ['edit problem', CreateProblem, '/problems/:id/edit', '/problems/p1/edit', 'Edit problem', 'teacher'],
   ['coding workspace', SubmitCode, '/submit/:problemId', '/submit/p1', 'Echo', 'student'],
-  ['doubt board', DoubtBoard, '/doubts', '/doubts', 'Doubt board', 'student'],
+  ['doubt board', DoubtBoard, '/doubts', '/doubts', 'Doubts', 'student'],
   ['ask doubt', AskDoubt, '/doubts/new', '/doubts/new', 'Ask a doubt', 'student'],
   ['doubt detail', DoubtDetail, '/doubts/:id', '/doubts/d1', 'Loop question', 'student'],
   ['review queue', TeacherReview, '/review', '/review', 'Review queue', 'teacher'],
-  ['profile', Profile, '/profile', '/profile', 'My profile', 'student'],
-  ['not found', NotFound, '*', '/missing', 'That page isn’t here', 'student'],
+  ['profile', Profile, '/profile', '/profile', 'Profile', 'student'],
+  ['leaderboard', Leaderboard, '/leaderboard', '/leaderboard', 'Leaderboard', 'student'],
+  ['not found', NotFound, '*', '/missing', 'Page not found', 'student'],
   ['route error', RouteError, '/error', '/error', 'This page couldn’t load', 'student'],
   ['bulk jobs', BulkJobs, '/bulk-jobs', '/bulk-jobs', 'Imports and reports', 'teacher'],
 ];

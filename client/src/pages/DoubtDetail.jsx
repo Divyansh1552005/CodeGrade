@@ -1,8 +1,9 @@
-import { PageHeader, ErrorState } from '../components/UI.jsx';
 import { useParams } from 'react-router-dom';
+import { Bot, GraduationCap } from 'lucide-react';
 import { useCachedQuery } from '../api/useCachedQuery.js';
 import Markdown from '../components/Markdown.jsx';
-import LoadingSpinner from '../components/LoadingSpinner.jsx';
+import { doubtStatus } from '../lib/doubtStatus.js';
+import { Avatar, Badge, ErrorState, PageHeader, PageSkeleton, Panel, PanelBody, PanelHeader, Skeleton } from '../components/ui/index.js';
 
 export default function DoubtDetail() {
   const { id } = useParams();
@@ -13,60 +14,63 @@ export default function DoubtDetail() {
   const loading = doubtQuery.loading || answerQuery.loading;
   const error = doubtQuery.error || answerQuery.error;
 
-  if (loading) return <LoadingSpinner full />;
+  if (loading) return <PageSkeleton />;
   if (error) return <ErrorState message={error} onRetry={() => { doubtQuery.refetch(); answerQuery.refetch(); }} />;
   if (!doubt) return null;
 
-  const failed = doubt.aiDraftStatus === 'failed';
-  const irrelevant = doubt.aiDraftStatus === 'irrelevant';
+  const status = doubtStatus(doubt);
+  const author = doubt.studentId?.name || 'Student';
+  const fromAi = answer?.source === 'ai';
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5">
-      <PageHeader eyebrow="Conversation" title={doubt.title} description={`Asked by ${doubt.studentId?.name || 'student'}`} backTo="/doubts" backLabel="Doubt board" />
-      {/* The doubt */}
-      <div className="card">
-        <h2 className="section-title mb-4">The question</h2>
-        <div className="mt-3">
-          <Markdown>{doubt.body}</Markdown>
-        </div>
-      </div>
+    <div className="max-w-3xl space-y-4">
+      <PageHeader
+        title={doubt.title}
+        description={doubt.createdAt ? `Asked ${new Date(doubt.createdAt).toLocaleString()}` : undefined}
+        action={<Badge tone={status.tone}>{status.label}</Badge>}
+        backTo="/doubts"
+        backLabel="Doubts"
+      />
 
-      {/* The answer, or a status message */}
+      <Panel aria-label="Question">
+        <PanelHeader>
+          <span className="flex min-w-0 items-center gap-2 text-base"><Avatar name={author} size="sm" /><span className="truncate font-medium">{author}</span><span className="text-fg-muted">asked</span></span>
+        </PanelHeader>
+        <PanelBody><Markdown>{doubt.body}</Markdown></PanelBody>
+      </Panel>
+
       {answer ? (
-        <div className="card border-green-200 dark:border-green-900/60">
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="badge bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400">
-              Approved answer
-            </span>
-            <span className="badge">
-              {answer.source === 'ai' ? 'AI-drafted' : 'Teacher-written'}
+        <Panel aria-label="Answer" className="border-success-border">
+          <PanelHeader className="flex-wrap">
+            <span className="flex flex-wrap items-center gap-2">
+              <Badge tone="success">Approved answer</Badge>
+              {fromAi
+                ? <Badge icon={Bot}>AI-drafted</Badge>
+                : <Badge tone="accent" icon={GraduationCap}>Teacher-written</Badge>}
             </span>
             {answer.reviewedBy?.name && (
-              <span className="text-sm text-slate-500 dark:text-slate-400">
-                {answer.source === 'ai' ? 'Approved by ' : 'Answered by '}
-                <span className="font-medium text-slate-700 dark:text-slate-200">
-                  {answer.reviewedBy.name}
-                </span>
-              </span>
+              <span className="text-sm text-fg-muted">{fromAi ? 'Approved by' : 'Answered by'} <span className="font-medium text-fg">{answer.reviewedBy.name}</span></span>
             )}
-          </div>
-          <Markdown>{answer.content}</Markdown>
-        </div>
+          </PanelHeader>
+          <PanelBody><Markdown>{answer.content}</Markdown></PanelBody>
+        </Panel>
       ) : (
-        <div className="card">
-          {irrelevant ? (
-            <p className="text-sm text-purple-700 dark:text-purple-400">
-              This doesn't look like a programming question, so no AI draft was generated —
-              a teacher can still answer it manually.
-            </p>
-          ) : failed ? (
-            <p className="text-sm text-amber-700 dark:text-amber-400">
-              AI failed to generate a draft answer — awaiting a manual answer from a teacher.
-            </p>
-          ) : (
-            <p className="text-sm text-slate-500 dark:text-slate-400">{doubt.aiDraftStatus === 'pending' ? 'Preparing an AI draft for teacher review…' : 'Awaiting teacher response.'}</p>
-          )}
-        </div>
+        <Panel aria-label="Answer status">
+          <PanelBody>
+            {doubt.aiDraftStatus === 'irrelevant' ? (
+              <p className="text-base text-fg-muted">This doesn't look like a programming question, so no AI draft was generated. A teacher can still answer it.</p>
+            ) : doubt.aiDraftStatus === 'failed' ? (
+              <p className="text-base text-warning">The AI could not draft an answer. A teacher will answer it manually.</p>
+            ) : doubt.aiDraftStatus === 'pending' ? (
+              <div role="status" className="space-y-2">
+                <p className="text-base text-fg-muted">Preparing an AI draft for teacher review…</p>
+                <Skeleton className="h-3 w-2/3" />
+              </div>
+            ) : (
+              <p className="text-base text-fg-muted">Waiting for a teacher to review.</p>
+            )}
+          </PanelBody>
+        </Panel>
       )}
     </div>
   );

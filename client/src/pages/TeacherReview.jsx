@@ -1,11 +1,11 @@
-import { PageHeader, EmptyState, ErrorState } from '../components/UI.jsx';
 import { memo, useCallback, useState } from 'react';
 import toast from 'react-hot-toast';
+import { CheckCheck, MessagesSquare } from 'lucide-react';
 import { api } from '../api/client.js';
 import { useCachedQuery, invalidate } from '../api/useCachedQuery.js';
 import Markdown from '../components/Markdown.jsx';
 import MarkdownEditor from '../components/MarkdownEditor.jsx';
-import LoadingSpinner from '../components/LoadingSpinner.jsx';
+import { Badge, Button, EmptyState, ErrorState, Field, Input, PageHeader, Panel, PanelBody, PanelHeader, Skeleton } from '../components/ui/index.js';
 
 export default function TeacherReview() {
   const pending = useCachedQuery('/answers?state=pending', { key: 'answers:pending', refetchInterval: 5000 });
@@ -24,113 +24,82 @@ export default function TeacherReview() {
     failed.refetch();
   }, [failed]);
 
-  const loading = pending.loading || failed.loading;
-
   return (
-    <div>
-      <PageHeader eyebrow="Teaching workspace" title="Review queue" description="Add your expertise to every answer. Review drafts carefully before publishing them to students." action={<span className="badge badge-warning">{answers.length} awaiting review</span>} />
-      {(pending.error || failed.error) && <ErrorState message={pending.error || failed.error} onRetry={() => { pending.refetch(); failed.refetch(); }} />}
-      {loading && <LoadingSpinner />}
+    <div className="max-w-3xl">
+      <PageHeader
+        title="Review queue"
+        description="Students only see an answer once it is approved."
+        action={<Badge tone="warning">{answers.length} awaiting review</Badge>}
+      />
+      {(pending.error || failed.error) && <ErrorState className="mb-6" message={pending.error || failed.error} onRetry={() => { pending.refetch(); failed.refetch(); }} />}
 
-      {/* AI drafts awaiting approval */}
-      <section className="mb-8">
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-          AI drafts awaiting approval
-        </h2>
-        <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">
-          Students only ever see an answer once it is approved.
-        </p>
-        <div className="space-y-4">
-          {answers.map((a) => (
-            <ReviewCard key={a._id} answer={a} onReviewed={afterReview} />
-          ))}
-          {!pending.loading && !pending.error && answers.length === 0 && (
-            <EmptyState icon="check" title="You’re all caught up" description="New drafts will appear here when students ask questions." />
-          )}
-        </div>
+      <section className="mb-10 space-y-4" aria-labelledby="drafts-heading">
+        <h2 id="drafts-heading" className="text-md font-semibold">AI drafts awaiting approval</h2>
+        {pending.loading && !pending.data && <div role="status" aria-label="Loading drafts" className="space-y-3"><Skeleton className="h-32 w-full" /></div>}
+        {answers.map((a) => <ReviewCard key={a._id} answer={a} onReviewed={afterReview} />)}
+        {!pending.loading && !pending.error && answers.length === 0 && (
+          <EmptyState icon={CheckCheck} title="Nothing to review" description="New drafts appear here when students ask questions." />
+        )}
       </section>
 
-      {/* Doubts where the AI failed — need a manual answer */}
-      <section>
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-          Needs a manual answer
-        </h2>
-        <div className="space-y-4">
-          {failedDoubts.map((d) => (
-            <FailedDoubtCard key={d._id} doubt={d} onAnswered={afterManualAnswer} />
-          ))}
-          {!failed.loading && !failed.error && failedDoubts.length === 0 && (
-            <EmptyState icon="chat" title="No questions need a manual answer" description="Questions that need your direct support will appear here." />
-          )}
-        </div>
+      <section className="space-y-4" aria-labelledby="manual-heading">
+        <h2 id="manual-heading" className="text-md font-semibold">Needs a manual answer</h2>
+        {failed.loading && !failed.data && <div role="status" aria-label="Loading doubts" className="space-y-3"><Skeleton className="h-32 w-full" /></div>}
+        {failedDoubts.map((d) => <FailedDoubtCard key={d._id} doubt={d} onAnswered={afterManualAnswer} />)}
+        {!failed.loading && !failed.error && failedDoubts.length === 0 && (
+          <EmptyState icon={MessagesSquare} title="No questions need a manual answer" description="Questions that need your direct answer appear here." />
+        )}
       </section>
     </div>
   );
 }
 
+function Question({ body }) {
+  return <div className="border-l-2 border-border pl-3"><Markdown>{body}</Markdown></div>;
+}
+
 const ReviewCard = memo(function ReviewCard({ answer, onReviewed }) {
   const [content, setContent] = useState(answer.content);
   const [notes, setNotes] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState('');
   const [err, setErr] = useState('');
 
   const doreview = useCallback(
     async (action) => {
-      setBusy(true);
+      setBusy(action);
       setErr('');
       try {
         await api.patch(`/answers/${answer._id}/${action}`, { content, reviewNotes: notes });
         onReviewed();
         toast.success(action === 'approve' ? 'Answer approved.' : 'Answer rejected.');
       } catch (e) {
-        const msg = e.response?.data?.error || 'Action failed';
+        const msg = e.response?.data?.error || 'Action failed. Check your connection and try again.';
         setErr(msg);
         toast.error(msg);
       } finally {
-        setBusy(false);
+        setBusy('');
       }
     },
     [answer._id, content, notes, onReviewed]
   );
 
   return (
-    <div className="card">
-      <div className="mb-2 flex items-center gap-2">
-        <span className="badge">{answer.source}</span>
-        <span className="badge bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
-          {answer.state}
-        </span>
-      </div>
-      <h3 className="font-semibold">{answer.doubtId?.title || 'Doubt'}</h3>
-      {answer.doubtId?.body && (
-        <div className="mt-1 rounded-md bg-slate-50 p-2 dark:bg-slate-800">
-          <Markdown>{answer.doubtId.body}</Markdown>
+    <Panel aria-label={answer.doubtId?.title || 'Doubt'}>
+      <PanelHeader title={answer.doubtId?.title || 'Doubt'} action={<><Badge>{answer.source === 'ai' ? 'AI draft' : answer.source}</Badge><Badge tone="warning">{answer.state}</Badge></>} />
+      <PanelBody className="space-y-4">
+        {answer.doubtId?.body && <Question body={answer.doubtId.body} />}
+        <div className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium">Draft answer</span>
+          <MarkdownEditor value={content} onChange={setContent} label="Answer content" minH="min-h-28" autoGrow />
         </div>
-      )}
-
-      <div className="field mt-3">
-        <span>Draft answer (editable, markdown)</span>
-        <MarkdownEditor value={content} onChange={setContent} label="Answer content" minH="min-h-28" autoGrow />
-      </div>
-      <label className="field">
-        Review notes (optional)
-        <input className="input" value={notes} onChange={(e) => setNotes(e.target.value)} />
-      </label>
-
-      {err && <ErrorState message={err} />}
-      <div className="flex gap-2">
-        <button className="btn" disabled={busy} onClick={() => doreview('approve')}>
-          Approve
-        </button>
-        <button
-          className="btn-secondary !border-rose-200 !text-rose-600 hover:!bg-rose-50 dark:!border-rose-900 dark:!text-rose-300 dark:hover:!bg-rose-500/10"
-          disabled={busy}
-          onClick={() => doreview('reject')}
-        >
-          Reject
-        </button>
-      </div>
-    </div>
+        <Field label="Review notes (optional)"><Input value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
+        <div className="flex gap-2">
+          <Button variant="primary" loading={busy === 'approve'} disabled={Boolean(busy)} onClick={() => doreview('approve')}>Approve</Button>
+          <Button variant="danger" loading={busy === 'reject'} disabled={Boolean(busy)} onClick={() => doreview('reject')}>Reject</Button>
+        </div>
+        {err && <ErrorState message={err} />}
+      </PanelBody>
+    </Panel>
   );
 });
 
@@ -142,7 +111,7 @@ const FailedDoubtCard = memo(function FailedDoubtCard({ doubt, onAnswered }) {
 
   const submit = useCallback(async () => {
     if (!content.trim()) {
-      setErr('Answer cannot be empty');
+      setErr('Write an answer before publishing.');
       return;
     }
     setBusy(true);
@@ -153,7 +122,7 @@ const FailedDoubtCard = memo(function FailedDoubtCard({ doubt, onAnswered }) {
       onAnswered();
       toast.success('Answer published to the student.');
     } catch (e) {
-      const msg = e.response?.data?.error || 'Failed to submit answer';
+      const msg = e.response?.data?.error || 'Failed to publish the answer. Check your connection and try again.';
       setErr(msg);
       toast.error(msg);
     } finally {
@@ -162,41 +131,23 @@ const FailedDoubtCard = memo(function FailedDoubtCard({ doubt, onAnswered }) {
   }, [content, doubt._id, onAnswered]);
 
   return (
-    <div className="card border-amber-200 dark:border-amber-900/60">
-      <div className="mb-2">
-        {irrelevant ? (
-          <span className="badge bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400">
-            Flagged as off-topic
-          </span>
-        ) : (
-          <span className="badge bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400">
-            AI draft failed
-          </span>
-        )}
-      </div>
-      <h3 className="font-semibold">{doubt.title}</h3>
-      <div className="mt-1 rounded-md bg-slate-50 p-2 dark:bg-slate-800">
-        <Markdown>{doubt.body}</Markdown>
-      </div>
-      <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-        by {doubt.studentId?.name || 'student'}
-      </p>
-
-      <p className="mt-3 text-sm text-amber-700 dark:text-amber-400">
-        {irrelevant
-          ? "The AI judged this doubt isn't related to programming, so no draft was generated. Write an answer manually if it's actually relevant, or reject/ignore otherwise."
-          : 'AI failed to generate a draft answer for this doubt. Write one manually — it will be published to the student immediately.'}
-      </p>
-
-      <div className="field mt-2">
-        <span>Your answer (markdown)</span>
-        <MarkdownEditor value={content} onChange={setContent} label="Answer content" minH="min-h-28" autoGrow />
-      </div>
-
-      {err && <ErrorState message={err} />}
-      <button className="btn" disabled={busy} onClick={submit}>
-        {busy ? 'Publishing…' : 'Write Answer Manually'}
-      </button>
-    </div>
+    <Panel aria-label={doubt.title}>
+      <PanelHeader title={doubt.title} action={irrelevant ? <Badge>Off topic</Badge> : <Badge tone="danger">AI draft failed</Badge>} />
+      <PanelBody className="space-y-4">
+        <p className="text-sm text-fg-muted">Asked by {doubt.studentId?.name || 'a student'}</p>
+        <Question body={doubt.body} />
+        <p className="text-base text-fg-muted">
+          {irrelevant
+            ? 'The AI judged this is not about programming, so it wrote no draft. Answer it manually if it is relevant.'
+            : 'The AI could not draft an answer. Your answer is published to the student immediately.'}
+        </p>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium">Your answer</span>
+          <MarkdownEditor value={content} onChange={setContent} label="Answer content" minH="min-h-28" autoGrow />
+        </div>
+        <Button variant="primary" loading={busy} onClick={submit}>Publish answer</Button>
+        {err && <ErrorState message={err} />}
+      </PanelBody>
+    </Panel>
   );
 });

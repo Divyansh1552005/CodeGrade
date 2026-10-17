@@ -41,7 +41,7 @@ SyntaxHighlighter.registerLanguage('sql', sql);
 export default function Markdown({ children }) {
   const { theme } = useTheme();
   return (
-    <div className="markdown text-sm text-slate-700 dark:text-slate-300">
+    <div className="markdown text-fg">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -54,30 +54,19 @@ export default function Markdown({ children }) {
                 PreTag="div"
                 language={match[1]}
                 style={theme === 'dark' ? oneDark : oneLight}
-                customStyle={{ borderRadius: '0.5rem', fontSize: '0.85em', margin: '0.5rem 0' }}
+                customStyle={{ background: 'transparent', border: 'none', margin: 0, padding: 0, fontSize: 'inherit' }}
+                codeTagProps={{ style: { fontFamily: 'var(--font-mono)' } }}
               >
                 {String(codeChildren).replace(/\n$/, '')}
               </SyntaxHighlighter>
             ) : (
-              <code
-                {...rest}
-                className="rounded bg-slate-100 px-1 py-0.5 text-[0.85em] dark:bg-slate-800"
-              >
-                {codeChildren}
-              </code>
+              <code {...rest}>{codeChildren}</code>
             );
           },
           // Links open safely in a new tab.
           a({ children: linkChildren, ...props }) {
             return (
-              <a
-                {...props}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 underline dark:text-blue-400"
-              >
-                {linkChildren}
-              </a>
+              <a {...props} target="_blank" rel="noopener noreferrer">{linkChildren}</a>
             );
           },
         }}

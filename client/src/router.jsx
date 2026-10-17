@@ -19,7 +19,7 @@ const CreateProblem = lazy(() => import('./pages/CreateProblem.jsx'));
 const BulkJobs = lazy(() => import('./pages/BulkJobs.jsx'));
 const NotFound = lazy(() => import('./pages/NotFound.jsx'));
 const Profile = lazy(() => import('./pages/Profile.jsx'));
-const UiGallery = import.meta.env.DEV ? lazy(() => import('./pages/UiGallery.jsx')) : null;
+const Leaderboard = lazy(() => import('./pages/Leaderboard.jsx'));
 
 // Route table lives here, separate from the shell (RootLayout) and the
 // per-route auth gate (ProtectedRoute), so adding a page is a one-line diff.
@@ -94,6 +94,14 @@ const routes = [
     ),
   },
   {
+    path: '/leaderboard',
+    element: (
+      <ProtectedRoute>
+        <Leaderboard />
+      </ProtectedRoute>
+    ),
+  },
+  {
     path: '/profile',
     element: (
       <ProtectedRoute>
@@ -110,7 +118,6 @@ const routes = [
     ),
   },
   { path: '/bulk-jobs', element: <ProtectedRoute role="teacher"><BulkJobs /></ProtectedRoute> },
-  ...(UiGallery ? [{ path: '/ui-gallery', element: <UiGallery /> }] : []),
   { path: '*', element: <NotFound /> },
 ];
 

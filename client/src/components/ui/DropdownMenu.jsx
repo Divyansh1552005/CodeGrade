@@ -1,5 +1,7 @@
 import * as Menu from '@radix-ui/react-dropdown-menu';
+import { Check } from 'lucide-react';
 import { cn } from '../../lib/cn.js';
+import { Icon } from './Icon.jsx';
 
 export const DropdownMenu = Menu.Root;
 export const DropdownMenuTrigger = Menu.Trigger;
@@ -32,3 +34,15 @@ export const DropdownMenuLabel = ({ className, ...props }) => (
 export const DropdownMenuSeparator = ({ className, ...props }) => (
   <Menu.Separator className={cn('-mx-1 my-1 h-px bg-border', className)} {...props} />
 );
+
+export function DropdownMenuCheckboxItem({ className, children, ...props }) {
+  return (
+    <Menu.CheckboxItem
+      className={cn('relative flex h-8 cursor-pointer select-none items-center gap-2 rounded-sm pl-7 pr-2 text-sm text-fg outline-none data-[highlighted]:bg-subtle', className)}
+      {...props}
+    >
+      <Menu.ItemIndicator className="absolute left-2 inline-flex"><Icon as={Check} /></Menu.ItemIndicator>
+      {children}
+    </Menu.CheckboxItem>
+  );
+}

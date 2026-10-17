@@ -16,3 +16,14 @@ export function TableSkeleton({ rows = 6, columns = 4 }) {
     </div>
   );
 }
+
+/** Route-level Suspense fallback. */
+export function PageSkeleton() {
+  return (
+    <div role="status" aria-label="Loading page" className="space-y-4">
+      <Skeleton className="h-6 w-48" />
+      <Skeleton className="h-4 w-80 max-w-full" />
+      <TableSkeleton rows={5} columns={3} />
+    </div>
+  );
+}

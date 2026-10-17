@@ -22,21 +22,24 @@ const sizes = {
 const iconSizes = { sm: 'size-8', md: 'size-9', lg: 'size-10' };
 
 /**
- * Renders a <button>, or a router <Link> when `to` is given.
+ * Renders a <button>, a router <Link> when `to` is given, or an <a> when `href` is given.
  * `loading` shows a spinner and disables the button without changing its width.
  * `iconOnly` buttons must pass an `aria-label`.
  */
 export const Button = forwardRef(function Button(
-  { variant = 'secondary', size = 'md', loading = false, iconOnly = false, to, className, children, disabled, type = 'button', ...props },
+  { variant = 'secondary', size = 'md', loading = false, iconOnly = false, to, href, className, children, disabled, type = 'button', ...props },
   ref
 ) {
   const classes = cn(base, variants[variant], iconOnly ? iconSizes[size] : sizes[size], iconOnly && 'px-0', className);
   if (to) {
     return <Link ref={ref} to={to} className={classes} {...props}>{children}</Link>;
   }
+  if (href) {
+    return <a ref={ref} href={href} className={classes} {...props}>{children}</a>;
+  }
   return (
     <button ref={ref} type={type} className={classes} disabled={disabled || loading} aria-busy={loading || undefined} {...props}>
-      <span className={cn('inline-flex items-center justify-center gap-2', loading && 'invisible')}>{children}</span>
+      <span className={cn('inline-flex items-center justify-center gap-2', loading && 'opacity-0')}>{children}</span>
       {loading && <span className="absolute inset-0 flex items-center justify-center"><Spinner /></span>}
     </button>
   );

@@ -4,7 +4,7 @@ import { ArrowLeft } from 'lucide-react';
 import { Icon } from './Icon.jsx';
 
 export function PageHeader({ title, description, action, backTo, backLabel = 'Back' }) {
-  useEffect(() => { document.title = `${title} · CodeGrade`; }, [title]);
+  useEffect(() => { document.title = `${title} - CodeGrade`; }, [title]);
   return (
     <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div className="min-w-0">

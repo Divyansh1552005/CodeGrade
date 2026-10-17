@@ -1,8 +1,9 @@
-import Modal from './Modal.jsx';
+import { useRef } from 'react';
+import { Button, Modal } from './ui/index.js';
 
 /**
- * Destructive-action confirmation, built on Modal. Replaces window.confirm
- * so the choice is styled, themed, and animated consistently across the app.
+ * Destructive-action confirmation. Replaces window.confirm so the choice is
+ * themed and accessible. Focus starts on Cancel so Enter never confirms by accident.
  */
 export default function ConfirmDialog({
   open,
@@ -15,33 +16,22 @@ export default function ConfirmDialog({
   danger = true,
   busy = false,
 }) {
+  const cancelRef = useRef(null);
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onOpenChange={(next) => !next && onClose()}
       title={title}
       busy={busy}
+      onOpenAutoFocus={(event) => { event.preventDefault(); cancelRef.current?.focus(); }}
       footer={
         <>
-          <button type="button" className="btn-ghost btn-sm" onClick={onClose} disabled={busy}>
-            {cancelLabel}
-          </button>
-          <button
-            type="button"
-            className={`btn btn-sm ${
-              danger
-                ? 'bg-red-600 text-white hover:bg-red-500 dark:bg-red-600 dark:text-white dark:hover:bg-red-500'
-                : ''
-            }`}
-            onClick={onConfirm}
-            disabled={busy}
-          >
-            {busy ? 'Working…' : confirmLabel}
-          </button>
+          <Button ref={cancelRef} onClick={onClose} disabled={busy}>{cancelLabel}</Button>
+          <Button variant={danger ? 'danger' : 'primary'} onClick={onConfirm} loading={busy}>{confirmLabel}</Button>
         </>
       }
     >
-      {message}
+      <p className="text-base text-fg-muted">{message}</p>
     </Modal>
   );
 }

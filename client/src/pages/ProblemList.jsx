@@ -1,19 +1,28 @@
-import { PageHeader, EmptyState, ErrorState, Icon } from '../components/UI.jsx';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { CheckCircle2, ChevronDown, Code2, Pencil, Plus, Search, SearchX, Trash2, X } from 'lucide-react';
 import { api } from '../api/client.js';
 import { useCachedQuery } from '../api/useCachedQuery.js';
 import { usePaginatedQuery } from '../api/usePaginatedQuery.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
-import TopicFilter from '../components/TopicFilter.jsx';
-import LoadingSpinner from '../components/LoadingSpinner.jsx';
+import { TOPICS } from '../data/topics.js';
+import {
+  Badge, Button, DifficultyBadge, DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger, EmptyState,
+  ErrorState, Icon, Input, PageHeader, Select, TBody, Table, TableSkeleton, Td, Th, THead, Tr,
+} from '../components/ui/index.js';
+
+const VISIBLE_TOPICS = 2;
 
 export default function ProblemList() {
   const { user } = useAuth();
   const isTeacher = user.role === 'teacher';
   const [selectedTopics, setSelectedTopics] = useState([]);
+  const [search, setSearch] = useState('');
+  const [difficulty, setDifficulty] = useState('');
+  const [status, setStatus] = useState('');
+  // Topics are filtered by the server; search, difficulty and status filter the rows loaded so far.
   const query = selectedTopics.length
     ? `/problems?topics=${selectedTopics.map(encodeURIComponent).join(',')}`
     : '/problems';
@@ -48,89 +57,181 @@ export default function ProblemList() {
     }
   }
 
+  const needle = search.trim().toLowerCase();
+  const visible = useMemo(
+    () => problems.filter((p) => {
+      if (difficulty && (p.difficulty || 'easy') !== difficulty) return false;
+      if (status === 'solved' && !p.solved) return false;
+      if (status === 'unsolved' && p.solved) return false;
+      if (needle && !`${p.title} ${(p.topics || []).join(' ')}`.toLowerCase().includes(needle)) return false;
+      return true;
+    }),
+    [problems, difficulty, status, needle]
+  );
+
+  const availableTopics = stats?.byTopic ? TOPICS.filter((t) => stats.byTopic[t] > 0) : [];
+  const rowFilters = Boolean(needle || difficulty || status);
+  const filtered = rowFilters || selectedTopics.length > 0;
+  function clearFilters() {
+    setSelectedTopics([]); setSearch(''); setDifficulty(''); setStatus('');
+  }
+  function toggleTopic(topic, checked) {
+    setSelectedTopics((current) => (checked ? [...current, topic] : current.filter((t) => t !== topic)));
+  }
+
   return (
-    <div>
-      <PageHeader eyebrow="Practice & progress" title="Problem library" description={isTeacher ? 'Create thoughtful challenges and help your students build confidence.' : 'Choose your next challenge. Practice at your pace, then learn from your results.'} action={isTeacher && <Link className="btn" to="/problems/new"><Icon name="code" className="h-4 w-4" />Create problem</Link>} />
-      <div className="mb-5 flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400"><span className="pill">{stats?.total ?? '—'} problems</span>{!isTeacher && <span>2 submissions per minute · 20 per day</span>}</div>
-      <TopicFilter
-        selected={selectedTopics}
-        onChange={setSelectedTopics}
-        counts={stats?.byTopic}
+    <div className="flex h-full min-h-0 flex-col">
+      <PageHeader
+        title="Problems"
+        action={isTeacher && <Button variant="primary" to="/problems/new"><Icon as={Plus} />Create problem</Button>}
       />
 
-      {loading && <LoadingSpinner />}
-      {error && <ErrorState message={error} onRetry={refetch} />}
-      {!loading && !error && problems.length === 0 && <EmptyState icon="code" title={selectedTopics.length ? 'No matches yet' : 'A fresh start'} description={selectedTopics.length ? 'Try another topic or clear your filters to explore the library.' : isTeacher ? 'Create your first problem to start building the library.' : 'Your teachers are preparing new problems. Check back soon.'} action={selectedTopics.length ? <button className="btn-secondary" onClick={() => setSelectedTopics([])}>Clear filters</button> : isTeacher && <Link className="btn" to="/problems/new">Create a problem</Link>} />}
-
-      <div className="space-y-3">
-        {problems.map((p) => {
-          const mine = isTeacher && String(p.createdBy) === String(user.id || user._id);
-          return (
-            <div
-              key={p._id}
-              className={`card flex flex-col justify-between gap-4 sm:flex-row sm:items-center ${
-                p.solved
-                  ? 'border-green-300 bg-green-50 dark:border-green-900/60 dark:bg-green-950/30'
-                  : ''
-              }`}
-            >
-              <div>
-                <h3 className="flex flex-wrap items-center gap-2 text-base font-semibold">
-                  {typeof p.number === 'number' && (
-                    <span className="text-slate-400 dark:text-slate-500">
-                      Problem {p.number}:
-                    </span>
-                  )}
-                  {p.title}
-                  <span className="badge capitalize">{p.difficulty || 'easy'}</span>
-                  {p.solved && (
-                    <span className="badge bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400">
-                      Solved
-                    </span>
-                  )}
-                </h3>
-                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{p.description}</p>
-                <div className="mt-2 flex flex-wrap items-center gap-1">
-                  <span className="text-xs text-slate-400 dark:text-slate-500">
-                    {p.testCases?.length || 0} test case(s)
-                  </span>
-                  {(p.topics || []).map((topic) => (
-                    <span key={topic} className="pill">
-                      {topic}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <div className="flex shrink-0 gap-2">
-                {user.role === 'student' && (
-                  <Link className="btn btn-sm" to={`/submit/${p._id}`}>
-                    Solve
-                  </Link>
-                )}
-                {mine && (
-                  <>
-                    <Link className="btn-ghost btn-sm" to={`/problems/${p._id}/edit`}>
-                      Edit
-                    </Link>
-                    <button
-                      className="btn-ghost btn-sm text-red-600 dark:text-red-400"
-                      onClick={() => setPendingDelete(p)}
-                    >
-                      Delete
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          );
-        })}
+      <div className="mb-3 flex shrink-0 flex-wrap items-center gap-2">
+        <div className="relative w-full sm:w-64">
+          <Icon as={Search} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-subtle" />
+          <Input type="search" aria-label="Search problems" placeholder="Search title or topic" className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
+        <div className="w-36">
+          <Select aria-label="Difficulty" value={difficulty} onChange={(e) => setDifficulty(e.target.value)}>
+            <option value="">All difficulties</option>
+            <option value="easy">Easy</option>
+            <option value="medium">Medium</option>
+            <option value="hard">Hard</option>
+          </Select>
+        </div>
+        {!isTeacher && (
+          <div className="w-32">
+            <Select aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value)}>
+              <option value="">All statuses</option>
+              <option value="solved">Solved</option>
+              <option value="unsolved">Unsolved</option>
+            </Select>
+          </div>
+        )}
+        {availableTopics.length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button>
+                Topics{selectedTopics.length > 0 && <Badge tone="accent">{selectedTopics.length}</Badge>}
+                <Icon as={ChevronDown} />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="max-h-80 overflow-y-auto">
+              {availableTopics.map((topic) => (
+                <DropdownMenuCheckboxItem
+                  key={topic}
+                  checked={selectedTopics.includes(topic)}
+                  onCheckedChange={(checked) => toggleTopic(topic, checked)}
+                  onSelect={(event) => event.preventDefault()}
+                >
+                  {topic}
+                  <span className="ml-auto pl-4 tabular-nums text-fg-subtle">{stats.byTopic[topic]}</span>
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+        {filtered && <Button variant="ghost" onClick={clearFilters}><Icon as={X} />Clear filters</Button>}
+        <span className="ml-auto text-sm tabular-nums text-fg-muted" aria-live="polite">
+          {loading ? '' : filtered ? `${visible.length} shown` : `${stats?.total ?? problems.length} problems`}
+        </span>
       </div>
 
-      {hasMore && (
-        <div className="mt-4 flex justify-center">
-          <button className="btn-ghost btn-sm" onClick={loadMore} disabled={loadingMore}>
-            {loadingMore ? 'Loading…' : 'Load more'}
-          </button>
+      {selectedTopics.length > 0 && (
+        <ul aria-label="Active topic filters" className="mb-3 flex shrink-0 flex-wrap gap-2">
+          {selectedTopics.map((topic) => (
+            <li key={topic}>
+              <Badge tone="accent" className="h-6 pr-1">
+                {topic}
+                <button type="button" aria-label={`Remove ${topic} filter`} className="inline-flex size-4 items-center justify-center rounded-full hover:bg-surface" onClick={() => toggleTopic(topic, false)}>
+                  <Icon as={X} className="size-3" />
+                </button>
+              </Badge>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {error && <ErrorState message={error} onRetry={refetch} />}
+      {loading && <TableSkeleton rows={8} columns={5} />}
+
+      {!loading && !error && problems.length === 0 && (
+        <EmptyState
+          icon={selectedTopics.length ? SearchX : Code2}
+          title={selectedTopics.length ? 'No problems match these topics' : 'No problems yet'}
+          description={selectedTopics.length ? 'Clear the topic filter to see every problem.' : isTeacher ? 'Create the first problem to start the library.' : 'Problems appear here once a teacher adds one.'}
+          action={selectedTopics.length ? <Button onClick={clearFilters}>Clear filters</Button> : isTeacher ? <Button variant="primary" to="/problems/new">Create problem</Button> : undefined}
+        />
+      )}
+
+      {!loading && !error && problems.length > 0 && visible.length === 0 && (
+        <EmptyState
+          icon={SearchX}
+          title="No matching problems"
+          description={hasMore ? 'Nothing among the problems loaded so far matches. Load more to search further.' : 'Try a different search or clear the filters.'}
+          action={<div className="flex gap-2"><Button onClick={clearFilters}>Clear filters</Button>{hasMore && <Button onClick={loadMore} loading={loadingMore}>Load more</Button>}</div>}
+        />
+      )}
+
+      {!loading && visible.length > 0 && (
+        <Table aria-label="Problems" wrapperClassName="min-h-0">
+          <THead>
+            <Tr className="hover:bg-transparent">
+              {!isTeacher && <Th className="w-16">Status</Th>}
+              <Th numeric className="w-16">#</Th>
+              <Th>Title</Th>
+              <Th>Difficulty</Th>
+              <Th>Topics</Th>
+              {isTeacher && <Th numeric>Tests</Th>}
+              {isTeacher && <Th className="w-24"><span className="sr-only">Actions</span></Th>}
+            </Tr>
+          </THead>
+          <TBody>
+            {visible.map((p) => {
+              const mine = isTeacher && String(p.createdBy) === String(user.id || user._id);
+              const topics = p.topics || [];
+              return (
+                <Tr key={p._id}>
+                  {!isTeacher && (
+                    <Td>{p.solved && <><Icon as={CheckCircle2} className="text-success" /><span className="sr-only">Solved</span></>}</Td>
+                  )}
+                  <Td numeric className="text-fg-muted">{typeof p.number === 'number' ? p.number : ''}</Td>
+                  <Td>
+                    {isTeacher ? (
+                      <span className="block max-w-md truncate font-medium" title={p.title}>{p.title}</span>
+                    ) : (
+                      <Link to={`/submit/${p._id}`} className="block max-w-md truncate rounded-sm font-medium hover:text-accent-text hover:underline" title={p.title}>{p.title}</Link>
+                    )}
+                  </Td>
+                  <Td><DifficultyBadge level={p.difficulty || 'easy'} /></Td>
+                  <Td>
+                    <div className="flex items-center gap-1">
+                      {topics.slice(0, VISIBLE_TOPICS).map((topic) => <Badge key={topic}>{topic}</Badge>)}
+                      {topics.length > VISIBLE_TOPICS && <Badge title={topics.slice(VISIBLE_TOPICS).join(', ')}>+{topics.length - VISIBLE_TOPICS}</Badge>}
+                    </div>
+                  </Td>
+                  {isTeacher && <Td numeric>{p.testCases?.length || 0}</Td>}
+                  {isTeacher && (
+                    <Td>
+                      {mine && (
+                        <div className="flex justify-end gap-1">
+                          <Button variant="ghost" size="sm" iconOnly to={`/problems/${p._id}/edit`} aria-label={`Edit ${p.title}`}><Icon as={Pencil} /></Button>
+                          <Button variant="ghost" size="sm" iconOnly aria-label={`Delete ${p.title}`} onClick={() => setPendingDelete(p)}><Icon as={Trash2} /></Button>
+                        </div>
+                      )}
+                    </Td>
+                  )}
+                </Tr>
+              );
+            })}
+          </TBody>
+        </Table>
+      )}
+
+      {hasMore && !loading && visible.length > 0 && (
+        <div className="mt-3 flex shrink-0 items-center justify-center gap-3">
+          {rowFilters && <span className="text-sm text-fg-muted">Search and filters only cover the problems loaded so far.</span>}
+          <Button onClick={loadMore} loading={loadingMore}>Load more</Button>
         </div>
       )}
 

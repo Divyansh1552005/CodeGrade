@@ -1,21 +1,27 @@
-import { PageHeader, ErrorState } from '../components/UI.jsx';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { Plus, X } from 'lucide-react';
 import { api } from '../api/client.js';
 import { invalidate } from '../api/useCachedQuery.js';
 import { STARTER_TEMPLATES, LANGUAGE_LABELS } from '../data/starterTemplates.js';
 import CodeEditor from '../components/CodeEditor.jsx';
 import TopicSelect from '../components/TopicSelect.jsx';
+import { Button, ErrorState, Field, Icon, Input, PageHeader, Select, Tabs, TabsList, TabsTrigger, Textarea } from '../components/ui/index.js';
 
 const emptyCase = () => ({ input: '', expectedOutput: '' });
 const emptySample = () => ({ input: '', output: '', explanation: '' });
 const LANGUAGES = ['javascript', 'python', 'java', 'cpp'];
 const emptyStarter = () => ({ javascript: '', python: '', java: '', cpp: '' });
 
-const tabBase = 'min-h-10 rounded-lg px-3 py-2 text-xs font-medium transition';
-const tabActive = `${tabBase} bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900`;
-const tabIdle = `${tabBase} text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800`;
+function Section({ title, children }) {
+  return (
+    <section className="space-y-4 border-t border-border pt-8 first:border-t-0 first:pt-0">
+      <h2 className="text-md font-semibold">{title}</h2>
+      {children}
+    </section>
+  );
+}
 
 export default function CreateProblem() {
   const { id } = useParams(); // present => edit mode
@@ -30,9 +36,9 @@ export default function CreateProblem() {
     outputFormat: '',
     constraints: '',
   });
-  // Public worked examples — at least one is required.
+  // Public worked examples. At least one is required.
   const [sampleCases, setSampleCases] = useState([emptySample()]);
-  // Fixed, LeetCode-style categorization — at least one is required.
+  // Fixed, LeetCode-style categorization. At least one is required.
   const [topics, setTopics] = useState([]);
   // starterCode is language-agnostic on the Problem: optional boilerplate per language.
   const [starterCode, setStarterCode] = useState(emptyStarter());
@@ -65,7 +71,7 @@ export default function CreateProblem() {
             : [emptySample()]
         );
       })
-      .catch((err) => setError(err.response?.data?.error || 'Failed to load problem'));
+      .catch((err) => setError(err.response?.data?.error || 'Failed to load the problem. Check your connection and try again.'));
   }, [id, isEdit]);
 
   const setField = (k) => (e) => setForm({ ...form, [k]: e.target.value });
@@ -118,7 +124,7 @@ export default function CreateProblem() {
       toast.success(isEdit ? 'Problem updated.' : 'Problem created.');
       navigate('/problems');
     } catch (err) {
-      const msg = err.response?.data?.error || 'Failed to save problem';
+      const msg = err.response?.data?.error || 'Failed to save the problem. Check your connection and try again.';
       setError(msg);
       toast.error(msg);
     } finally {
@@ -127,223 +133,91 @@ export default function CreateProblem() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl">
-      <PageHeader eyebrow="Problem authoring" title={isEdit ? 'Edit problem' : 'Create a problem'} description="Build a clear challenge with a complete statement, worked examples, and reliable tests." backTo="/problems" backLabel="Problem library" />
-      <div className="card">
-      <form onSubmit={onSubmit}>
-        <h2 className="section-title mb-5">1. Problem details</h2>
-        <label className="field">
-          Title
-          <input className="input" value={form.title} onChange={setField('title')} required />
-        </label>
-        <label className="field">
-          Initial difficulty
-          <select className="input" value={form.difficulty} onChange={setField('difficulty')}>
-            <option value="easy">Easy · 100 XP</option>
-            <option value="medium">Medium · 200 XP</option>
-            <option value="hard">Hard · 300 XP</option>
-          </select>
-          <span className="text-xs text-slate-500">Updated from solve rates once enough students attempt the problem.</span>
-        </label>
-        <label className="field">
-          Description
-          <textarea
-            className="input min-h-24"
-            value={form.description}
-            onChange={setField('description')}
-            required
-          />
-        </label>
-
-        <div className="field">
-          <span>
-            Topics <span className="text-slate-400 dark:text-slate-500">(select at least one)</span>
-          </span>
-          <TopicSelect selected={topics} onChange={setTopics} />
-        </div>
-
-        <h2 className="section-title mb-5 mt-8 border-t border-slate-100 pt-6 dark:border-slate-800">2. Statement & examples</h2>
-        <label className="field">
-          Input format
-          <textarea
-            className="input min-h-20"
-            value={form.inputFormat}
-            onChange={setField('inputFormat')}
-            placeholder="e.g. Line 1: n — the number of elements. Line 2: n space-separated integers."
-            required
-          />
-        </label>
-        <label className="field">
-          Output format
-          <textarea
-            className="input min-h-20"
-            value={form.outputFormat}
-            onChange={setField('outputFormat')}
-            placeholder="e.g. A single integer — the sum of the elements."
-            required
-          />
-        </label>
-        <label className="field">
-          Constraints
-          <textarea
-            className="input min-h-20"
-            value={form.constraints}
-            onChange={setField('constraints')}
-            placeholder={'e.g. 1 <= n <= 1000\n-10^9 <= a[i] <= 10^9'}
-            required
-          />
-        </label>
-
-        <div className="mb-4">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              Sample examples{' '}
-              <span className="text-slate-400 dark:text-slate-500">(shown to students)</span>
-            </span>
-            <button type="button" className="btn-ghost btn-sm" onClick={addSample}>
-              + Add example
-            </button>
+    <div className="max-w-3xl">
+      <PageHeader title={isEdit ? 'Edit problem' : 'Create a problem'} backTo="/problems" backLabel="Problems" />
+      <form className="space-y-8" onSubmit={onSubmit}>
+        <Section title="Details">
+          <Field label="Title"><Input value={form.title} onChange={setField('title')} required /></Field>
+          <Field label="Initial difficulty" hint="Updated from solve rates once enough students attempt the problem.">
+            <Select value={form.difficulty} onChange={setField('difficulty')}>
+              <option value="easy">Easy (100 XP)</option>
+              <option value="medium">Medium (200 XP)</option>
+              <option value="hard">Hard (300 XP)</option>
+            </Select>
+          </Field>
+          <Field label="Description"><Textarea className="min-h-32" value={form.description} onChange={setField('description')} required /></Field>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium">Topics</span>
+            <TopicSelect selected={topics} onChange={setTopics} />
+            <p className="text-sm text-fg-muted">Select at least one.</p>
           </div>
+        </Section>
+
+        <Section title="Statement and examples">
+          <Field label="Input format"><Textarea value={form.inputFormat} onChange={setField('inputFormat')} placeholder="Line 1: n, the number of elements. Line 2: n space-separated integers." required /></Field>
+          <Field label="Output format"><Textarea value={form.outputFormat} onChange={setField('outputFormat')} placeholder="A single integer: the sum of the elements." required /></Field>
+          <Field label="Constraints"><Textarea value={form.constraints} onChange={setField('constraints')} placeholder={'1 <= n <= 1000\n-10^9 <= a[i] <= 10^9'} required /></Field>
+
           <div className="space-y-3">
-            {sampleCases.map((s, i) => (
-              <div
-                key={i}
-                className="rounded-lg border border-slate-200 p-3 dark:border-slate-800"
-              >
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Example {i + 1}
-                  </span>
-                  <button
-                    type="button"
-                    className="btn-ghost btn-sm text-red-600 dark:text-red-400"
-                    aria-label={`Remove example ${i + 1}`}
-                    onClick={() => removeSample(i)}
-                    disabled={sampleCases.length === 1}
-                    title="Remove"
-                  >
-                    ✕
-                  </button>
-                </div>
-                <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-start">
-                  <textarea
-                    className="input flex-1 font-mono text-sm"
-                    aria-label={`Example ${i + 1} input`}
-                    placeholder="sample input"
-                    value={s.input}
-                    onChange={(e) => updateSample(i, 'input', e.target.value)}
-                    rows={2}
-                    required
-                  />
-                  <textarea
-                    className="input flex-1 font-mono text-sm"
-                    aria-label={`Example ${i + 1} output`}
-                    placeholder="sample output"
-                    value={s.output}
-                    onChange={(e) => updateSample(i, 'output', e.target.value)}
-                    rows={2}
-                    required
-                  />
-                </div>
-                <textarea
-                  className="input mt-2 w-full text-sm"
-                  aria-label={`Example ${i + 1} explanation`}
-                  placeholder="explanation (optional)"
-                  value={s.explanation}
-                  onChange={(e) => updateSample(i, 'explanation', e.target.value)}
-                  rows={2}
-                />
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-medium">Sample examples</h3>
+                <p className="text-sm text-fg-muted">Shown to students.</p>
               </div>
-            ))}
-          </div>
-        </div>
-
-        <h2 className="section-title mb-5 mt-8 border-t border-slate-100 pt-6 dark:border-slate-800">3. Starter code & test cases</h2>
-        {/* Optional starter code per language. Test cases are language-agnostic;
-            starter code is just convenience boilerplate students can start from. */}
-        <div className="field">
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span>Starter code (optional, per language)</span>
-            <div className="flex flex-wrap gap-1">
-              {LANGUAGES.map((lang) => (
-                <button
-                  key={lang}
-                  type="button"
-                  aria-pressed={activeLang === lang}
-                  className={activeLang === lang ? tabActive : tabIdle}
-                  onClick={() => setActiveLang(lang)}
-                >
-                  {LANGUAGE_LABELS[lang]}
-                  {starterCode[lang]?.trim() ? ' •' : ''}
-                </button>
-              ))}
+              <Button size="sm" onClick={addSample}><Icon as={Plus} />Add example</Button>
             </div>
-            {!isEdit && (
-              <button type="button" className="btn-ghost btn-sm ml-auto" onClick={insertTemplate}>
-                Insert {LANGUAGE_LABELS[activeLang]} template
-              </button>
-            )}
+            {sampleCases.map((s, i) => (
+              <fieldset key={i} className="space-y-3 rounded-lg border border-border p-3">
+                <legend className="px-1 text-sm font-medium">Example {i + 1}</legend>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Textarea className="min-h-16 font-mono text-sm" aria-label={`Example ${i + 1} input`} placeholder="Sample input" value={s.input} onChange={(e) => updateSample(i, 'input', e.target.value)} rows={2} required />
+                  <Textarea className="min-h-16 font-mono text-sm" aria-label={`Example ${i + 1} output`} placeholder="Sample output" value={s.output} onChange={(e) => updateSample(i, 'output', e.target.value)} rows={2} required />
+                </div>
+                <Textarea className="min-h-16" aria-label={`Example ${i + 1} explanation`} placeholder="Explanation (optional)" value={s.explanation} onChange={(e) => updateSample(i, 'explanation', e.target.value)} rows={2} />
+                <Button size="sm" variant="ghost" aria-label={`Remove example ${i + 1}`} onClick={() => removeSample(i)} disabled={sampleCases.length === 1}><Icon as={X} />Remove</Button>
+              </fieldset>
+            ))}
           </div>
-          <CodeEditor
-            language={activeLang}
-            value={starterCode[activeLang]}
-            onChange={(v) => setLangCode(activeLang, v)}
-            height="240px"
-          />
-          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-            Optional {LANGUAGE_LABELS[activeLang]} starter code — leave blank if none.
-          </p>
-        </div>
+        </Section>
 
-        <div className="mb-4">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              Test cases
-            </span>
-            <button type="button" className="btn-ghost btn-sm" onClick={addCase}>
-              + Add test case
-            </button>
-          </div>
+        <Section title="Starter code and test cases">
           <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm font-medium">Starter code (optional, per language)</span>
+              {!isEdit && <Button size="sm" onClick={insertTemplate}>Insert {LANGUAGE_LABELS[activeLang]} template</Button>}
+            </div>
+            <Tabs value={activeLang} onValueChange={setActiveLang}>
+              <TabsList>
+                {LANGUAGES.map((lang) => (
+                  <TabsTrigger key={lang} value={lang}>{LANGUAGE_LABELS[lang]}{starterCode[lang]?.trim() ? ' (set)' : ''}</TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+            <CodeEditor language={activeLang} value={starterCode[activeLang]} onChange={(v) => setLangCode(activeLang, v)} height="240px" />
+            <p className="text-sm text-fg-muted">Leave blank if there is no {LANGUAGE_LABELS[activeLang]} starter code.</p>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-medium">Test cases</h3>
+              <Button size="sm" onClick={addCase}><Icon as={Plus} />Add test case</Button>
+            </div>
             {testCases.map((tc, i) => (
-              <div key={i} className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-start">
-                <textarea
-                  className="input flex-1 font-mono text-sm"
-                  aria-label={`Test case ${i + 1} input`}
-                  placeholder="input (stdin)"
-                  value={tc.input}
-                  onChange={(e) => updateCase(i, 'input', e.target.value)}
-                  rows={2}
-                />
-                <textarea
-                  className="input flex-1 font-mono text-sm"
-                  aria-label={`Test case ${i + 1} expected output`}
-                  placeholder="expected output"
-                  value={tc.expectedOutput}
-                  onChange={(e) => updateCase(i, 'expectedOutput', e.target.value)}
-                  rows={2}
-                />
-                <button
-                  type="button"
-                  className="btn-ghost btn-sm text-red-600 dark:text-red-400"
-                  aria-label={`Remove test case ${i + 1}`}
-                  onClick={() => removeCase(i)}
-                  disabled={testCases.length === 1}
-                  title="Remove"
-                >
-                  ✕
-                </button>
+              <div key={i} className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                <Textarea className="min-h-16 font-mono text-sm sm:flex-1" aria-label={`Test case ${i + 1} input`} placeholder="Input (stdin)" value={tc.input} onChange={(e) => updateCase(i, 'input', e.target.value)} rows={2} />
+                <Textarea className="min-h-16 font-mono text-sm sm:flex-1" aria-label={`Test case ${i + 1} expected output`} placeholder="Expected output" value={tc.expectedOutput} onChange={(e) => updateCase(i, 'expectedOutput', e.target.value)} rows={2} />
+                <Button variant="ghost" iconOnly aria-label={`Remove test case ${i + 1}`} onClick={() => removeCase(i)} disabled={testCases.length === 1}><Icon as={X} /></Button>
               </div>
             ))}
           </div>
-        </div>
+        </Section>
 
+        <div className="flex items-center gap-2 border-t border-border pt-6">
+          <Button type="submit" variant="primary" loading={busy}>{isEdit ? 'Save changes' : 'Create problem'}</Button>
+          <Button to="/problems">Cancel</Button>
+        </div>
         {error && <ErrorState message={error} />}
-        <button className="btn" disabled={busy}>
-          {busy ? 'Saving…' : isEdit ? 'Save changes' : 'Create problem'}
-        </button>
       </form>
-      </div>
     </div>
   );
 }

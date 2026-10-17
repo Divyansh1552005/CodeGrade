@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import Markdown from './Markdown.jsx';
-
-const tabBase = 'min-h-10 rounded-lg px-3 py-2 text-xs font-semibold transition';
-const tabActive = `${tabBase} bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300`;
-const tabIdle = `${tabBase} text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800`;
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/index.js';
+import { cn } from '../lib/cn.js';
 
 /**
- * A textarea with a Write/Preview toggle. "Write" is a plain textarea for
+ * A textarea with Write and Preview tabs. "Write" is a plain textarea for
  * authoring markdown; "Preview" renders it via the safe Markdown component.
  *
  * When `autoGrow` is set, the textarea grows to fit its content (no inner
@@ -32,41 +30,27 @@ export default function MarkdownEditor({
     el.style.height = `${el.scrollHeight}px`;
   }, [value, tab, autoGrow]);
 
-  const writeClass = autoGrow
-    ? `input w-full ${minH} resize-none overflow-hidden font-mono text-sm`
-    : `input w-full ${minH} font-mono text-sm`;
-
   return (
-    <div>
-      <div className="mb-2 flex gap-1">
-        <button type="button" aria-pressed={tab === 'write'} className={tab === 'write' ? tabActive : tabIdle} onClick={() => setTab('write')}>
-          Write
-        </button>
-        <button type="button" aria-pressed={tab === 'preview'} className={tab === 'preview' ? tabActive : tabIdle} onClick={() => setTab('preview')}>
-          Preview
-        </button>
-      </div>
-
-      {tab === 'write' ? (
+    <Tabs value={tab} onValueChange={setTab} className="overflow-hidden rounded-sm border border-border-strong bg-surface focus-within:border-accent">
+      <TabsList>
+        <TabsTrigger value="write">Write</TabsTrigger>
+        <TabsTrigger value="preview">Preview</TabsTrigger>
+      </TabsList>
+      <TabsContent value="write">
         <textarea
           ref={ref}
           aria-label={label}
-          className={writeClass}
+          className={cn('block w-full border-0 bg-transparent p-3 font-mono text-sm leading-6 text-fg outline-none placeholder:text-fg-subtle', minH, autoGrow ? 'resize-none overflow-hidden' : 'resize-y')}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           rows={autoGrow ? 1 : rows}
           placeholder={placeholder}
           spellCheck={false}
         />
-      ) : (
-        <div className={`input ${minH} bg-white dark:bg-slate-800 ${autoGrow ? '' : 'overflow-auto'}`}>
-          {value?.trim() ? (
-            <Markdown>{value}</Markdown>
-          ) : (
-            <p className="text-sm text-slate-400 dark:text-slate-500">Nothing to preview.</p>
-          )}
-        </div>
-      )}
-    </div>
+      </TabsContent>
+      <TabsContent value="preview" className={cn('p-3', minH, !autoGrow && 'overflow-auto')}>
+        {value?.trim() ? <Markdown>{value}</Markdown> : <p className="text-base text-fg-muted">Nothing to preview.</p>}
+      </TabsContent>
+    </Tabs>
   );
 }

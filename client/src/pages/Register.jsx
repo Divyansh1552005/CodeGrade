@@ -1,10 +1,9 @@
 import toast from 'react-hot-toast';
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { useAuth } from '../auth/AuthContext.jsx';
 import AuthCard from '../components/AuthCard.jsx';
-import { formContainer, formItem, ErrorBanner, Spinner } from '../components/FormMotion.jsx';
+import { Button, ErrorState, Field, Input, Select } from '../components/ui/index.js';
 
 export default function Register() {
   const { register } = useAuth();
@@ -24,7 +23,7 @@ export default function Register() {
       toast.success('Account created.');
       navigate('/dashboard');
     } catch (err) {
-      const message = err.response?.data?.error || 'Registration failed';
+      const message = err.response?.data?.error || 'Registration failed. Check your connection and try again.';
       setError(message);
       toast.error(message);
     } finally {
@@ -33,70 +32,26 @@ export default function Register() {
   }
 
   return (
-    <AuthCard title="Create account" subtitle="Join to start solving or teaching">
-      <motion.form variants={formContainer} initial="hidden" animate="show" onSubmit={onSubmit}>
-        <motion.label variants={formItem} className="field">
-          Name
-          <input className="input" autoComplete="name" placeholder="Your full name" value={form.name} onChange={set('name')} required />
-        </motion.label>
-        <motion.label variants={formItem} className="field">
-          Email
-          <input
-            className="input"
-            value={form.email}
-            onChange={set('email')}
-            type="email"
-            autoComplete="email"
-            placeholder="you@example.com"
-            required
-          />
-        </motion.label>
-        <motion.label variants={formItem} className="field">
-          Password
-          <input
-            className="input"
-            value={form.password}
-            onChange={set('password')}
-            type="password"
-            autoComplete="new-password"
-            minLength={6}
-            required
-          />
-        </motion.label>
-        <motion.label variants={formItem} className="field">
-          Role
-          <select className="input" value={form.role} onChange={set('role')}>
+    <AuthCard title="Create account" footer={<>Have an account? <Link className="rounded-sm font-medium text-accent-text hover:underline" to="/login">Log in</Link></>}>
+      <form className="space-y-4" onSubmit={onSubmit}>
+        <Field label="Name">
+          <Input autoComplete="name" value={form.name} onChange={set('name')} required />
+        </Field>
+        <Field label="Email">
+          <Input value={form.email} onChange={set('email')} type="email" autoComplete="email" placeholder="you@example.com" required />
+        </Field>
+        <Field label="Password" hint="At least 6 characters.">
+          <Input value={form.password} onChange={set('password')} type="password" autoComplete="new-password" minLength={6} required />
+        </Field>
+        <Field label="Role">
+          <Select value={form.role} onChange={set('role')}>
             <option value="student">Student</option>
             <option value="teacher">Teacher</option>
-          </select>
-        </motion.label>
-
-        <ErrorBanner>{error}</ErrorBanner>
-
-        <motion.div variants={formItem}>
-          <motion.button
-            whileTap={{ scale: 0.98 }}
-            className="btn flex w-full items-center justify-center gap-2"
-            disabled={busy}
-          >
-            {busy && <Spinner />}
-            {busy ? 'Creating…' : 'Register'}
-          </motion.button>
-        </motion.div>
-      </motion.form>
-
-      <motion.p
-        variants={formItem}
-        initial="hidden"
-        animate="show"
-        transition={{ delay: 0.4 }}
-        className="mt-4 text-center text-sm text-slate-500 dark:text-slate-400"
-      >
-        Have an account?{' '}
-        <Link className="font-medium text-slate-900 dark:text-slate-100" to="/login">
-          Log in
-        </Link>
-      </motion.p>
+          </Select>
+        </Field>
+        <Button type="submit" variant="primary" size="lg" className="w-full" loading={busy}>Create account</Button>
+        {error && <ErrorState message={error} />}
+      </form>
     </AuthCard>
   );
 }

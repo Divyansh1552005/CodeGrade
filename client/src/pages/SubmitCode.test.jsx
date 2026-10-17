@@ -31,11 +31,13 @@ async function showAndSubmit() {
   fireEvent.change(screen.getByLabelText('Code editor'), { target: { value: 'print(input())' } });
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Submit solution' })); });
 }
+// Radix tabs activate on mouse down.
+const openTab = (name) => fireEvent.mouseDown(screen.getByRole('tab', { name }));
 const detailCalls = () => api.get.mock.calls.filter(([url]) => url === '/submissions/s1').length;
 
 it('renders queued status, exposes test results before feedback, then stops polling on completion', async () => {
   await showAndSubmit();
-  expect(screen.getByRole('button', { name: 'Grading…' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Submit solution' })).toBeDisabled();
   expect(screen.getByText('Submission queued. Waiting for grading…')).toBeInTheDocument();
   submission = { ...submission, status: 'graded', feedbackStatus: 'pending', passCount: 1, totalCount: 1,
     testResults: [{ input: '7', expectedOutput: '7', actualOutput: '7', passed: true }] };
@@ -64,8 +66,8 @@ it('shows persisted grading errors, re-enables submitting and stops polling', as
 it('resumes pending history polling on a revisit', async () => {
   accepted = true;
   await act(async () => { render(<MemoryRouter initialEntries={['/submit/p1']}><Routes><Route path="/submit/:problemId" element={<SubmitCode />} /></Routes></MemoryRouter>); });
-  fireEvent.click(screen.getByRole('button', { name: 'Submissions (1)' }));
-  expect(screen.getByText('queued')).toBeInTheDocument();
+  openTab('Submissions');
+  expect(screen.getByText('Queued')).toBeInTheDocument();
   submission = { ...submission, status: 'graded', feedbackStatus: 'completed', passCount: 1, totalCount: 1 };
   await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
   expect(screen.getByText('1/1')).toBeInTheDocument();
@@ -85,7 +87,8 @@ it('loads starter code from a direct problem link and preserves independent lang
 });
 it('uses the public sample console without submitting or executing code', async () => {
   await act(async () => { render(<MemoryRouter initialEntries={['/submit/p1']}><Routes><Route path="/submit/:problemId" element={<SubmitCode />} /></Routes></MemoryRouter>); });
-  fireEvent.click(screen.getByRole('button', { name: 'Testcases' }));
+  openTab('Results');
+  openTab('Testcases');
   expect(screen.getByText('Expected output')).toBeInTheDocument();
   expect(screen.getAllByText('7')).toHaveLength(2);
   expect(api.post).not.toHaveBeenCalled();
