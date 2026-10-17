@@ -15,11 +15,23 @@ treated as the primary concern, on par with feature completeness.
 
 ---
 
+## Screenshots
+
+Captured against sample data in a development build.
+
+| | |
+|---|---|
+| ![Home page](docs/screenshots/home.png) | ![Dashboard](docs/screenshots/dashboard.png) |
+| ![Problem list](docs/screenshots/problems.png) | ![Coding workspace, dark theme](docs/screenshots/workspace.png) |
+| ![Doubt thread](docs/screenshots/doubt.png) | ![Leaderboard](docs/screenshots/leaderboard.png) |
+
+---
+
 ## Tech stack
 
 | Layer | Choice |
 |---|---|
-| Frontend | React 18 (Vite), React Router v7 (data router), Tailwind CSS v4, Framer Motion, react-hot-toast, Axios |
+| Frontend | React 18 (Vite), React Router v7 (data router), Tailwind CSS v4, Radix UI primitives, lucide-react, react-hot-toast, Axios |
 | Backend | Node.js + Express (ES modules) |
 | Database | MongoDB + Mongoose |
 | Validation | Zod (request bodies, backend) |
@@ -53,13 +65,19 @@ treated as the primary concern, on par with feature completeness.
     /api         axios client (+ refresh interceptor), cached-query hook
     /auth        AuthContext
     /theme       ThemeContext (light/dark, class-based, persisted)
-    /layouts     RootLayout (navbar + animated route transitions + toaster)
-    /components  NavBar, ProtectedRoute, Modal/ConfirmDialog, LoadingSpinner,
-                 TopicFilter/TopicSelect, ProblemStatement, CodeEditor,
-                 Markdown/MarkdownEditor, AuthCard/FormMotion
-    /pages       LandingPage, Login, Register, Dashboard, ProblemList,
-                 CreateProblem, SubmitCode, DoubtBoard, AskDoubt, DoubtDetail,
-                 TeacherReview, Profile
+    /layouts     RootLayout (app shell, page outlet, toaster)
+    /components  AppShell (sidebar / mobile drawer), ProtectedRoute, ConfirmDialog,
+                 TopicSelect, ProblemStatement, CodeEditor, Markdown/MarkdownEditor,
+                 AuthCard, ColdStartNotice
+      /ui        shared set: Button, Field/Input/Select, Badge, Panel, Table, Modal,
+                 Tabs, DropdownMenu, Tooltip, Toast, Skeleton, EmptyState, ErrorState,
+                 Avatar, Progress, CodeBlock, PageHeader, resizable panes
+      /dashboard dashboard sections (next up, progress, submissions, badges, ...)
+      /workspace submission result and submission history
+    /lib         cn(), media-query hook, status helpers
+    /pages       LandingPage, Login, Register, Dashboard, ProblemList, CreateProblem,
+                 SubmitCode, Leaderboard, DoubtBoard, AskDoubt, DoubtDetail,
+                 TeacherReview, BulkJobs, Profile
     /data        topics.js, starterTemplates.js
     router.jsx   data-router route table (createBrowserRouter)
 ```
@@ -434,9 +452,9 @@ change its maxmemory-policy to `noeviction` before production, as required by
 `constants/topics.js` (server) / `data/topics.js` (client, kept in sync
 manually) define a fixed 21-item enum (Arrays, Trees, Graphs, SQL, Time
 Complexity, General Doubt, …). A problem can carry several; teachers pick
-them from a searchable multi-select (`TopicSelect.jsx`) when authoring a
-problem, and students filter the problem list with a chip bar
-(`TopicFilter.jsx`) that only shows topics with at least one match and
+them from a multi-select menu (`TopicSelect.jsx`) when authoring a
+problem, and students filter the problem list with a topics menu
+(in `ProblemList.jsx`) that only lists topics with at least one match and
 displays live counts, sourced from `GET /problems/stats/counts`. Every
 problem also gets a **stable number** ("Problem 7"), ranked by creation
 order across all non-archived problems — unaffected by whatever topic
@@ -500,12 +518,11 @@ A hybrid model chosen for security:
   legacy `<BrowserRouter>`/`<Routes>` tree — the route table lives entirely
   in `router.jsx`, separate from the shell layout and the per-route auth
   gate.
-- **Public landing page at `/`**, separate from the authenticated dashboard
-  at `/dashboard`; the landing page redirects an already-authenticated
+- **Public home page at `/`**, separate from the authenticated dashboard
+  at `/dashboard`; the home page redirects an already-authenticated
   visitor straight to the dashboard.
 - **Route-level code splitting** via `React.lazy` + `Suspense` (each page is
-  its own chunk; vendor libs split into `react-vendor`), with an
-  `AnimatePresence`-driven fade/slide between routes.
+  its own chunk; vendor libs split into `react-vendor`).
 - **Class-based dark mode** (`ThemeContext`), not Tailwind's default
   media-query variant, so an explicit user choice always wins over OS
   preference; applied via a `dark` class on `<html>`, set pre-paint by an
@@ -680,7 +697,7 @@ Things I'd do next, roughly in the order I'd prioritize them:
   supports global/topic scope. UI: dashboard widgets and difficulty selection/display.
 - Tests: `gamification.test.js` covers replay, concurrency, failure recovery,
   thresholds, streak boundaries, catalog rules, migration, cache and sampling;
-  `ActivityPanel.test.jsx` covers widgets, scope switching and role presentation.
+  `Dashboard.test.jsx`, `Leaderboard.test.jsx` and `Profile.test.jsx` cover progress, scope switching and role presentation.
 
 The event history and stats projections currently grow without automatic archival;
 award projection scans a user's events. Larger installations may need incremental
@@ -718,50 +735,47 @@ build and all nine live Redis/Judge0/AI smoke checks passed. Final backend and
 frontend audits both reported zero vulnerabilities; dependency-tree checks and
 `git diff --check` passed. No application flow changes were needed.
 
-## UI / UX refresh
+## UI revamp
 
-Every screen now uses one Tailwind v4 workspace design: indigo actions, a quiet
-slate canvas, consistent typography, cards, fields, badges and feedback states.
-Signed-in desktop users have a role-aware sidebar; mobile users have a collapsible
-navigation menu. Public pages use a separate top bar and split landing/auth layouts.
-No new dependencies, fonts fetched from external services, or API changes were
-introduced for this redesign.
+### Design tokens
+All colors, type sizes, radii and shadows are tokens in `client/src/styles.css`:
+raw values are CSS variables on `:root` and `.dark` (neutral scale, one indigo
+accent, success/danger/warning/info status colors with background, border and text
+shades, two shadows), and `@theme` maps them to Tailwind utilities such as
+`bg-surface`, `text-fg-muted` and `border-border`. Light and dark run off the same
+variable names. Tailwind's default palette, radii, text sizes and shadows are reset,
+so only tokens exist: no hex values or arbitrary values appear in components. Type is
+Inter and JetBrains Mono (self-hosted via Fontsource) on a 12/13/14/16/20/24/32 scale;
+there are two radii (controls and panels) and two shadows (dropdowns, overlays).
+There are no gradients, glows, glass effects, emoji icons or decorative motion.
 
-- Landing, login and registration: clearer hierarchy, useful product context,
-  autocomplete fields and responsive account forms.
-- Dashboard/profile: role-specific shortcuts, readable metrics, improved progress,
-  streak/badge/leaderboard panels and accurate queued/error submission labels.
-- Problem library and doubt board: consistent page headers, wrapping rows/actions,
-  topic controls, helpful empty states and visible fetch errors.
-- Coding: wide-screen statement/editor split, mobile stacking, readable results
-  tables with contained horizontal scroll, labelled editor and submission history.
-- Problem authoring: three clearly numbered sections, stacked sample/test inputs
-  on phones, labelled input/output fields and descriptive remove controls.
-- Questions/review/reports: contextual instructions, consistent forms, clear
-  approval and job status, readable history, retry controls and friendly empty states.
-- Missing/error routes: useful recovery screens instead of silent redirects or
-  raw router error output.
+### Shared components
+`client/src/components/ui/` holds the shared set: Button (primary, secondary, ghost,
+danger; loading keeps its width), Field/Input/Select/Textarea/Checkbox, Badge
+(including difficulty and submission status, always text plus color), Panel, Table
+(sticky header, tabular numbers), Modal, Tabs, DropdownMenu, Tooltip, Toaster
+(react-hot-toast styled with the tokens), Skeleton, EmptyState, ErrorState, Avatar,
+Progress, CodeBlock, PageHeader and resizable panes. Dialogs, tabs, menus and tooltips
+are Radix UI primitives. Icons are lucide-react at one size and one stroke width.
+`cn()` (clsx + tailwind-merge) in `lib/cn.js` merges class names.
 
-Accessibility improvements include visible keyboard focus, a skip link, route-focus
-and scroll restoration, reduced-motion preferences, live loading announcements,
-labelled markdown/code inputs, selected-state controls and dialog focus trapping/
-restoration. A running destructive action cannot be dismissed with Escape/backdrop.
-Dark mode applies across the entire system. Existing polling, grading, approval,
-gamification and notification behavior remains intact.
+### App shell and pages
+`components/AppShell.jsx` renders a slim sidebar from the `lg` breakpoint up (role-aware
+navigation, level and XP bar for students, account menu, theme toggle) and a top bar with
+a drawer below it. Logged-out visitors get a minimal top bar. The problem workspace
+(`/submit/:problemId`) is two resizable panes whose sizes are remembered in
+`localStorage`, with Description, Submissions, Testcases and Results tabs; below `lg` the
+panes become tabs. The Monaco theme is generated from the same CSS variables and follows
+light/dark. The submission result shows the verdict first, then per-test-case results
+(passed collapsed, the first failure open), then the AI feedback. Problem list, leaderboard
+and the history tables are real tables. `/leaderboard` is its own page. The home page (`/`)
+explains the platform for logged-out visitors; the auth pages are a single centered form
+with room for provider buttons and a bot-check widget without layout shift.
 
-Validation: 54 frontend tests cover all page renders in light/dark modes, student/
-teacher dashboards, navigation, dialogs, markdown preview and existing form/polling
-flows. Production build and `git diff --check` passed. Browser surfaces were not
-available in this session, so pixel-level desktop/mobile visual QA remains to be
-performed in a real browser; component tests do not verify rendered layout geometry.
+### Tests
+Frontend: 86 Vitest + React Testing Library tests, including page renders in both themes,
+navigation and drawer, dialogs, the workspace (polling, drafts, reset), the problem list
+filters, dashboard, leaderboard, profile, doubts, teacher tools, auth and the home page.
+Layout geometry is checked in a browser, not by the unit tests.
 
-
-### Coding workspace and action feedback
-
-The submission page now uses a LeetCode-inspired split workspace: independently scrolling problem description / submission history on the left, Monaco editor and a public-example / results console on the right. It stacks on smaller screens and supports light and dark themes. The real Submit solution action queues grading; Ctrl/Cmd + Enter runs that same action. Public examples are reference data, not a separate execution endpoint.
-
-Language-specific drafts are preserved in memory per problem while the workspace remains mounted; navigating away or refreshing clears them. Direct problem links initialize starter code correctly. Reset requires confirmation; Copy reports clipboard success or failure. Submission history continues polling queued work on revisits.
-
-Global action toasts are themed and dismissible. Login, registration, queued submissions, clipboard/reset actions, and bulk job starts/downloads provide transient feedback alongside existing create/delete/review toasts. Grading completion remains in the results pane without a completion notification. Background polling errors stay inline to avoid repeated toasts.
-
-Validation: 57 frontend tests cover both themes, page rendering, polling, starter-code initialization, language-draft preservation, public examples, reset confirmation, and absence of grading-completion toasts. Production build passes. Visual review is left to the user as requested.
+Backend contracts, API calls and business logic were not changed by the revamp.
