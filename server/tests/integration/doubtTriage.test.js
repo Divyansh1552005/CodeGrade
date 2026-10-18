@@ -84,15 +84,16 @@ describe('triage decisions', () => {
     expect(await work(`draft-${id}`)).toBeNull();
     const notes = await Notification.find({ userId: student.id });
     expect(notes).toHaveLength(1);
-    expect(notes[0]).toMatchObject({ type: 'doubt_removed', title: 'Your doubt was removed', body: 'This is about cooking, not programming.', href: `/doubts/${id}/removed` });
+    expect(notes[0]).toMatchObject({ type: 'doubt_removed', title: 'Your doubt was marked off topic', body: 'This is about cooking, not programming.', href: `/doubts/${id}/removed` });
     expect((await request(app).get('/doubts').set(as(student))).body.doubts).toHaveLength(0);
     expect((await request(app).get(`/doubts/${id}`).set(as(teacher))).status).toBe(404);
   });
-  it('removes confident spam', async () => {
+  it('removes confident spam, described as removed rather than off topic', async () => {
     const id = (await post(student)).body.doubt._id;
     verdict('spam_or_abusive', 0.9);
     await run(`triage-${id}`);
     expect((await Doubt.findById(id).setOptions({ includeRemoved: true })).status).toBe('auto_rejected');
+    expect((await Notification.findOne({ userId: student.id })).title).toBe('Your doubt was removed');
   });
   it('sends a borderline removal verdict to the teachers, flagged low confidence, and queues the draft', async () => {
     const id = (await post(student)).body.doubt._id;

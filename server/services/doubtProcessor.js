@@ -1,10 +1,12 @@
 import Doubt from '../models/Doubt.js';
 import Answer from '../models/Answer.js';
 import { generateDraftAnswer, NotRelevantError } from './doubtDraftChain.js';
+import { removeAsOffTopic } from './doubtTriage.js';
 
 export async function processDoubtDraft(job) {
   const doubt = await Doubt.findById(job.data.doubtId);
-  if (!doubt || ['success', 'irrelevant'].includes(doubt.aiDraftStatus)) return;
+  // An appealed doubt goes straight to a teacher: no AI draft is ever made for it.
+  if (!doubt || doubt.status === 'appealed' || ['success', 'irrelevant', 'skipped'].includes(doubt.aiDraftStatus)) return;
   // Teacher answers and previously committed AI drafts survive retries.
   const existing = await Answer.findOne({ doubtId: doubt.id });
   if (existing) {
@@ -26,7 +28,9 @@ export async function processDoubtDraft(job) {
     await Doubt.updateOne({ _id: doubt.id }, { $set: { aiDraftStatus: 'success' }, $unset: { aiDraftError: '' } });
   } catch (err) {
     if (err instanceof NotRelevantError) {
-      await Doubt.updateOne({ _id: doubt.id }, { $set: { aiDraftStatus: 'irrelevant' } });
+      // Off topic: hidden from the board and the teachers, the student is told and may appeal.
+      const removed = await removeAsOffTopic(doubt);
+      if (!removed) await Doubt.updateOne({ _id: doubt.id }, { $set: { aiDraftStatus: 'irrelevant' } });
       return;
     }
     // The runner marks failed only after the retry budget is exhausted.

@@ -89,52 +89,56 @@ describe('GET /doubts/:id/removed', () => {
 });
 
 describe('POST /doubts/:id/appeal', () => {
-  it('moves the doubt to appealed, queues one draft, and makes it visible to teachers with an appealed marker', async () => {
+  it('moves the doubt to appealed, makes it visible, and goes straight to the teachers with no AI draft', async () => {
     const d = await removedDoubt();
     const res = await request(app).post(`/doubts/${d.id}/appeal`).set(as(student));
     expect(res.status).toBe(200);
     expect(res.body.doubt).toMatchObject({ status: 'appealed', appealed: true, canAppeal: false });
     const stored = await Doubt.findById(d.id);
-    expect(stored.status).toBe('appealed');
+    expect(stored).toMatchObject({ status: 'appealed', aiDraftStatus: 'skipped' });
     expect(stored.appeal.requestedAt).toBeInstanceOf(Date);
-    expect(await WorkItem.countDocuments({ key: `draft-${d.id}` })).toBe(1);
+    expect(await WorkItem.countDocuments({ type: 'doubt-draft' })).toBe(0);
+    expect(generateDraftAnswer).not.toHaveBeenCalled();
     expect((await request(app).get(`/doubts/${d.id}`).set(as(other))).status).toBe(200);
     expect((await request(app).get(`/doubts/${d.id}`).set(as(teacher))).body.doubt.appealed).toBe(true);
   });
-  it('enters the teacher queue exactly once and carries the marker', async () => {
+  it('appears in the teachers\' manual-answer queue exactly once, marked appealed, and never in the AI draft queue', async () => {
     const d = await removedDoubt();
     await request(app).post(`/doubts/${d.id}/appeal`).set(as(student));
-    await run(`draft-${d.id}`);
     await recoverDomainWork();
     await recoverDomainWork();
-    expect(await Answer.countDocuments({ doubtId: d.id })).toBe(1);
-    expect(await WorkItem.countDocuments({ key: `draft-${d.id}` })).toBe(1);
-    const queue = (await request(app).get('/answers?state=pending').set(as(teacher))).body.answers;
-    expect(queue).toHaveLength(1);
-    expect(queue[0].doubtId).toMatchObject({ _id: d.id, appealed: true });
+    const manual = (await request(app).get('/doubts/failed').set(as(teacher))).body.doubts;
+    expect(manual.map((x) => x._id)).toEqual([d.id]);
+    expect(manual[0].appealed).toBe(true);
+    expect(await Answer.countDocuments({ doubtId: d.id })).toBe(0);
+    expect((await request(app).get('/answers?state=pending').set(as(teacher))).body.answers).toHaveLength(0);
+    expect(await WorkItem.countDocuments({ type: 'doubt-draft' })).toBe(0);
+    expect(generateDraftAnswer).not.toHaveBeenCalled();
   });
-  it('lands in the manual queue with the marker when the AI cannot draft an answer', async () => {
+  it('lets a teacher answer an appealed doubt by hand, and the student sees that answer', async () => {
     const d = await removedDoubt();
     await request(app).post(`/doubts/${d.id}/appeal`).set(as(student));
-    generateDraftAnswer.mockRejectedValue(new NotRelevantError());
-    await run(`draft-${d.id}`);
-    const failed = (await request(app).get('/doubts/failed').set(as(teacher))).body.doubts;
-    expect(failed.map((x) => x._id)).toEqual([d.id]);
-    expect(failed[0].appealed).toBe(true);
+    const answered = await request(app).post('/answers').set(as(teacher)).send({ doubtId: d.id, content: 'Here is a human answer.' });
+    expect(answered.status).toBe(201);
+    const seen = await request(app).get(`/doubts/${d.id}/answer`).set(as(student));
+    expect(seen.body.answer).toMatchObject({ content: 'Here is a human answer.', source: 'teacher' });
+    expect((await request(app).get('/doubts/failed').set(as(teacher))).body.doubts).toHaveLength(0);
+    expect(generateDraftAnswer).not.toHaveBeenCalled();
   });
   it('allows only one appeal per doubt', async () => {
     const d = await removedDoubt();
     expect((await request(app).post(`/doubts/${d.id}/appeal`).set(as(student))).status).toBe(200);
     const again = await request(app).post(`/doubts/${d.id}/appeal`).set(as(student));
     expect(again.status).toBe(409);
-    expect(await WorkItem.countDocuments({ key: `draft-${d.id}` })).toBe(1);
+    expect(await WorkItem.countDocuments({ type: 'doubt-draft' })).toBe(0);
   });
   it('lets exactly one of several parallel appeals through', async () => {
     const d = await removedDoubt();
     const results = await Promise.all(Array.from({ length: 6 }, () => request(app).post(`/doubts/${d.id}/appeal`).set(as(student))));
     expect(results.filter((r) => r.status === 200)).toHaveLength(1);
     expect(results.filter((r) => r.status === 409)).toHaveLength(5);
-    expect(await WorkItem.countDocuments({ key: `draft-${d.id}` })).toBe(1);
+    expect(await WorkItem.countDocuments({ type: 'doubt-draft' })).toBe(0);
+    expect((await request(app).get('/doubts/failed').set(as(teacher))).body.doubts).toHaveLength(1);
   });
   it('is owner only: 404 for another student, 403 for a teacher, 401 without login, and nothing changes', async () => {
     const d = await removedDoubt();
@@ -156,13 +160,15 @@ describe('POST /doubts/:id/appeal', () => {
     expect(res.body.doubt).toMatchObject({ appealed: true, canAppeal: false });
     expect((await request(app).get(`/doubts/${d.id}`).set(as(student))).status).toBe(200);
   });
-  it('recovers the draft job if the process dies right after the status change', async () => {
+  it('never creates an AI draft for an appealed doubt, even through recovery or a stray draft job', async () => {
     const d = await removedDoubt();
-    await Doubt.updateOne({ _id: d.id }, { $set: { status: 'appealed', 'appeal.requestedAt': new Date() } });
-    expect(await WorkItem.countDocuments({ key: `draft-${d.id}` })).toBe(0);
+    await request(app).post(`/doubts/${d.id}/appeal`).set(as(student));
     await recoverDomainWork();
-    await recoverDomainWork();
-    expect(await WorkItem.countDocuments({ key: `draft-${d.id}` })).toBe(1);
+    expect(await WorkItem.countDocuments({ type: 'doubt-draft' })).toBe(0);
+    await WorkItem.create({ key: `draft-${d.id}`, type: 'doubt-draft', ownerId: student.id, payload: { doubtId: d.id } });
+    await run(`draft-${d.id}`);
+    expect(generateDraftAnswer).not.toHaveBeenCalled();
+    expect(await Answer.countDocuments({ doubtId: d.id })).toBe(0);
   });
   it('does not create notifications for the appeal', async () => {
     const d = await removedDoubt();

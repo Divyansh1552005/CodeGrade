@@ -93,3 +93,15 @@ it('shows no marker on an ordinary doubt', () => {
   expect(screen.queryByText('Appealed')).not.toBeInTheDocument();
   expect(screen.queryByText('Low confidence')).not.toBeInTheDocument();
 });
+
+it('explains that an appealed doubt has no AI draft and is waiting for a human answer', () => {
+  data['/answers?state=pending'] = { answers: [] };
+  data['/doubts/failed'] = { doubts: [{ _id: 'd9', title: 'Heap help', body: 'y', aiDraftStatus: 'skipped', appealed: true, studentId: { name: 'Sam' } }] };
+  render(<MemoryRouter><TeacherReview /></MemoryRouter>);
+  const card = within(screen.getByRole('region', { name: 'Heap help' }));
+  expect(card.getByText('Appealed')).toBeInTheDocument();
+  expect(card.queryByText('Off topic')).not.toBeInTheDocument();
+  expect(card.queryByText('AI draft failed')).not.toBeInTheDocument();
+  expect(card.getByText(/No AI draft was made/)).toBeInTheDocument();
+  expect(card.getByRole('button', { name: 'Publish answer' })).toBeInTheDocument();
+});

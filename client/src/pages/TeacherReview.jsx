@@ -139,15 +139,17 @@ const FailedDoubtCard = memo(function FailedDoubtCard({ doubt, onAnswered }) {
       <PanelHeader title={doubt.title} action={<>
         {doubt.appealed && <Badge tone="warning">Appealed</Badge>}
         {doubt.triage?.lowConfidence && <Badge tone="info" title="The AI was not confident this doubt is relevant.">Low confidence</Badge>}
-        {irrelevant ? <Badge>Off topic</Badge> : <Badge tone="danger">AI draft failed</Badge>}
+        {!doubt.appealed && (irrelevant ? <Badge>Off topic</Badge> : <Badge tone="danger">AI draft failed</Badge>)}
       </>} />
       <PanelBody className="space-y-4">
         <p className="text-sm text-fg-muted">Asked by {doubt.studentId?.name || 'a student'}</p>
         <Question body={doubt.body} />
         <p className="text-base text-fg-muted">
-          {irrelevant
-            ? 'The AI judged this is not about programming, so it wrote no draft. Answer it manually if it is relevant.'
-            : 'The AI could not draft an answer. Your answer is published to the student immediately.'}
+          {doubt.appealed
+            ? 'The AI marked this doubt off topic and the student appealed. No AI draft was made. Read it and answer it yourself if it is relevant. Your answer is published to the student immediately.'
+            : irrelevant
+              ? 'The AI judged this is not about programming, so it wrote no draft. Answer it manually if it is relevant.'
+              : 'The AI could not draft an answer. Your answer is published to the student immediately.'}
         </p>
         <div className="flex flex-col gap-1.5">
           <span className="text-sm font-medium">Your answer</span>

@@ -40,7 +40,8 @@ const doubtSchema = new mongoose.Schema(
     // Tracks the outcome of the AI draft generation for this doubt.
     aiDraftStatus: {
       type: String,
-      enum: ['pending', 'success', 'failed', 'irrelevant'],
+      // 'skipped': an appealed doubt goes straight to a teacher, so no AI draft is made for it.
+      enum: ['pending', 'success', 'failed', 'irrelevant', 'skipped'],
       default: 'pending',
     },
   },
@@ -53,6 +54,8 @@ doubtSchema.index({ createdAt: -1, _id: -1 });
 doubtSchema.index({ studentId: 1, createdAt: -1, _id: -1 });
 // Lets recovery find doubts stuck in triage without scanning the collection.
 doubtSchema.index({ status: 1, createdAt: 1 });
+// Serves the teacher's manual-answer queue and the off-topic clean-up scan.
+doubtSchema.index({ aiDraftStatus: 1, createdAt: -1 });
 
 // Default scope: an auto-rejected doubt is invisible to every read, populate() included,
 // unless the query opts in with .setOptions({ includeRemoved: true }). Only the owner's

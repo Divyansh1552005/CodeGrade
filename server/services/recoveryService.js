@@ -5,7 +5,7 @@ import Answer from '../models/Answer.js';
 import Problem from '../models/Problem.js';
 import { ensureWork, recordSubmissionTasks, recordAnswerNotification } from './workService.js';
 import { failWork } from './workProcessor.js';
-import { failOpen, notifyRemoval } from './doubtTriage.js';
+import { failOpen, notifyRemoval, removeAsOffTopic } from './doubtTriage.js';
 import { aiLimits } from '../config/aiLimits.js';
 
 // Restore domain-to-outbox crash gaps. Existing work keys preserve failed and
@@ -33,6 +33,11 @@ export async function recoverDomainWork() {
   // A removal whose notification was lost in a crash.
   for await (const doubt of Doubt.find({ status: 'auto_rejected', removalNotifiedAt: { $exists: false } }).setOptions({ includeRemoved: true }).cursor()) {
     await notifyRemoval(doubt);
+  }
+  // Doubts the draft model marked off topic before off-topic doubts were removed: hide them and tell the
+  // student, unless a teacher has already answered. Appealed doubts are never touched.
+  for await (const doubt of Doubt.find({ aiDraftStatus: 'irrelevant', status: { $nin: ['auto_rejected', 'appealed'] } }).cursor()) {
+    await removeAsOffTopic(doubt);
   }
   for await (const doubt of Doubt.find({ aiDraftStatus: 'pending', status: { $ne: 'pending_triage' } }).cursor()) {
     await ensureWork({ key: `draft-${doubt.id}`, type: 'doubt-draft', ownerId: doubt.studentId, payload: { doubtId: doubt.id } });

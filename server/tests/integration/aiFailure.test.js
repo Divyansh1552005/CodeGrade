@@ -26,7 +26,7 @@ const waitForStatus = async (doubtId, status) => {
   const work = await WorkItem.findOne({ key: `draft-${doubtId}` });
   await processWork({ data: { workItemId: work.id }, attemptsMade: 2, opts: { attempts: 3 } }).catch(() => {});
   return waitFor(async () => {
-    const d = await Doubt.findById(doubtId);
+    const d = await Doubt.findById(doubtId).setOptions({ includeRemoved: true });
     return d && d.aiDraftStatus === status ? d : null;
   });
 };
@@ -85,7 +85,7 @@ describe('AI draft failure handling', () => {
     expect(answer.state).toBe('pending');
   });
 
-  it('marks aiDraftStatus "irrelevant" and creates NO Answer when the doubt is off-topic', async () => {
+  it('removes the doubt (aiDraftStatus "irrelevant") and creates NO Answer when the doubt is off-topic', async () => {
     generateDraftAnswer.mockRejectedValue(new NotRelevantError());
 
     const res = await request(app)
@@ -99,11 +99,13 @@ describe('AI draft failure handling', () => {
     const answers = await Answer.find({ doubtId: res.body.doubt._id });
     expect(answers).toHaveLength(0);
 
-    // Surfaced to the teacher queue alongside genuine AI failures.
+    // An off-topic doubt is removed: it is NOT in the teacher queue, and the student is told.
     const queue = await request(app)
       .get('/doubts/failed')
       .set('Authorization', `Bearer ${teacherToken}`);
-    expect(queue.body.doubts.map((d) => d._id)).toContain(res.body.doubt._id);
+    expect(queue.body.doubts.map((d) => d._id)).not.toContain(res.body.doubt._id);
+    const removed = await Doubt.findById(res.body.doubt._id).setOptions({ includeRemoved: true });
+    expect(removed.status).toBe('auto_rejected');
   });
 
   it('lists failed doubts for the teacher via GET /doubts/failed', async () => {

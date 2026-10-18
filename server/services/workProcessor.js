@@ -22,7 +22,7 @@ export async function failWork(work, error) {
     // Triage could not finish: the doubt goes to the teachers rather than waiting forever.
     await failOpen(work.payload.doubtId, 'triage_failed');
   } else if (work.type === 'doubt-draft') {
-    await Doubt.updateOne({ _id: work.payload.doubtId, aiDraftStatus: { $nin: ['success', 'irrelevant'] } },
+    await Doubt.updateOne({ _id: work.payload.doubtId, aiDraftStatus: { $nin: ['success', 'irrelevant', 'skipped'] } },
       { $set: { aiDraftStatus: 'failed', aiDraftError: message } });
   }
 }

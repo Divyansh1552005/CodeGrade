@@ -10,7 +10,7 @@ vi.mock('react-hot-toast', () => ({ default: { error: vi.fn(), success: vi.fn() 
 vi.mock('../components/Markdown.jsx', () => ({ default: ({ children }) => <div>{children}</div> }));
 
 let removed;
-const doubt = (over = {}) => ({ id: 'd1', title: 'Dinner?', body: 'What should I cook?', status: 'auto_rejected', reason: 'This is about cooking, not programming.', appealed: false, canAppeal: true, ...over });
+const doubt = (over = {}) => ({ id: 'd1', title: 'Dinner?', body: 'What should I cook?', status: 'auto_rejected', reason: 'This is about cooking, not programming.', offTopic: true, appealed: false, canAppeal: true, ...over });
 beforeEach(() => {
   invalidate();
   removed = doubt();
@@ -25,7 +25,8 @@ const apiError = (status, error) => Object.assign(new Error(error), { response: 
 
 it('shows the reason, the original doubt and one appeal action', async () => {
   show();
-  expect(await screen.findByRole('heading', { level: 1, name: 'Your doubt was removed' })).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { level: 1, name: 'Your doubt was marked off topic' })).toBeInTheDocument();
+  expect(screen.getByText('Why it was marked off topic')).toBeInTheDocument();
   expect(screen.getByText('This is about cooking, not programming.')).toBeInTheDocument();
   expect(screen.getByText('What should I cook?')).toBeInTheDocument();
   expect(screen.getAllByRole('button', { name: 'Request teacher review' })).toHaveLength(1);
@@ -35,7 +36,7 @@ it('sends the appeal once and then shows that it was requested', async () => {
   show();
   fireEvent.click(await screen.findByRole('button', { name: 'Request teacher review' }));
   await waitFor(() => expect(api.post).toHaveBeenCalledWith('/doubts/d1/appeal'));
-  expect(await screen.findByRole('status')).toHaveTextContent('You asked for a teacher to review this doubt');
+  expect(await screen.findByRole('status')).toHaveTextContent('a teacher will answer it directly');
   expect(screen.queryByRole('button', { name: 'Request teacher review' })).not.toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Open the doubt' })).toHaveAttribute('href', '/doubts/d1');
   expect(api.post).toHaveBeenCalledTimes(1);
@@ -65,4 +66,11 @@ it('shows other errors with a retry', async () => {
   show();
   fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
   await waitFor(() => expect(api.get.mock.calls.length).toBeGreaterThan(1));
+});
+
+it('uses "removed" wording for a doubt that was not about being off topic', async () => {
+  removed = doubt({ offTopic: false, reason: 'This looks like spam.' });
+  show();
+  expect(await screen.findByRole('heading', { level: 1, name: 'Your doubt was removed' })).toBeInTheDocument();
+  expect(screen.getByText('Why it was removed')).toBeInTheDocument();
 });

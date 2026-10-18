@@ -79,7 +79,7 @@ export async function findVisibleDoubt(id, viewer) {
 
 /** Teacher view: doubts with no usable AI draft that still have no answer. */
 export async function listManualAnswerQueue(viewer) {
-  const failed = await Doubt.find({ $and: [{ aiDraftStatus: { $in: ['failed', 'irrelevant'] } }, visibleFor(viewer)] })
+  const failed = await Doubt.find({ $and: [{ aiDraftStatus: { $in: ['failed', 'irrelevant', 'skipped'] } }, visibleFor(viewer)] })
     .sort({ createdAt: -1 })
     .populate('studentId', 'name');
   const answeredIds = await Answer.find({ doubtId: { $in: failed.map((d) => d._id) } }).distinct('doubtId');
@@ -122,6 +122,7 @@ export function presentRemoved(doubt) {
     createdAt: doubt.createdAt,
     status: doubt.status,
     reason: doubt.triage?.reason || 'It did not look like a question about programming.',
+    offTopic: doubt.triage?.verdict !== 'spam_or_abusive',
     appealed: doubt.status === 'appealed',
     canAppeal: doubt.status === 'auto_rejected' && !doubt.appeal?.requestedAt,
   };
@@ -135,7 +136,8 @@ export function presentRemoved(doubt) {
 export async function requestAppeal(id, ownerId) {
   const doubt = await Doubt.findOneAndUpdate(
     { _id: id, studentId: ownerId, status: REJECTED, 'appeal.requestedAt': { $exists: false } },
-    { $set: { status: 'appealed', 'appeal.requestedAt': new Date() } },
+    // No AI draft for an appeal: skipping it sends the doubt straight to the teachers' manual queue.
+    { $set: { status: 'appealed', 'appeal.requestedAt': new Date(), aiDraftStatus: 'skipped' } },
     { new: true }
   );
   if (doubt) return { doubt };

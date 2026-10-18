@@ -91,6 +91,7 @@ describe('doubts in the checking, appealed and removed states', () => {
     expect(doubtStatus({ status: 'appealed' }, 'student').label).toBe('Awaiting review');
     expect(doubtStatus({ status: 'appealed', hasApprovedAnswer: true }, 'teacher').label).toBe('Answered');
     expect(doubtStatus({ status: 'pending_review', aiDraftStatus: 'failed' }).label).toBe('Awaiting teacher');
+    expect(doubtStatus({ status: 'pending_review', aiDraftStatus: 'skipped' }).label).toBe('Awaiting teacher');
   });
   it('shows a Checking badge on the board for a doubt still being checked', () => {
     paged.items = [doubt({ status: 'pending_triage' })];

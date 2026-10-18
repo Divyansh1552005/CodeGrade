@@ -8,6 +8,6 @@ export function doubtStatus(doubt, role = 'student') {
   if (doubt.hasApprovedAnswer) return { label: 'Answered', tone: 'success' };
   if (role === 'teacher' && doubt.status === 'appealed') return { label: 'Appealed', tone: 'warning' };
   if (doubt.aiDraftStatus === 'irrelevant') return { label: 'Off topic', tone: 'neutral' };
-  if (doubt.aiDraftStatus === 'failed') return { label: 'Awaiting teacher', tone: 'warning' };
+  if (doubt.aiDraftStatus === 'failed' || doubt.aiDraftStatus === 'skipped') return { label: 'Awaiting teacher', tone: 'warning' };
   return { label: 'Awaiting review', tone: 'info' };
 }

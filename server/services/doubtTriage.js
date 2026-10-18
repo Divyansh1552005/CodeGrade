@@ -1,5 +1,6 @@
 import Doubt from '../models/Doubt.js';
 import Problem from '../models/Problem.js';
+import Answer from '../models/Answer.js';
 import { classifyDoubt } from './doubtTriageChain.js';
 import { getModelName } from './llm.js';
 import { ensureWork } from './workService.js';
@@ -31,10 +32,15 @@ export const ensureDraftWork = (doubt) => ensureWork({
   key: `draft-${doubt.id}`, type: 'doubt-draft', ownerId: doubt.studentId, payload: { doubtId: doubt.id },
 });
 
+export const OFF_TOPIC_REASON = 'This does not look like a question about programming.';
+
+// "Marked off topic" for an unrelated doubt; spam and abuse are described as removed.
+export const removalTitle = (doubt) => (doubt.triage?.verdict === 'spam_or_abusive' ? 'Your doubt was removed' : 'Your doubt was marked off topic');
+
 export async function notifyRemoval(doubt) {
   await createNotification({
     key: `doubt-removed-${doubt.id}`, userId: doubt.studentId, type: 'doubt_removed',
-    title: 'Your doubt was removed', body: doubt.triage?.reason || 'It did not look like a question about programming.',
+    title: removalTitle(doubt), body: doubt.triage?.reason || OFF_TOPIC_REASON,
     link: `/doubts/${doubt.id}/removed`,
   });
   await Doubt.updateOne({ _id: doubt.id }, { $set: { removalNotifiedAt: new Date() } });
@@ -50,6 +56,24 @@ async function settle(doubtId, { status, triage }) {
 export async function afterDecision(doubt) {
   if (doubt.status === 'auto_rejected') await notifyRemoval(doubt);
   else await ensureDraftWork(doubt);
+}
+
+/**
+ * The draft model said the doubt is not about programming. The doubt is removed like any other
+ * auto-removed doubt: hidden from the board and from teachers, the student is notified and may
+ * appeal once. Returns the updated doubt, or null when it was already decided, appealed, or a
+ * teacher has answered it in the meantime.
+ */
+export async function removeAsOffTopic(doubt) {
+  if (await Answer.exists({ doubtId: doubt.id })) return null;
+  const triage = { verdict: 'unrelated', reason: OFF_TOPIC_REASON, model: getModelName(), source: 'ai', lowConfidence: false, decidedAt: new Date() };
+  const removed = await Doubt.findOneAndUpdate(
+    { _id: doubt.id, status: { $nin: ['auto_rejected', 'appealed', 'pending_triage'] } },
+    { $set: { status: 'auto_rejected', triage, aiDraftStatus: 'irrelevant' } },
+    { new: true }
+  );
+  if (removed) await notifyRemoval(removed);
+  return removed;
 }
 
 /** Fail open: the doubt goes to the teachers. Used when triage cannot complete. */

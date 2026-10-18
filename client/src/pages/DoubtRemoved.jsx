@@ -52,9 +52,9 @@ export default function DoubtRemoved() {
 
   return (
     <div className="max-w-2xl space-y-4">
-      <PageHeader title="Your doubt was removed" backTo="/doubts" backLabel="Doubts" />
+      <PageHeader title={doubt.offTopic ? 'Your doubt was marked off topic' : 'Your doubt was removed'} backTo="/doubts" backLabel="Doubts" />
       <Panel aria-label="Reason">
-        <PanelHeader title="Why it was removed" />
+        <PanelHeader title={doubt.offTopic ? 'Why it was marked off topic' : 'Why it was removed'} />
         <PanelBody><p className="text-base">{doubt.reason}</p></PanelBody>
       </Panel>
       <Panel aria-label="Your doubt">
@@ -63,12 +63,12 @@ export default function DoubtRemoved() {
       </Panel>
       {doubt.appealed ? (
         <div role="status" className="space-y-3">
-          <p className="text-base">You asked for a teacher to review this doubt. It is now in the review queue and on the doubts board.</p>
+          <p className="text-base">You asked for a teacher to review this doubt. It is back on the doubts board and a teacher will answer it directly.</p>
           <Button to={`/doubts/${id}`}>Open the doubt</Button>
         </div>
       ) : doubt.canAppeal ? (
         <div className="space-y-3">
-          <p className="text-base text-fg-muted">If you think this was a mistake, a teacher can review it. You can ask once.</p>
+          <p className="text-base text-fg-muted">If you think this was a mistake, a teacher will read it and answer it directly. You can ask once.</p>
           <Button variant="primary" loading={busy} onClick={appeal}>Request teacher review</Button>
           {error && <ErrorState message={error} />}
         </div>

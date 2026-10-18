@@ -89,7 +89,8 @@ describe('durable drafts and retries', () => {
     const other = await ensureWork({ key: 'other', type: 'doubt-draft', ownerId: student.user._id, payload: { doubtId: offTopic.id } });
     draft.mockRejectedValue(new NotRelevantError());
     await run(other);
-    expect((await Doubt.findById(offTopic.id)).aiDraftStatus).toBe('irrelevant');
+    const removed = await Doubt.findById(offTopic.id).setOptions({ includeRemoved: true });
+    expect(removed).toMatchObject({ aiDraftStatus: 'irrelevant', status: 'auto_rejected' });
     expect((await WorkItem.findById(other.id)).status).toBe('completed');
   });
 });
