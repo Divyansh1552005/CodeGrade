@@ -17,6 +17,8 @@ import { QUEUE_NAMES, createWorkerConnection, createQueues, queueOptions, report
 import { processWork, failWork } from './services/workProcessor.js';
 import { recalculateDifficulties } from './services/difficultyService.js';
 import { dispatchPendingWork, reconcileWork } from './services/recoveryService.js';
+import { cleanupUnverified } from './services/emailMaintenance.js';
+import { features } from './config/features.js';
 
 dotenv.config({ path: fileURLToPath(new URL('.env', import.meta.url)) });
 
@@ -49,7 +51,7 @@ async function main() {
     reconciling = true;
     try { await reconcileWork(queues); } finally { reconciling = false; }
   };
-  const maintenance = new Worker('queue-maintenance', async (job) => job.name === 'difficulty' ? recalculateDifficulties() : reconcile(), { ...queueOptions(connection), concurrency: 1 });
+  const maintenance = new Worker('queue-maintenance', async (job) => job.name === 'difficulty' ? recalculateDifficulties() : job.name === 'cleanup-unverified' ? cleanupUnverified() : reconcile(), { ...queueOptions(connection), concurrency: 1 });
   maintenance.on('error', reportQueueError);
   workers.push(maintenance);
   let closing = false, dispatching = false, timer;
@@ -81,6 +83,15 @@ async function main() {
   await maintenanceQueue.upsertJobScheduler('recalculate-difficulty', { every: 3600000 }, {
     name: 'difficulty', data: {}, opts: { attempts: 3, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: 10, removeOnFail: 20 },
   });
+  // Only while verification is on. The job also checks the flag, so a scheduler left over after the flag
+  // is turned off does nothing; it is removed here as well.
+  if (features.emailVerification()) {
+    await maintenanceQueue.upsertJobScheduler('cleanup-unverified', { every: 3600000 }, {
+      name: 'cleanup-unverified', data: {}, opts: { attempts: 3, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: 10, removeOnFail: 20 },
+    });
+  } else {
+    await maintenanceQueue.removeJobScheduler('cleanup-unverified');
+  }
   await recalculateDifficulties();
   await reconcile();
   await dispatch();
