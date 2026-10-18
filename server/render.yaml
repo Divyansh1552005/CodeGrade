@@ -1,24 +1,18 @@
 # Render Blueprint — https://render.com/docs/blueprint-spec
-# Deploys just the backend (server/). The frontend goes to Vercel instead —
-# see the "Deployment" section in README.md for the full walkthrough.
+# Deploys the backend (server/) as TWO services from the same code: the API (web) and the worker.
+# Grading, AI drafts, hints, emails and bulk jobs are finished by the worker, so without it
+# nothing but the HTTP API works. The frontend goes to Vercel instead: see the Deployment
+# section of README.md.
 #
-# This file lives in server/ (not the repo root) since it only describes the
-# backend service. `rootDir` below is still relative to the repo root, not to
-# this file, so it stays `server` either way. Render's Blueprint auto-detect
-# looks for render.yaml at the repo root by default — if it doesn't pick this
-# up automatically, the Blueprint creation flow (dashboard → New → Blueprint)
-# lets you point it at a specific render.yaml path; use `server/render.yaml`.
-# Any env var below with `sync: false` is a secret Render will prompt you for
-# instead of reading from this file (never commit real secrets here).
-services:
-  - type: web
-    name: codegrade-api
-    runtime: node
-    rootDir: server
-    plan: free
-    buildCommand: npm install
-    startCommand: npm start
-    healthCheckPath: /health
+# This file lives in server/ (not the repo root). `rootDir` below is still relative to the repo root,
+# so it stays `server`. If Render does not find the file by itself, use dashboard -> New -> Blueprint
+# and give it the path `server/render.yaml`.
+# Any env var with `sync: false` is a secret Render asks you for instead of reading it from this file
+# (never commit real secrets here).
+
+envVarGroups:
+  # Needed by BOTH services. Edit them once, here (or in the dashboard under Environment Groups).
+  - name: codegrade-shared
     envVars:
       - key: NODE_ENV
         value: production
@@ -26,14 +20,6 @@ services:
         sync: false
       - key: REDIS_URL
         sync: false
-      - key: JWT_ACCESS_SECRET
-        generateValue: true
-      - key: JWT_REFRESH_SECRET
-        generateValue: true
-      - key: JWT_ACCESS_EXPIRY
-        value: 15m
-      - key: JWT_REFRESH_EXPIRY
-        value: 7d
       - key: LLM_PROVIDER
         value: gemini
       - key: GOOGLE_API_KEY
@@ -48,9 +34,67 @@ services:
         value: https://judge0-ce.p.rapidapi.com
       - key: JUDGE0_API_KEY
         sync: false
-      # Comma-separated list of allowed browser origins, `*` wildcard
-      # supported (e.g. "https://your-app.vercel.app,https://*.vercel.app"
-      # to also allow every preview deployment). REQUIRED in production —
-      # see the CORS note in server/app.js.
+      # Optional AI features, off unless "true" (see docs/ai-doubts-hints.md).
+      - key: FEATURE_AI_TRIAGE
+        value: "false"
+      - key: FEATURE_HINT_CHAT
+        value: "false"
+      # Email (Brevo). Turn the two flags on only after BREVO_API_KEY and MAIL_FROM are filled in.
+      - key: FEATURE_EMAIL_VERIFICATION
+        value: "true"
+      - key: FEATURE_PASSWORD_RESET
+        value: "true"
+      # The API and the worker MUST have the identical value (at least 32 characters).
+      - key: EMAIL_TOKEN_SECRET
+        sync: false
+      # The Vercel URL, https, no trailing slash. Used in every email link.
+      - key: APP_BASE_URL
+        sync: false
+      - key: BREVO_API_KEY
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+
+services:
+  - type: web
+    name: codegrade-api
+    runtime: node
+    rootDir: server
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - fromGroup: codegrade-shared
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_EXPIRY
+        value: 15m
+      - key: JWT_REFRESH_EXPIRY
+        value: 7d
+      # Comma-separated list of allowed browser origins, `*` wildcard supported (e.g.
+      # "https://your-app.vercel.app,https://*.vercel.app" to also allow every preview deployment).
+      # REQUIRED in production — see the CORS note in server/app.js.
       - key: CLIENT_ORIGIN
         sync: false
+      # The one admin account, created or updated at API startup. Password: at least 12 characters, not a
+      # common word or sequence, or the API refuses to start. Never commit these.
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_SESSION_HOURS
+        value: "8"
+
+  # A Background Worker is a paid Render service type (there is no free plan for it).
+  - type: worker
+    name: codegrade-worker
+    runtime: node
+    rootDir: server
+    plan: starter
+    buildCommand: npm ci
+    startCommand: npm run worker
+    envVars:
+      - fromGroup: codegrade-shared

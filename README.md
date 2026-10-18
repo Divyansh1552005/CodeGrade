@@ -3,15 +3,19 @@
 A full-stack LMS module where students solve tagged coding problems (graded
 automatically in a sandbox, with AI qualitative feedback), and post doubts
 that get an AI-drafted answer — which must pass a **teacher approval
-workflow** before any student can see it.
+workflow** before any student can see it. Teachers are not self-service: a
+teacher signs up as an *applicant* with their degree and proof links, and the
+single **admin** approves or rejects them.
 
 Backend engineering rigor — safe code execution, approval-state correctness,
 request validation, rate limiting, and prompt-injection resistance — was
 treated as the primary concern, on par with feature completeness.
 
-> For the full architectural record, see `ARCHITECTURE.md`. For a plain-English,
-> file-by-file walkthrough of the whole system, see `PERSONALNOTES.md`
-> (tracked alongside this document).
+> **Documents.** `DEPLOYMENT_GUIDE.md` (step-by-step Render + Vercel deployment),
+> `ARCHITECTURE.md`: the architectural record. `PERSONALNOTES.md`: a plain-English,
+> file-by-file walkthrough. `docs/`: feature notes (email, AI doubts and hints,
+> admin and teacher access). Only this README is committed; the other
+> documents are local working notes (listed in `.gitignore`).
 
 ---
 
@@ -78,13 +82,13 @@ Anyone can sign up, but only as a student or as a teacher *applicant*. A teacher
 
 **Roles.** `student`, `teacher`, `admin` and `teacher_applicant`. The role is read from the database on every request (the token only identifies the user), and every check is deny-by-default: `requireAuth` lets only students and teachers in, so an applicant (or the admin) is refused on every product route even if a route forgot a role check. A test walks every route against every role and fails if a route is added without an explicit rule. Role changes, approval, rejection, suspension and a changed admin password end the user's sessions (a `tokenVersion` carried by the tokens).
 
-**Signup.** `POST /auth/register` takes `accountType` (`student` or `teacher`) and nothing privileged: any other key, including `role`, is a 400. A teacher also sends `organization` (up to 120 characters) and an optional `note` (up to 500). All of that text is plain text: control and bidirectional characters are stripped, it is escaped in email and never rendered as HTML or a link.
+**Signup.** `POST /auth/register` takes `accountType` (`student` or `teacher`) and nothing privileged: any other key, including `role`, is a 400. A teacher also sends `organization` (up to 120 characters), `degree` (up to 120), `degreeLink` (a public https link to the degree certificate, for example a Google Drive file shared with "Anyone with the link"), optional `proofLinks` (up to 3 more https links: ID card, CV, staff page) and an optional `note` (up to 500). **Links only, no file uploads**: that avoids storing strangers' documents, scanning them for malware and carrying the privacy duties. A link must be https, with no embedded credentials, no spaces and a real host name; the server never fetches it. All text is plain text: control and bidirectional characters are stripped, it is escaped in email and never rendered as HTML. In the admin area a link is clickable only when it is https, and opens in a new tab with `rel="noopener noreferrer nofollow"`. A Drive file can still be changed after review, so the admin should open the links before deciding.
 
-**Applications.** A teacher signup creates a `teacher_applicant` and an application. After the applicant verifies their email the application appears on the admin Applications page (an unverified, possibly fake, address never does). Until approval the applicant can only log in, see their status and log out. The admin approves (the user becomes a teacher) or rejects with an optional reason (shown to the applicant). Each decision is one atomic update, ends the user's sessions, is audited, and emails the applicant (approved, rejected). A rejected application can later be flipped to approved. At most `TEACHER_APPLICATION_CAP` verified applications can wait, and teacher signups are limited per IP.
+**Applications.** A teacher signup creates a `teacher_applicant` and an application. After the applicant verifies their email the application appears on the admin Applications page (an unverified, possibly fake, address never does). Until approval the applicant can only log in, see their status and log out. The admin approves (the user becomes a teacher) or rejects with an optional reason (shown to the applicant). Each decision is one atomic update, ends the user's sessions, is audited, and emails the applicant (approved, rejected). A rejected application can later be flipped to approved. An approved teacher sees what they were approved with in a "Your qualifications" panel on their own Profile page. At most `TEACHER_APPLICATION_CAP` verified applications can wait, and teacher signups are limited per IP.
 
 **The admin.** `ADMIN_EMAIL` and `ADMIN_PASSWORD` in the environment define the single admin; there is no 2FA, no invites and no mail to the admin (the admin learns about applications from the Applications page and its pending count). At API startup the account is created or promoted first, then any other admin is demoted, so there is never zero admins. A changed password updates the hash and ends the admin's sessions; a changed `ADMIN_EMAIL` moves the role. In production the password must be at least 12 characters and not trivial, or the server refuses to start. The admin address is reserved: signup, forgot-password and resend for it answer like any existing account and change nothing. The admin logs in at `/admin/login` through the normal login API with `scope: "admin"`; every failure is the same 401. Limits: 5 attempts per IP in 15 minutes (429), and 5 failed attempts against the admin address lock the account for 15 minutes (the same 401, no hint, ends by itself). Sessions last `ADMIN_SESSION_HOURS` (default 8) and refreshing never extends them. Admin API routes (`/admin/*`) answer 404 to everyone else. The admin cannot be demoted, suspended or changed through any route, and nobody can be given admin through the API.
 
-**Admin pages.** Applications (pending, approved, rejected), Users (search, filters, demote to student, suspend) and the Audit log, which is append-only (no route or service edits or deletes an entry, and secrets are never stored).
+**Admin pages.** Applications (pending, approved, rejected; Approve and Reject buttons on each row, and a detail view with the degree, links and note), Users (search, filters, a "View profile" popup with the degree and links the person applied with, demote to student, suspend, via `GET /admin/users/:id`) and the Audit log, which is append-only (no route or service edits or deletes an entry, and secrets are never stored).
 
 **Legacy teachers.** Accounts that hold the teacher role without ever having been approved (including anyone who self-registered before signup was locked down) keep working and show as "Legacy" in the Users page. `node scripts/legacyTeachers.js [--csv=FILE]` is a read-only report of them and of the answers they approved; review it and demote strangers on the Users page.
 
@@ -113,38 +117,44 @@ Anyone can sign up, but only as a student or as a teacher *applicant*. A teacher
 
 ```
 /server
-  /config        db.js (MongoDB), redis.js (lazy ioredis client)
+  /config        db.js, redis.js (lazy ioredis), features.js (flags), mail.js, teacherAccess.js, aiLimits.js
   /constants     topics.js (fixed problem-tag list, mirrored on the client)
-  /models        User, Problem, Submission, Doubt, Answer, RefreshToken, WorkItem, StudentStats, Notification, UserStats, Badge, UserBadge, GamificationEvent
-  /routes        auth, problems, submissions, doubts, answers, activity, jobs
-  /services      execution/AI chains, processors, durable work/outbox dispatch, recovery, progress, tokenService
-  worker.js      separate BullMQ consumers + recurring recovery
-  /middleware    auth (+ general rate limit), roleGuard, errorHandler, validate (zod), rateLimit
-  /validation    schemas.js — zod schemas for every route body
-  /utils         sanitize (length caps), cookies
-  /scripts       seed.js, cleanupDoubts.js
-  /tests         unit + integration (+ security)
+  /models        User, Problem, Submission, Doubt, Answer, RefreshToken, EmailToken, TeacherApplication, AuditLog,
+                 WorkItem, StudentStats, UserStats, Badge, UserBadge, GamificationEvent, Notification,
+                 HintThread, HintQuota, UsageCounter
+  /routes        auth, teacherApplication, admin, problems, submissions, doubts, answers, hints, activity,
+                 leaderboard, notifications, features, jobs
+  /services      grading + AI chains, hint and triage chains, processors, durable work/outbox, recovery,
+                 progress, tokenService, emailTokens, mail/ (Brevo), adminBootstrap, adminActions, adminLists,
+                 teacherApplications, audit
+  worker.js      separate BullMQ consumers + recurring recovery and maintenance
+  /middleware    auth (requireAuth, requireAnyAuth, requireAdmin), roleGuard, validate (zod), rateLimit,
+                 authLimits, adminLoginLimit, featureGate, errorHandler, requestId
+  /validation    schemas.js: zod schemas for every route body (the signup schema is strict)
+  /utils         sanitize, plainText (text and link cleaning), roles, cookies, pagination
+  /scripts       seed.js, migrateEmailVerified.js, legacyTeachers.js, cleanupDoubts.js, smokeJobs.js
+  /tests         unit + integration (+ security, route access for every role)
+  render.yaml    Render Blueprint: API web service + worker + shared environment group
   app.js / server.js
 /client
   /src
-    /api         axios client (+ refresh interceptor), cached-query hook
+    /api         axios client (refresh interceptor, global 403 handling), cached/paged query hooks
     /auth        AuthContext
     /theme       ThemeContext (light/dark, class-based, persisted)
     /layouts     RootLayout (app shell, page outlet, toaster)
-    /components  AppShell (sidebar / mobile drawer), ProtectedRoute, ConfirmDialog,
-                 TopicSelect, ProblemStatement, CodeEditor, Markdown/MarkdownEditor,
-                 AuthCard, ColdStartNotice
-      /ui        shared set: Button, Field/Input/Select, Badge, Panel, Table, Modal,
-                 Tabs, DropdownMenu, Tooltip, Toast, Skeleton, EmptyState, ErrorState,
-                 Avatar, Progress, CodeBlock, PageHeader, resizable panes
-      /dashboard dashboard sections (next up, progress, submissions, badges, ...)
-      /workspace submission result and submission history
+    /components  AppShell, ProtectedRoute, ConfirmDialog, PagerControls, TopicSelect, CodeEditor, Markdown, AuthCard
+      /ui        shared set: Button, Field/Input/Select, Badge, Panel, Table, Modal, Tabs, DropdownMenu, ...
+      /admin     AdminHeader, usePendingCount, ProofLinks, Qualifications
+      /dashboard /workspace /profile
     /lib         cn(), media-query hook, status helpers
-    /pages       LandingPage, Login, Register, Dashboard, ProblemList, CreateProblem,
-                 SubmitCode, Leaderboard, DoubtBoard, AskDoubt, DoubtDetail,
-                 TeacherReview, BulkJobs, Profile
+    /pages       LandingPage, Login, Register, VerifyEmail, ForgotPassword, ResetPassword, PendingApproval,
+                 Dashboard, ProblemList, CreateProblem, SubmitCode, Leaderboard, DoubtBoard, AskDoubt,
+                 DoubtDetail, DoubtRemoved, TeacherReview, BulkJobs, Profile, AdminLogin
+      /admin     Applications, Users, AuditLog
     /data        topics.js, starterTemplates.js
     router.jsx   data-router route table (createBrowserRouter)
+/docs            email.md, ai-doubts-hints.md, admin-and-teacher-access.md, screenshots/
+DEPLOYMENT_GUIDE.md  ARCHITECTURE.md  PERSONALNOTES.md
 ```
 
 ---
@@ -156,7 +166,8 @@ Use Node.js 22.12 or newer (Node 22 LTS recommended) for both packages.
 ### 1. Configure environment
 
 Copy `server/.env.example` to `server/.env` and fill in the values (MongoDB
-URI, Redis URL, JWT secrets, LLM provider key, Judge0 RapidAPI key). The
+URI, Redis URL, JWT secrets, LLM provider key, Judge0 RapidAPI key, and
+`ADMIN_EMAIL` / `ADMIN_PASSWORD` for the admin account). The
 frontend has its own, much smaller `client/.env.example` → `client/.env` —
 only needed if you want to point it at a non-default API URL (see
 `VITE_API_URL` below); local dev works without it.
@@ -174,7 +185,17 @@ npm run dev      # node --watch → http://localhost:5000
 ```
 
 Demo accounts created by the seed (password `password123`):
-`teacher@demo.com`, `student@demo.com`.
+`teacher@demo.com`, `student@demo.com`. **Never run the seed in production.**
+The admin is not seeded: it is created at API startup from `ADMIN_EMAIL` and
+`ADMIN_PASSWORD`; log in at `/admin/login`.
+
+Grading, AI drafts, hints, emails and bulk jobs are finished by a separate
+worker, so run it in a second terminal as well:
+
+```bash
+cd server
+npm run worker   # needs the same MongoDB and Redis as the API
+```
 
 > `npm run dev` uses `node --watch`, so it picks up backend edits
 > automatically. If you start the server with `npm start` instead, you must
@@ -192,8 +213,8 @@ npm run dev      # → http://localhost:5173  (proxies /api to :5000)
 ### 4. Tests
 
 ```bash
-cd server  && npm test              # 126 tests: unit + integration + security
-cd client  && npm run test:frontend  # 54 UI/hook tests
+cd server  && npm test              # 678 tests in 44 suites: unit + integration + security + route access
+cd client  && npm run test:frontend  # 264 UI/hook tests in 28 files
 cd client  && npm run build
 # Optional live checks with server/.env Redis, Judge0 and AI credentials:
 cd server  && npm run test:smoke
@@ -208,96 +229,31 @@ counters.
 
 ## Deployment — Vercel (frontend) + Render (backend)
 
-The frontend and backend deploy to two different domains, which has one real
-consequence worth understanding up front: **the refresh-token cookie is
-cross-site**. That's handled already (`utils/cookies.js` sets
-`SameSite=None; Secure` whenever `NODE_ENV=production`), but it only works if
-every piece below is wired up correctly — a mismatch in any one of these
-silently breaks login persistence (you'd see login work, but a page refresh
-logs you out, or the browser just never sends the cookie back).
+**A step-by-step walkthrough lives in the local `DEPLOYMENT_GUIDE.md` (not committed).** In short:
 
-### 1. Backend → Render
+| Piece | Host | Notes |
+|---|---|---|
+| Frontend (`client/`) | Vercel | Root directory `client`; `VITE_API_URL` = the API's URL, no trailing slash and no `/api`; `client/vercel.json` adds the SPA rewrite |
+| API (`server/`, `npm start`) | Render web service | Health check `/health`; `NODE_ENV=production` is required |
+| Worker (`server/`, `npm run worker`) | Render **background worker** (paid) | Without it nothing queued (grading, AI, email) ever finishes |
+| Database | MongoDB Atlas | Use a separate production database |
+| Queues and rate limits | Redis with persistence and `noeviction` | Same Redis for the API and the worker |
 
-- New Web Service, root directory `server` (or use the included
-  `server/render.yaml` Blueprint — Render dashboard → New → Blueprint → point
-  at this repo; if it doesn't auto-detect the file since it's not at the repo
-  root, the Blueprint flow lets you specify the path: `server/render.yaml`).
-- Build command: `npm install`. Start command: `npm start`. Health check
-  path: `/health`.
-- Environment variables — everything in `server/.env.example`, plus:
-  - **`NODE_ENV=production`** — required; this is what flips the refresh
-    cookie to `Secure`/`SameSite=None`. Without it, the browser will accept
-    the cookie on login but silently refuse to send it back cross-site, and
-    the user gets logged out on every reload.
-  - **`CLIENT_ORIGIN`** — set to your Vercel URL(s), comma-separated, `*`
-    wildcard supported — e.g.
-    `https://your-app.vercel.app,https://*.vercel.app` (the wildcard form
-    covers every preview deployment too, not just production). **This is
-    required in production** — `app.js`'s CORS config only falls back to
-    "allow any origin" when `CLIENT_ORIGIN` is unset, which is a dev
-    convenience, not something you want facing the internet once cookies are
-    involved.
-  - `MONGODB_URI` / `REDIS_URL` — this project already uses hosted MongoDB
-    Atlas and a hosted Redis instance, both reachable from anywhere, so no
-    extra provisioning is needed here — just point at the same ones (or your
-    own).
-- Once deployed, note the service's URL (e.g. `https://codegrade-api.onrender.com`)
-  — the frontend needs it next.
+`server/render.yaml` is a Blueprint that creates the API, the worker and a shared environment
+group in one go (dashboard, New, Blueprint, path `server/render.yaml`).
 
-> Render's free tier spins a service down after inactivity; the first
-> request after idle can take ~30–60s to wake it up. Fine for a demo, worth
-> knowing so a "slow" first login isn't mistaken for a bug.
+**Environment that must line up.** `CLIENT_ORIGIN` (API) must equal the Vercel URL exactly; `APP_BASE_URL`
+(API and worker) is the same URL and is used in every email link; `EMAIL_TOKEN_SECRET` must be identical in
+the API and the worker; `ADMIN_EMAIL` / `ADMIN_PASSWORD` define the admin (password at least 12
+characters in production, or the API refuses to start). The frontend and API live on different domains, so
+the refresh-token cookie is cross-site (`SameSite=None; Secure`, set whenever `NODE_ENV=production`).
+Some browsers block such cookies; putting both on one registrable domain (`app.example.com` and
+`api.example.com`) avoids that. The tradeoff is described in "My tradeoffs".
 
-### 2. Frontend → Vercel
-
-- New Project, **root directory `client`** (this matters — Vercel needs to
-  build from inside `client/`, not the repo root). Framework preset "Vite"
-  is auto-detected; build command `npm run build`, output directory `dist`
-  are the defaults and don't need overriding.
-- Environment variable: **`VITE_API_URL`** = the Render backend's full URL
-  from step 1, e.g. `https://codegrade-api.onrender.com` — **no trailing
-  slash, no `/api` suffix** (the `/api` prefix only exists in the local Vite
-  dev proxy, which strips it before forwarding; the deployed backend's
-  routes are mounted at the root, e.g. `/auth/login`).
-- `client/vercel.json` (already in the repo) adds the SPA rewrite Vercel
-  needs for client-side routing — without it, refreshing on any route other
-  than `/` (e.g. `/problems`) 404s, since Vercel would otherwise look for an
-  actual `/problems` file.
-- Deploy, note the resulting URL, and go back to Render to set `CLIENT_ORIGIN`
-  to it if you hadn't already (chicken-and-egg: you need the Vercel URL to
-  configure the backend, and Vercel doesn't need any backend config to
-  deploy first).
-
-### 3. Sanity-check the cross-site cookie
-
-After both are deployed: log in on the Vercel URL, open DevTools → Application
-→ Cookies, and confirm a `refreshToken` cookie exists **scoped to the Render
-domain**, with `Secure` and `SameSite=None` flags set. Then hard-refresh the
-page — you should stay logged in (the silent `/auth/refresh` call on load
-should succeed). If it doesn't:
-- Check `NODE_ENV=production` is actually set on Render (not just in the
-  Blueprint file — confirm it in the dashboard).
-- Check `CLIENT_ORIGIN` on Render matches the Vercel URL **exactly**
-  (scheme + host, no trailing slash) or matches your wildcard pattern.
-- Check `VITE_API_URL` on Vercel has no trailing slash and no `/api` suffix.
-- Both origins must be HTTPS — `Secure` cookies are refused over plain HTTP,
-  and both Vercel and Render serve HTTPS by default, so this should already
-  be true unless you're using a custom domain without TLS configured.
-
-### The security tradeoff, made explicit
-
-Cross-site cookies (`SameSite=None`) are inherently a step down from
-same-site (`SameSite=Lax`/`Strict`) — that's the "some security issues" that
-come with splitting frontend and backend across two domains instead of
-serving both from one. This is mitigated as much as it reasonably can be
-without collapsing back to a single domain: the cookie is still `httpOnly`
-(never readable by JS) and `Secure` (HTTPS-only), `CLIENT_ORIGIN` is an
-explicit allowlist rather than "allow everything," and refresh tokens are
-still rotated/hashed/reuse-detected exactly as described below. The
-alternative — same-site cookies — would require putting both behind one
-domain (e.g. Render serving the built frontend too, or a reverse proxy in
-front of both), which is a legitimate production hardening step if this ever
-needs to be more than a demo deployment.
+After deploying: check `/health`, log in at `/admin/login`, confirm the `refreshToken` cookie is on the API
+domain and survives a hard refresh, and (on an existing database) run `scripts/migrateEmailVerified.js`
+and `scripts/legacyTeachers.js`. Render's free web tier sleeps after idle time, so the first request can
+take 30 to 60 seconds.
 
 ---
 
@@ -605,10 +561,15 @@ A hybrid model chosen for security:
 
 | Method | Route | Role | Purpose |
 |---|---|---|---|
-| POST | `/auth/register` `/auth/login` | public | issue access + refresh tokens |
+| POST | `/auth/register` `/auth/login` | public | sign up as `student` or `teacher` (an applicant) / log in (`scope: "admin"` from `/admin/login`) |
 | POST | `/auth/refresh` `/auth/logout` | public | rotate / revoke refresh token |
 | GET | `/teacher-application` | any signed-in | the user's own teacher application status |
-| GET/POST | `/admin/users`, `/admin/teacher-applications`, `/admin/audit-log` | admin (404 for everyone else) | accounts, applications, audit log |
+| GET | `/admin/users`, `/admin/users/:id` | admin (404 for everyone else) | accounts list; one account with its application (degree, links) |
+| POST | `/admin/users/:id/role` `/suspend` `/unsuspend` | admin | demote to student, suspend, unsuspend |
+| GET/POST | `/admin/teacher-applications`, `/:id/approve`, `/:id/reject` | admin | the application queue and decisions |
+| GET | `/admin/audit-log` | admin | append-only audit log |
+| GET/POST | `/problems/:problemId/hints` | student | hint chat (flag `FEATURE_HINT_CHAT`) |
+| GET | `/features` | auth | which optional features are on |
 | GET | `/auth/config` | public | which email features are on |
 | POST | `/auth/verify-email` `/auth/resend-verification` | public | verify an address / send a new link (flag) |
 | POST | `/auth/forgot-password` `/auth/reset-password` | public | request / complete a password reset (flag) |
@@ -637,22 +598,22 @@ per-user rate limit (enforced inside `requireAuth`, not listed per-row).
 
 ## Testing summary
 
-Backend (126 tests): Answer state-machine unit tests (valid + all illegal
-transitions), Judge0 client (timeout + non-2xx + base64 round-trip + Unicode
-regression), rate-limit middleware (wrapper logic + both submission quotas +
-live route wiring), Zod validation (every required/invalid field per route),
-chain schema parsing/rejection, and integration tests covering the full
-submission grading flow, topic filtering + stable numbering, the doubt → AI
-draft → approval workflow, role guards (student 403 on teacher routes), and
-the security cases (prompt injection, oversized code, invalid language
-rejected before Judge0).
+Backend (678 tests, 44 suites; Jest, Supertest, mongodb-memory-server, providers mocked): Answer state-machine
+unit tests (valid and all illegal transitions), Judge0 client, rate-limit middleware and quotas, Zod
+validation, chain schema parsing, and integration tests for the submission grading flow, topic filtering,
+the doubt, AI draft and approval workflow, AI triage and appeals, hint chat and quotas, gamification, durable
+background jobs (retries, recovery, replay), email verification and password reset, the security cases
+(prompt injection, oversized code, invalid language), **teacher access** (strict signup schema, link
+validation, the verification gate, approval and rejection, the audit log, admin login throttling and
+lockout, sessions that cannot be extended) and a **route access test that walks every route against every
+role** (student, teacher, applicant, admin, suspended, anonymous) and fails when a route has no explicit rule.
 
-Frontend (54 tests): login rendering/submit, cached-query polling and stale-response
-protection, bulk-job JSON validation, acceptance/status rendering, and server errors; submission
-queued/results/feedback rendering, terminal-error polling stop, and pending-history
-refresh on revisit, plus XP-bar/streak/badge rendering and leaderboard scope switching.
-Backend background-job tests additionally cover retries/recovery, replay safety,
-analytics/XP/streaks, notification ownership, and teacher-only imports/exports.
+Frontend (264 tests, 28 files; Vitest and React Testing Library): pages in both themes, navigation, dialogs,
+the coding workspace, problem list filters, dashboard, leaderboard, profile, doubts, teacher tools, auth, email
+flows, signup with account type and proof links, the applicant waiting page, route guards, the global 403
+handling in the API client and `AuthContext`, the admin shell (it makes no student or teacher request), the
+Applications, Users and Audit log pages, the pending-count badge polling, and paging. Layout and visual polish
+are checked manually in a browser.
 
 ---
 
@@ -701,17 +662,25 @@ larger/longer-running project would probably revisit:
   the database. Simple and fast to ship; the cost is that adding a topic
   means editing two files by hand instead of an admin UI, and the two lists
   can drift if one is edited without the other.
-- **Backend test depth over frontend test depth.** 126 backend tests vs. 54
+- **Teacher proof as links, not uploads.** Applicants give links (a shared Drive file) instead of uploading
+  documents. That keeps strangers' files, malware scanning and personal-data retention out of the app, at the
+  cost that a file can change or be made private after the admin looked at it, and the admin must open the links
+  by hand.
+- **One admin, from the environment, with no 2FA and no mail.** Simple and independent of the mail
+  provider, but whoever can read `ADMIN_PASSWORD` is the admin, and anyone who keeps guessing the admin address
+  can lock it out for 15 minutes at a time.
+- **Backend test depth over frontend test depth.** 678 backend tests vs. 264
   frontend tests, deliberately — the assignment explicitly weights backend
   correctness (safe execution, approval-state correctness,
   prompt-injection resistance) at least as heavily as feature completeness,
   so that's where the testing time went. The frontend was instead verified
   by actually clicking through the running app rather than by an automated
   suite.
-- **Render's free tier over a paid always-on instance.** Free to run, at
-  the cost of a cold-start delay (~30–60s) on the first request after
-  idling — mitigated in the UI with the cold-start notice on first visit,
-  not eliminated.
+- **Render's free tier for the API.** Free to run, at the cost of a cold-start
+  delay (~30–60s) on the first request after idling — mitigated in the UI with
+  the cold-start notice, not eliminated. The worker cannot be free: Render's
+  background worker is a paid service, and it is required for grading, AI and
+  email.
 
 ---
 
@@ -737,8 +706,8 @@ Things I'd do next, roughly in the order I'd prioritize them:
 4. **Teacher-managed topics** — move the fixed topic list from hardcoded
    constants into a database collection teachers can add to, removing the
    manual client/server duplication.
-5. **Pagination** on the problems list and doubt board — both currently do
-   an unbounded `find()`, fine at demo scale, not at real class-roster scale.
+5. **Pagination** on the problems list — the doubt board, submissions and the admin lists
+   are paged already; the problems list is not, which is fine at demo scale.
 6. **Push updates instead of polling** — a doubt's AI draft finishing, or a
    teacher approving an answer, is now refreshed by short polling intervals;
    WebSockets/SSE would make that live.
@@ -751,8 +720,10 @@ Things I'd do next, roughly in the order I'd prioritize them:
    a per-case result.
 9. **Richer per-teacher analytics** — queued grading reports now expose per-problem
    totals; add class cohorts and common failure patterns as follow-up features.
-10. **Password reset / email verification** — registration and login work,
-    but there's no email delivery integration yet for account recovery.
+10. **Teacher applications:** let an application count as visible whenever its user is verified (so a missed
+    hook can never hide one), notify the admin through an in-app inbox, and optionally allow document uploads with
+    scanning if proof by link proves too weak.
+11. **Admin hardening:** optional 2FA, and an admin audit export.
 
 ---
 
@@ -843,7 +814,7 @@ explains the platform for logged-out visitors; the auth pages are a single cente
 with room for provider buttons and a bot-check widget without layout shift.
 
 ### Tests
-Frontend: 86 Vitest + React Testing Library tests, including page renders in both themes,
+Frontend (at the time of the revamp 86 tests; see the Testing summary for today's count): Vitest + React Testing Library tests, including page renders in both themes,
 navigation and drawer, dialogs, the workspace (polling, drafts, reset), the problem list
 filters, dashboard, leaderboard, profile, doubts, teacher tools, auth and the home page.
 Layout geometry is checked in a browser, not by the unit tests.
