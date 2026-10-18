@@ -11,12 +11,6 @@ Backend engineering rigor — safe code execution, approval-state correctness,
 request validation, rate limiting, and prompt-injection resistance — was
 treated as the primary concern, on par with feature completeness.
 
-> **Documents.** `DEPLOYMENT_GUIDE.md` (step-by-step Render + Vercel deployment),
-> `ARCHITECTURE.md`: the architectural record. `PERSONALNOTES.md`: a plain-English,
-> file-by-file walkthrough. `docs/`: feature notes (email, AI doubts and hints,
-> admin and teacher access). Only this README is committed; the other
-> documents are local working notes (listed in `.gitignore`).
-
 ---
 
 ## Screenshots
@@ -197,6 +191,8 @@ cd server
 npm run worker   # needs the same MongoDB and Redis as the API
 ```
 
+Or set `RUN_WORKER=true` in `server/.env` and run only `npm run dev`: the worker then runs inside the API process.
+
 > `npm run dev` uses `node --watch`, so it picks up backend edits
 > automatically. If you start the server with `npm start` instead, you must
 > restart it manually after any backend code change — otherwise it keeps
@@ -235,7 +231,7 @@ counters.
 |---|---|---|
 | Frontend (`client/`) | Vercel | Root directory `client`; `VITE_API_URL` = the API's URL, no trailing slash and no `/api`; `client/vercel.json` adds the SPA rewrite |
 | API (`server/`, `npm start`) | Render web service | Health check `/health`; `NODE_ENV=production` is required |
-| Worker (`server/`, `npm run worker`) | Render **background worker** (paid) | Without it nothing queued (grading, AI, email) ever finishes |
+| Worker (`server/`, `npm run worker`) | Render **background worker** (paid), or free inside the API with `RUN_WORKER=true` | Without a worker nothing queued (grading, AI, email) ever finishes |
 | Database | MongoDB Atlas | Use a separate production database |
 | Queues and rate limits | Redis with persistence and `noeviction` | Same Redis for the API and the worker |
 
@@ -249,6 +245,8 @@ characters in production, or the API refuses to start). The frontend and API liv
 the refresh-token cookie is cross-site (`SameSite=None; Secure`, set whenever `NODE_ENV=production`).
 Some browsers block such cookies; putting both on one registrable domain (`app.example.com` and
 `api.example.com`) avoids that. The tradeoff is described in "My tradeoffs".
+
+**Free option.** Set `RUN_WORKER=true` on the API service and do not deploy a separate worker: `server.js` then starts the queue consumers, dispatcher and maintenance inside the API process (the same code as `npm run worker`). Leave it unset when a separate worker runs. On Render's free web tier the service sleeps when idle and queued work waits until it wakes (ping `/health` every 5 minutes to avoid that).
 
 After deploying: check `/health`, log in at `/admin/login`, confirm the `refreshToken` cookie is on the API
 domain and survives a hard refresh, and (on an existing database) run `scripts/migrateEmailVerified.js`

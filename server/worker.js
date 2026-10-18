@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import mongoose from 'mongoose';
 import { Queue, Worker } from 'bullmq';
 import WorkItem from './models/WorkItem.js';
@@ -22,9 +22,15 @@ import { features } from './config/features.js';
 
 dotenv.config({ path: fileURLToPath(new URL('.env', import.meta.url)) });
 
-async function main() {
+/**
+ * Start every queue consumer, the outbox dispatcher and the recurring maintenance. Standalone (`npm run worker`)
+ * it owns the process: it handles SIGTERM/SIGINT and closes MongoDB itself. Embedded (RUN_WORKER=true inside the
+ * API process) the API owns the process and the MongoDB connection, so this only closes what it opened and the
+ * caller decides when to exit. Returns { shutdown }.
+ */
+export async function startWorker({ embedded = false } = {}) {
   validateMailConfig(); // fail fast, before connecting, when an email flag is on and the config is wrong
-  await connectDB();
+  if (mongoose.connection.readyState !== 1) await connectDB();
   // Build new unique indexes before workers accept replayable imports/drafts.
   const { default: Answer } = await import('./models/Answer.js');
   const { default: Problem } = await import('./models/Problem.js');
@@ -71,12 +77,14 @@ async function main() {
     await Promise.all([...new Set([...Object.values(queues), maintenanceQueue])].map((queue) => queue.close()));
     if (connection.status === 'ready') await connection.quit();
     else connection.disconnect();
-    await mongoose.disconnect();
+    if (!embedded) await mongoose.disconnect();
   }
-  process.on('SIGTERM', () => shutdown().catch(console.error));
-  process.on('SIGINT', () => shutdown().catch(console.error));
+  if (!embedded) {
+    process.on('SIGTERM', () => shutdown().catch(console.error));
+    process.on('SIGINT', () => shutdown().catch(console.error));
+  }
   await connection.ping();
-  if (closing) return;
+  if (closing) return { shutdown };
   await maintenanceQueue.upsertJobScheduler('reconcile-work', { every: 60000 }, {
     name: 'reconcile', data: {}, opts: { attempts: 3, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: 10, removeOnFail: 20 },
   });
@@ -97,9 +105,14 @@ async function main() {
   await dispatch();
   timer = setInterval(dispatch, 2000);
   await Promise.all(workers.map((worker) => worker.waitUntilReady()));
-  console.log('Workers ready: grading, doubt triage, drafts, feedback, completion, notifications, bulk jobs, recovery');
+  console.log(`Workers ready${embedded ? ' (inside the API process)' : ''}: grading, doubt triage, drafts, feedback, completion, notifications, bulk jobs, recovery`);
+  return { shutdown };
 }
-main().catch((err) => {
-  console.error('Failed to start workers:', err);
-  process.exit(1);
-});
+
+// `npm run worker` runs this file directly; importing it (from server.js) starts nothing.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  startWorker().catch((err) => {
+    console.error('Failed to start workers:', err);
+    process.exit(1);
+  });
+}

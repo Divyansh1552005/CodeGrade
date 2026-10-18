@@ -89,6 +89,7 @@ services:
         value: "8"
 
   # A Background Worker is a paid Render service type (there is no free plan for it).
+  # To stay free, delete this service and set RUN_WORKER=true on codegrade-api: the worker then runs inside the API.
   - type: worker
     name: codegrade-worker
     runtime: node

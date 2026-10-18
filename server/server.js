@@ -35,9 +35,21 @@ async function main() {
   await Promise.all([User.init(), TeacherApplication.init(), AuditLog.init(), WorkItem.init(), Answer.init(), Problem.init(), Submission.init(), Doubt.init(), StudentStats.init(), Notification.init(), UserStats.init(), Badge.init(), UserBadge.init(), GamificationEvent.init()]);
   await bootstrapAdmin(); // API process only, once at startup
   const app = createApp();
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     console.log(`API listening on http://localhost:${PORT}`);
   });
+  // RUN_WORKER=true runs the queue consumers inside this process (one free Render service instead of a paid
+  // worker). Leave it unset when a separate worker is deployed. It needs the same variables as `npm run worker`.
+  if (process.env.RUN_WORKER === 'true') {
+    const { startWorker } = await import('./worker.js');
+    const worker = await startWorker({ embedded: true });
+    const stop = () => {
+      server.close();
+      worker.shutdown().catch(console.error).finally(() => process.exit(0));
+    };
+    process.once('SIGTERM', stop);
+    process.once('SIGINT', stop);
+  }
 }
 
 main().catch((err) => {
