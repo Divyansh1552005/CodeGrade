@@ -105,3 +105,41 @@ it('explains that an appealed doubt has no AI draft and is waiting for a human a
   expect(card.getByText(/No AI draft was made/)).toBeInTheDocument();
   expect(card.getByRole('button', { name: 'Publish answer' })).toBeInTheDocument();
 });
+
+describe('marking a doubt off topic', () => {
+  const failedCard = () => within(screen.getByRole('region', { name: 'Heap help' }));
+  it('asks for confirmation, then marks the doubt and refreshes the queue', async () => {
+    api.post.mockResolvedValue({ data: { removed: true } });
+    render(<MemoryRouter><TeacherReview /></MemoryRouter>);
+    fireEvent.click(failedCard().getByRole('button', { name: 'Mark off topic' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Mark this doubt off topic?' });
+    expect(within(dialog).getByText(/ask for a review once/)).toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Mark off topic' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/doubts/d9/off-topic'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+  it('does nothing when the dialog is cancelled', async () => {
+    render(<MemoryRouter><TeacherReview /></MemoryRouter>);
+    fireEvent.click(failedCard().getByRole('button', { name: 'Mark off topic' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(api.post).not.toHaveBeenCalled();
+  });
+  it('shows the server message when it fails, for example when the doubt was already answered', async () => {
+    api.post.mockRejectedValue({ response: { status: 409, data: { error: 'This doubt already has an approved answer, so it cannot be marked off topic.' } } });
+    render(<MemoryRouter><TeacherReview /></MemoryRouter>);
+    fireEvent.click(failedCard().getByRole('button', { name: 'Mark off topic' }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Mark off topic' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(await failedCard().findByRole('alert')).toHaveTextContent('already has an approved answer');
+  });
+  it('is also available while reviewing an AI draft', async () => {
+    api.post.mockResolvedValue({ data: { removed: true } });
+    data['/answers?state=pending'] = { answers: [{ _id: 'a1', source: 'ai', state: 'pending', content: 'Draft', doubtId: { _id: 'd1', title: 'Why loops?', body: 'x' } }] };
+    render(<MemoryRouter><TeacherReview /></MemoryRouter>);
+    fireEvent.click(within(screen.getByRole('region', { name: 'Why loops?' })).getByRole('button', { name: 'Mark off topic' }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Mark off topic' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/doubts/d1/off-topic'));
+  });
+});

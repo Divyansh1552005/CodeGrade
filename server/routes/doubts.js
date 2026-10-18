@@ -8,6 +8,8 @@ import { httpError } from '../middleware/errorHandler.js';
 import { ensureWork } from '../services/workService.js';
 import { createDoubtSchema } from '../validation/schemas.js';
 import { z } from 'zod';
+import { objectId } from '../validation/schemas.js';
+import { markOffTopicByTeacher } from '../services/doubtTriage.js';
 import {
   listDoubts, STATUS_FILTERS, findVisibleDoubt, listManualAnswerQueue, presentDoubt, findRemovedForOwner, presentRemoved, requestAppeal,
 } from '../services/doubtAccess.js';
@@ -105,6 +107,30 @@ router.get('/failed', requireAuth, requireRole('teacher'), async (req, res, next
     next(err);
   }
 });
+
+// POST /doubts/:id/off-topic  { reason? }  — a teacher marks a doubt off topic, usually while answering it.
+// The doubt is hidden from the board, the student is told and can appeal once (not again if the appeal
+// was already used). A doubt that already has an approved answer cannot be marked.
+router.post(
+  '/:id/off-topic',
+  requireAuth,
+  requireRole('teacher'),
+  validate(z.object({ id: objectId }), 'params'),
+  validate(z.object({ reason: z.string().trim().max(aiLimits().triage.reasonMaxChars).optional() })),
+  async (req, res, next) => {
+    try {
+      const visible = await findVisibleDoubt(req.params.id, req.user);
+      if (!visible) throw httpError(404, 'Doubt not found');
+      const outcome = await markOffTopicByTeacher(req.params.id, req.user, req.body.reason);
+      if (outcome.error === 'answered') throw httpError(409, 'This doubt already has an approved answer, so it cannot be marked off topic.');
+      if (outcome.error) throw httpError(404, 'Doubt not found');
+      req.log?.info('doubt.off_topic.by_teacher', { doubtId: String(visible._id) });
+      res.json({ removed: true, doubtId: String(visible._id) });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 // GET /doubts/:id/removed  — the author's own removed doubt, with the reason. Not linked from
 // any list; students reach it from the removal notification. Everyone else, including

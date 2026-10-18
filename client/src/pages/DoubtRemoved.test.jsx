@@ -10,7 +10,7 @@ vi.mock('react-hot-toast', () => ({ default: { error: vi.fn(), success: vi.fn() 
 vi.mock('../components/Markdown.jsx', () => ({ default: ({ children }) => <div>{children}</div> }));
 
 let removed;
-const doubt = (over = {}) => ({ id: 'd1', title: 'Dinner?', body: 'What should I cook?', status: 'auto_rejected', reason: 'This is about cooking, not programming.', offTopic: true, appealed: false, canAppeal: true, ...over });
+const doubt = (over = {}) => ({ id: 'd1', title: 'Dinner?', body: 'What should I cook?', status: 'auto_rejected', reason: 'This is about cooking, not programming.', offTopic: true, removedBy: 'ai', appealUsed: false, appealed: false, canAppeal: true, ...over });
 beforeEach(() => {
   invalidate();
   removed = doubt();
@@ -73,4 +73,17 @@ it('uses "removed" wording for a doubt that was not about being off topic', asyn
   show();
   expect(await screen.findByRole('heading', { level: 1, name: 'Your doubt was removed' })).toBeInTheDocument();
   expect(screen.getByText('Why it was removed')).toBeInTheDocument();
+});
+
+it('says a teacher made the decision', async () => {
+  removed = doubt({ removedBy: 'teacher', reason: 'A teacher marked this doubt as not about programming.' });
+  show();
+  expect(await screen.findByRole('heading', { level: 1, name: 'A teacher marked your doubt off topic' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Request teacher review' })).toBeInTheDocument();
+});
+it('shows that the decision is final, with no appeal button, once the one appeal was already used', async () => {
+  removed = doubt({ removedBy: 'teacher', canAppeal: false, appealUsed: true, appealed: false });
+  show();
+  expect(await screen.findByRole('status')).toHaveTextContent('You already asked for a review, so this decision is final.');
+  expect(screen.queryByRole('button', { name: 'Request teacher review' })).not.toBeInTheDocument();
 });

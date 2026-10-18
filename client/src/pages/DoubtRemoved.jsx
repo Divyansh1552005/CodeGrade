@@ -52,7 +52,7 @@ export default function DoubtRemoved() {
 
   return (
     <div className="max-w-2xl space-y-4">
-      <PageHeader title={doubt.offTopic ? 'Your doubt was marked off topic' : 'Your doubt was removed'} backTo="/doubts" backLabel="Doubts" />
+      <PageHeader title={doubt.removedBy === 'teacher' ? 'A teacher marked your doubt off topic' : doubt.offTopic ? 'Your doubt was marked off topic' : 'Your doubt was removed'} backTo="/doubts" backLabel="Doubts" />
       <Panel aria-label="Reason">
         <PanelHeader title={doubt.offTopic ? 'Why it was marked off topic' : 'Why it was removed'} />
         <PanelBody><p className="text-base">{doubt.reason}</p></PanelBody>
@@ -72,6 +72,8 @@ export default function DoubtRemoved() {
           <Button variant="primary" loading={busy} onClick={appeal}>Request teacher review</Button>
           {error && <ErrorState message={error} />}
         </div>
+      ) : doubt.appealUsed ? (
+        <p role="status" className="text-base text-fg-muted">You already asked for a review, so this decision is final.</p>
       ) : null}
     </div>
   );

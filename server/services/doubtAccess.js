@@ -140,6 +140,9 @@ export function presentRemoved(doubt) {
     status: doubt.status,
     reason: doubt.triage?.reason || 'It did not look like a question about programming.',
     offTopic: doubt.triage?.verdict !== 'spam_or_abusive',
+    removedBy: doubt.triage?.source === 'teacher' ? 'teacher' : 'ai',
+    // True once the one appeal was used, including when a teacher then removed the doubt again.
+    appealUsed: Boolean(doubt.appeal?.requestedAt),
     appealed: doubt.status === 'appealed',
     canAppeal: doubt.status === 'auto_rejected' && !doubt.appeal?.requestedAt,
   };

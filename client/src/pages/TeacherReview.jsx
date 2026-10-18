@@ -5,6 +5,7 @@ import { api } from '../api/client.js';
 import { useCachedQuery, invalidate } from '../api/useCachedQuery.js';
 import Markdown from '../components/Markdown.jsx';
 import MarkdownEditor from '../components/MarkdownEditor.jsx';
+import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import { Badge, Button, EmptyState, ErrorState, Field, Input, PageHeader, Panel, PanelBody, PanelHeader, Skeleton } from '../components/ui/index.js';
 
 export default function TeacherReview() {
@@ -24,6 +25,13 @@ export default function TeacherReview() {
     failed.refetch();
   }, [failed]);
 
+  const afterOffTopic = useCallback(() => {
+    invalidate('answers:pending');
+    invalidate('doubts:failed');
+    pending.refetch();
+    failed.refetch();
+  }, [pending, failed]);
+
   return (
     <div className="max-w-3xl">
       <PageHeader
@@ -36,7 +44,7 @@ export default function TeacherReview() {
       <section className="mb-10 space-y-4" aria-labelledby="drafts-heading">
         <h2 id="drafts-heading" className="text-md font-semibold">AI drafts awaiting approval</h2>
         {pending.loading && !pending.data && <div role="status" aria-label="Loading drafts" className="space-y-3"><Skeleton className="h-32 w-full" /></div>}
-        {answers.map((a) => <ReviewCard key={a._id} answer={a} onReviewed={afterReview} />)}
+        {answers.map((a) => <ReviewCard key={a._id} answer={a} onReviewed={afterReview} onOffTopic={afterOffTopic} />)}
         {!pending.loading && !pending.error && answers.length === 0 && (
           <EmptyState icon={CheckCheck} title="Nothing to review" description="New drafts appear here when students ask questions." />
         )}
@@ -45,7 +53,7 @@ export default function TeacherReview() {
       <section className="space-y-4" aria-labelledby="manual-heading">
         <h2 id="manual-heading" className="text-md font-semibold">Needs a manual answer</h2>
         {failed.loading && !failed.data && <div role="status" aria-label="Loading doubts" className="space-y-3"><Skeleton className="h-32 w-full" /></div>}
-        {failedDoubts.map((d) => <FailedDoubtCard key={d._id} doubt={d} onAnswered={afterManualAnswer} />)}
+        {failedDoubts.map((d) => <FailedDoubtCard key={d._id} doubt={d} onAnswered={afterManualAnswer} onOffTopic={afterOffTopic} />)}
         {!failed.loading && !failed.error && failedDoubts.length === 0 && (
           <EmptyState icon={MessagesSquare} title="No questions need a manual answer" description="Questions that need your direct answer appear here." />
         )}
@@ -54,11 +62,50 @@ export default function TeacherReview() {
   );
 }
 
+// "Mark off topic": removes the doubt from the board, tells the student, and lets them appeal once.
+function useMarkOffTopic(doubtId, onDone) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function confirm() {
+    setBusy(true);
+    setError('');
+    try {
+      await api.post(`/doubts/${doubtId}/off-topic`);
+      toast.success('Doubt marked off topic. The student has been told.');
+      setOpen(false);
+      onDone();
+    } catch (e) {
+      const msg = e.response?.data?.error || 'Could not mark the doubt off topic. Check your connection and try again.';
+      setError(msg);
+      setOpen(false);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return { open, setOpen, busy, error, confirm };
+}
+
+function OffTopicDialog({ state }) {
+  return (
+    <ConfirmDialog
+      open={state.open}
+      onClose={() => !state.busy && state.setOpen(false)}
+      onConfirm={state.confirm}
+      busy={state.busy}
+      title="Mark this doubt off topic?"
+      message="It will be removed from the doubts board and the student will be told. They can ask for a review once."
+      confirmLabel="Mark off topic"
+    />
+  );
+}
+
 function Question({ body }) {
   return <div className="border-l-2 border-border pl-3"><Markdown>{body}</Markdown></div>;
 }
 
-const ReviewCard = memo(function ReviewCard({ answer, onReviewed }) {
+const ReviewCard = memo(function ReviewCard({ answer, onReviewed, onOffTopic }) {
+  const offTopic = useMarkOffTopic(answer.doubtId?._id, onOffTopic);
   const [content, setContent] = useState(answer.content);
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState('');
@@ -100,14 +147,17 @@ const ReviewCard = memo(function ReviewCard({ answer, onReviewed }) {
         <div className="flex gap-2">
           <Button variant="primary" loading={busy === 'approve'} disabled={Boolean(busy)} onClick={() => doreview('approve')}>Approve</Button>
           <Button variant="danger" loading={busy === 'reject'} disabled={Boolean(busy)} onClick={() => doreview('reject')}>Reject</Button>
+          {answer.doubtId?._id && <Button disabled={Boolean(busy)} onClick={() => offTopic.setOpen(true)}>Mark off topic</Button>}
         </div>
-        {err && <ErrorState message={err} />}
+        {(err || offTopic.error) && <ErrorState message={err || offTopic.error} />}
+        <OffTopicDialog state={offTopic} />
       </PanelBody>
     </Panel>
   );
 });
 
-const FailedDoubtCard = memo(function FailedDoubtCard({ doubt, onAnswered }) {
+const FailedDoubtCard = memo(function FailedDoubtCard({ doubt, onAnswered, onOffTopic }) {
+  const offTopic = useMarkOffTopic(doubt._id, onOffTopic);
   const [content, setContent] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -155,8 +205,12 @@ const FailedDoubtCard = memo(function FailedDoubtCard({ doubt, onAnswered }) {
           <span className="text-sm font-medium">Your answer</span>
           <MarkdownEditor value={content} onChange={setContent} label="Answer content" minH="min-h-28" autoGrow />
         </div>
-        <Button variant="primary" loading={busy} onClick={submit}>Publish answer</Button>
-        {err && <ErrorState message={err} />}
+        <div className="flex flex-wrap gap-2">
+          <Button variant="primary" loading={busy} onClick={submit}>Publish answer</Button>
+          <Button disabled={busy} onClick={() => offTopic.setOpen(true)}>Mark off topic</Button>
+        </div>
+        {(err || offTopic.error) && <ErrorState message={err || offTopic.error} />}
+        <OffTopicDialog state={offTopic} />
       </PanelBody>
     </Panel>
   );

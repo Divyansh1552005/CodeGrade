@@ -11,8 +11,11 @@ const triageSchema = new mongoose.Schema({
   reason: String,
   model: String,
   lowConfidence: { type: Boolean, default: false },
-  // 'ai' when the model answered, 'fallback' when triage failed open (timeout, outage, bad output, stuck).
-  source: { type: String, enum: ['ai', 'fallback'] },
+  // 'ai' when the model answered, 'fallback' when triage failed open (timeout, outage, bad output, stuck),
+  // 'teacher' when a teacher marked the doubt off topic.
+  source: { type: String, enum: ['ai', 'fallback', 'teacher'] },
+  // The teacher who marked the doubt off topic (source 'teacher').
+  decidedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   error: String,
   decidedAt: Date,
 }, { _id: false });
