@@ -6,6 +6,7 @@ import { api } from '../../api/client.js';
 import { usePagedList } from '../../api/usePagedList.js';
 import PagedSection from '../../components/PagedSection.jsx';
 import ConfirmDialog from '../../components/ConfirmDialog.jsx';
+import ProofLinks from '../../components/admin/ProofLinks.jsx';
 import { announceCountsChanged } from '../../components/admin/usePendingCount.js';
 import { Badge, Button, EmptyState, Field, Modal, PageHeader, Table, TBody, Td, Textarea, Th, THead, Tabs, TabsList, TabsTrigger, TabsContent, Tr } from '../../components/ui/index.js';
 
@@ -56,6 +57,9 @@ function ApplicationDetail({ application, initialConfirm = null, onClose, onDeci
         <dl className="space-y-4 text-base">
           <div><dt className="text-sm font-medium">Status</dt><dd className="mt-1"><Badge tone={tone[application.status]}>{application.status[0].toUpperCase() + application.status.slice(1)}</Badge></dd></div>
           <div><dt className="text-sm font-medium">Organization</dt><dd className="mt-1 whitespace-pre-wrap break-words text-fg-muted">{application.organization}</dd></div>
+          <div><dt className="text-sm font-medium">Degree</dt><dd className="mt-1 whitespace-pre-wrap break-words text-fg-muted">{application.degree || 'Not given.'}</dd></div>
+          <div><dt className="text-sm font-medium">Degree link</dt><dd className="mt-1"><ProofLinks links={application.degreeLink ? [application.degreeLink] : []} /></dd></div>
+          <div><dt className="text-sm font-medium">Other proof</dt><dd className="mt-1"><ProofLinks links={application.proofLinks} /></dd></div>
           <div><dt className="text-sm font-medium">Note</dt><dd className="mt-1 whitespace-pre-wrap break-words text-fg-muted">{application.note || 'No note.'}</dd></div>
           <div><dt className="text-sm font-medium">Submitted</dt><dd className="mt-1 text-fg-muted">{when(application.submittedAt)}</dd></div>
           {application.decisionReason && <div><dt className="text-sm font-medium">Reason given</dt><dd className="mt-1 whitespace-pre-wrap break-words text-fg-muted">{application.decisionReason}</dd></div>}
