@@ -20,5 +20,6 @@ const schema = new mongoose.Schema({
   decisionSeq: { type: Number, default: 0 },
 }, { timestamps: true });
 schema.index({ status: 1, visibleAt: -1, _id: -1 });
+schema.index({ status: 1, createdAt: -1, _id: -1 });
 
 export default mongoose.model('TeacherApplication', schema);

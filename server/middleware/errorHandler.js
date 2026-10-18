@@ -27,7 +27,9 @@ export function errorHandler(err, req, res, _next) {
   if (status >= 500) {
     console.error(err);
   }
-  return res.status(status).json({ error: err.message || 'Internal server error' });
+  // A string code on a client error (for example ADMIN_PROTECTED) is part of the answer so the UI can act on it.
+  const code = status < 500 && typeof err.code === 'string' && /^[A-Z_]+$/.test(err.code) ? { code: err.code } : {};
+  return res.status(status).json({ error: err.message || 'Internal server error', ...code });
 }
 
 /** Small helper to build errors with an HTTP status attached. */

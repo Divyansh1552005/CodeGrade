@@ -16,6 +16,7 @@ const ID = '507f1f77bcf86cd799439011';
 //   app        : students and teachers
 //   student    : students only
 //   teacher    : teachers only
+//   admin      : the admin only; everyone else, signed in or not, gets the same 404 as an unknown route
 const POLICY = {
   'GET /health': 'public',
   'GET /auth/config': 'public',
@@ -36,6 +37,9 @@ const POLICY = {
   'GET /doubts/failed': 'teacher', 'POST /doubts/:id/off-topic': 'teacher',
   'GET /answers': 'teacher', 'POST /answers': 'teacher', 'PATCH /answers/:id/approve': 'teacher', 'PATCH /answers/:id/reject': 'teacher',
   'GET /jobs': 'teacher', 'POST /jobs': 'teacher', 'GET /jobs/:id': 'teacher',
+  'GET /admin/users': 'admin', 'POST /admin/users/:id/role': 'admin', 'POST /admin/users/:id/suspend': 'admin', 'POST /admin/users/:id/unsuspend': 'admin',
+  'GET /admin/teacher-applications': 'admin', 'POST /admin/teacher-applications/:id/approve': 'admin', 'POST /admin/teacher-applications/:id/reject': 'admin',
+  'GET /admin/audit-log': 'admin',
 };
 
 const ALLOWED = {
@@ -43,6 +47,7 @@ const ALLOWED = {
   app: ['student', 'teacher'],
   student: ['student'],
   teacher: ['teacher'],
+  admin: ['admin'],
 };
 const ACTORS = ['student', 'teacher', 'teacher_applicant', 'admin', 'suspended'];
 
@@ -59,7 +64,8 @@ describe('route access rules', () => {
   it('answers 401 to a caller with no token on every route that needs one', async () => {
     for (const r of routes.filter((x) => POLICY[key(x)] !== 'public')) {
       const res = await request(app)[r.method.toLowerCase()](r.path.replace(/:\w+/g, ID)).send({});
-      expect({ route: key(r), status: res.status }).toEqual({ route: key(r), status: 401 });
+      const expected = POLICY[key(r)] === 'admin' ? 404 : 401; // /admin does not reveal itself
+      expect({ route: key(r), status: res.status }).toEqual({ route: key(r), status: expected });
     }
   });
 
@@ -77,10 +83,12 @@ describe('route access rules', () => {
       for (const actor of ACTORS) {
         const res = await request(app)[r.method.toLowerCase()](r.path.replace(/:\w+/g, ID))
           .set('Authorization', `Bearer ${users[actor].accessToken}`).send({});
-        const passedGuard = res.status !== 401 && res.status !== 403;
+        const adminRoute = POLICY[key(r)] === 'admin';
+        // An admin route that refuses answers a bare 404 (error "Not found"); a 404 with another message came from the handler.
+        const passedGuard = adminRoute ? !(res.status === 404 && res.body.error === 'Not found') : res.status !== 401 && res.status !== 403;
         const shouldPass = allowed.includes(actor);
         if (passedGuard !== shouldPass) failures.push(`${key(r)} as ${actor}: expected ${shouldPass ? 'access' : 'denied'}, got ${res.status}`);
-        if (!shouldPass && actor === 'teacher_applicant' && res.status === 403 && res.body.code !== 'TEACHER_PENDING' && POLICY[key(r)] !== 'student' && POLICY[key(r)] !== 'teacher') {
+        if (!shouldPass && actor === 'teacher_applicant' && res.status === 403 && res.body.code !== 'TEACHER_PENDING' && !['student', 'teacher'].includes(POLICY[key(r)])) {
           failures.push(`${key(r)} as applicant: missing TEACHER_PENDING`);
         }
       }

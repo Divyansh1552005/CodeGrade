@@ -18,29 +18,32 @@ import { ALL_ROLES, APP_ROLES, ROLES } from '../utils/roles.js';
  * Also applies the basic per-user rate limit (see rateLimit.js) here rather than per-route, so every
  * protected route gets it automatically.
  */
+/**
+ * Who is making this request? Returns { user } or { status, body } describing why not. Every route guard is
+ * built on this, so token checking lives in one place.
+ */
+async function identify(req) {
+  try {
+    const [scheme, headerToken] = (req.headers.authorization || '').split(' ');
+    const token = scheme === 'Bearer' ? headerToken : null;
+    if (!token) return { status: 401, body: { error: 'Not authenticated' } };
+
+    const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET, { algorithms: ['HS256'] });
+    const user = await User.findById(payload.sub).select('-passwordHash');
+    if (!user) return { status: 401, body: { error: 'User no longer exists' } };
+    // Tokens issued before a password reset or role change carry an older version. Missing counts as 0.
+    if ((payload.tv ?? 0) !== (user.tokenVersion ?? 0)) return { status: 401, body: { error: 'Invalid or expired token' } };
+    return { user };
+  } catch (err) {
+    return { status: 401, body: { error: 'Invalid or expired token' } };
+  }
+}
+
 export function authenticate({ roles }) {
   return async function authMiddleware(req, res, next) {
-    let user;
-    try {
-      const [scheme, headerToken] = (req.headers.authorization || '').split(' ');
-      const token = scheme === 'Bearer' ? headerToken : null;
-
-      if (!token) {
-        return res.status(401).json({ error: 'Not authenticated' });
-      }
-
-      const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET, { algorithms: ['HS256'] });
-      user = await User.findById(payload.sub).select('-passwordHash');
-      if (!user) {
-        return res.status(401).json({ error: 'User no longer exists' });
-      }
-      // Tokens issued before a password reset or role change carry an older version. Missing counts as 0.
-      if ((payload.tv ?? 0) !== (user.tokenVersion ?? 0)) {
-        return res.status(401).json({ error: 'Invalid or expired token' });
-      }
-    } catch (err) {
-      return res.status(401).json({ error: 'Invalid or expired token' });
-    }
+    const found = await identify(req);
+    if (!found.user) return res.status(found.status).json(found.body);
+    const { user } = found;
 
     if (user.suspendedAt) {
       return res.status(403).json({ error: 'This account is suspended.', code: 'ACCOUNT_SUSPENDED' });
@@ -62,6 +65,18 @@ export function authenticate({ roles }) {
     // not be swallowed and reported back as a misleading 401.
     return generalRateLimit(req, res, next);
   };
+}
+
+/**
+ * Guard for every /admin route. Whatever is wrong (no token, a bad token, a student, an applicant, a
+ * suspended admin) the answer is the same 404 as for a route that does not exist, so /admin does not
+ * reveal itself. The role is the one in the database.
+ */
+export async function requireAdmin(req, res, next) {
+  const found = await identify(req);
+  if (!found.user || found.user.role !== ROLES.ADMIN || found.user.suspendedAt) return res.status(404).json({ error: 'Not found' });
+  req.user = found.user;
+  return generalRateLimit(req, res, next);
 }
 
 /** Students and teachers: every product route. */
