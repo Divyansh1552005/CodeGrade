@@ -88,6 +88,15 @@ describe('applications queue', () => {
     expect(await screen.findByText('Applicant r1')).toBeInTheDocument();
     expect(screen.getByTestId('where')).toHaveTextContent('status=rejected');
   });
+  it('has Approve and Reject buttons on each pending row that go straight to the confirmation', async () => {
+    api.get.mockResolvedValue(appPage([application('a1')]));
+    open();
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve Applicant a1' }));
+    const confirm = await screen.findByRole('dialog');
+    expect(within(confirm).getByText(/become a teacher/)).toBeInTheDocument();
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Approve' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/admin/teacher-applications/a1/approve', {}));
+  });
   it('opens an application, shows the whole note as text, and approves after a confirmation that says what happens', async () => {
     api.get.mockResolvedValue(appPage([application('a1')]));
     open();

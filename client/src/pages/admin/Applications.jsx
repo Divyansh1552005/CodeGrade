@@ -15,8 +15,8 @@ const tone = { pending: 'warning', approved: 'success', rejected: 'danger' };
 const when = (value) => (value ? new Date(value).toLocaleDateString() : '');
 
 /** One application: everything the applicant wrote, as plain text, with the decision buttons. */
-function ApplicationDetail({ application, onClose, onDecided }) {
-  const [confirming, setConfirming] = useState(null); // 'approve' | 'reject'
+function ApplicationDetail({ application, initialConfirm = null, onClose, onDecided }) {
+  const [confirming, setConfirming] = useState(initialConfirm); // 'approve' | 'reject'
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -95,19 +95,25 @@ export default function Applications() {
         </TabsList>
         <TabsContent value={status} className="mt-4">
           <PagedSection
-            id="applications" heading="Applications" hideHeading label="applications" list={list} skeletonColumns={4}
+            id="applications" heading="Applications" hideHeading label="applications" list={list} skeletonColumns={5}
             empty={<EmptyState icon={ClipboardList} title={status === 'pending' ? 'No applications waiting' : `No ${status} applications`} description={status === 'pending' ? 'New teacher applications show up here after the applicant verifies their email.' : 'Nothing here yet.'} />}
           >
             {(items) => (
               <Table aria-label={`${status} applications`}>
-                <THead><Tr className="hover:bg-transparent"><Th>Name</Th><Th>Email</Th><Th>Organization</Th><Th>Submitted</Th></Tr></THead>
+                <THead><Tr className="hover:bg-transparent"><Th>Name</Th><Th>Email</Th><Th>Organization</Th><Th>Submitted</Th><Th><span className="sr-only">Actions</span></Th></Tr></THead>
                 <TBody>
                   {items.map((application) => (
                     <Tr key={application._id}>
-                      <Td className="max-w-48 truncate"><button type="button" className="max-w-full truncate rounded-sm text-left font-medium text-accent-text hover:underline" onClick={() => setOpen(application)} aria-label={`Open application from ${application.name}`}>{application.name}</button></Td>
+                      <Td className="max-w-48 truncate"><button type="button" className="max-w-full truncate rounded-sm text-left font-medium text-accent-text hover:underline" onClick={() => setOpen({ application })} aria-label={`Open application from ${application.name}`}>{application.name}</button></Td>
                       <Td className="max-w-56 truncate text-fg-muted">{application.email}</Td>
                       <Td className="max-w-56 truncate">{application.organization}</Td>
                       <Td className="whitespace-nowrap text-fg-muted">{when(application.submittedAt)}</Td>
+                      <Td className="whitespace-nowrap text-right">
+                        <div className="flex justify-end gap-2">
+                          {application.status === 'pending' && <Button size="sm" onClick={() => setOpen({ application, confirm: 'reject' })} aria-label={`Reject ${application.name}`}>Reject</Button>}
+                          {application.status !== 'approved' && <Button size="sm" variant="primary" onClick={() => setOpen({ application, confirm: 'approve' })} aria-label={`Approve ${application.name}`}>Approve</Button>}
+                        </div>
+                      </Td>
                     </Tr>
                   ))}
                 </TBody>
@@ -116,7 +122,7 @@ export default function Applications() {
           </PagedSection>
         </TabsContent>
       </Tabs>
-      {open && <ApplicationDetail application={open} onClose={() => setOpen(null)} onDecided={() => { setOpen(null); list.reload(); }} />}
+      {open && <ApplicationDetail key={open.application._id} application={open.application} initialConfirm={open.confirm ?? null} onClose={() => setOpen(null)} onDecided={() => { setOpen(null); list.reload(); }} />}
     </>
   );
 }
