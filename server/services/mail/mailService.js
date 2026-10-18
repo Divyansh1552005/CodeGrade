@@ -82,7 +82,7 @@ export async function sendEmail({ to, subject, html, text, tags = [], idempotenc
     logger.info('email.sent', { to, tags: tags.map((t) => t.value), providerId: result.id, ms: Date.now() - started });
     return result;
   } catch (err) {
-    logger.warn('email.failed', { to, tags: tags.map((t) => t.value), permanent: Boolean(err.permanent), status: err.status ?? null, code: err.code || '', ms: Date.now() - started });
+    logger.warn('email.failed', { to, tags: tags.map((t) => t.value), permanent: Boolean(err.permanent), status: err.status ?? null, errorCode: err.code || '', ms: Date.now() - started });
     throw err;
   }
 }
