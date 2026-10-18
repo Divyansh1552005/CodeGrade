@@ -53,3 +53,37 @@ it('does not refill an invalidated cache with an older in-flight response', asyn
   expect(api.get).toHaveBeenCalledTimes(2);
   first.unmount(); second.unmount();
 });
+
+const setHidden = (hidden) => {
+  Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+};
+
+it('with pauseWhenHidden, does not poll in a background tab and refreshes when it is visible again', async () => {
+  vi.useFakeTimers();
+  api.get.mockReset().mockResolvedValue({ data: { n: 1 } });
+  const { unmount } = renderHook(() => useCachedQuery('/count', { refetchInterval: 45000, pauseWhenHidden: true }));
+  await act(async () => {});
+  expect(api.get).toHaveBeenCalledTimes(1);
+  setHidden(true);
+  await act(async () => { vi.advanceTimersByTime(45000 * 4); });
+  expect(api.get).toHaveBeenCalledTimes(1);
+  setHidden(false);
+  await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+  expect(api.get).toHaveBeenCalledTimes(2);
+  await act(async () => { vi.advanceTimersByTime(45000); });
+  expect(api.get).toHaveBeenCalledTimes(3);
+  unmount();
+  setHidden(false);
+});
+
+it('without pauseWhenHidden, keeps polling as before', async () => {
+  vi.useFakeTimers();
+  setHidden(true);
+  api.get.mockReset().mockResolvedValue({ data: { n: 1 } });
+  const { unmount } = renderHook(() => useCachedQuery('/plain', { refetchInterval: 1000 }));
+  await act(async () => {});
+  await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+  expect(api.get.mock.calls.length).toBeGreaterThan(2);
+  unmount();
+  setHidden(false);
+});

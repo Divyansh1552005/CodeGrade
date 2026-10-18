@@ -16,7 +16,7 @@ export function invalidate(key) {
  * Fetch `url` with GET and cache the result by key (default: the url).
  * Returns { data, loading, error, refetch }.
  */
-export function useCachedQuery(url, { key = url, enabled = true, refetchInterval = 0 } = {}) {
+export function useCachedQuery(url, { key = url, enabled = true, refetchInterval = 0, pauseWhenHidden = false } = {}) {
   const [data, setData] = useState(() => cache.get(key));
   const [loading, setLoading] = useState(enabled && !cache.has(key));
   const [error, setError] = useState('');
@@ -63,11 +63,19 @@ export function useCachedQuery(url, { key = url, enabled = true, refetchInterval
     return () => { generation.current += 1; };
   }, [run, key, enabled]);
 
+  // With `pauseWhenHidden`, polling stops while the tab is in the background and the query
+  // refreshes once as soon as the tab is visible again.
   useEffect(() => {
-    if (!enabled || !refetchInterval) return;
-    const timer = setInterval(() => run(), refetchInterval);
-    return () => clearInterval(timer);
-  }, [run, enabled, refetchInterval]);
+    if (!enabled || !refetchInterval) return undefined;
+    const hidden = () => pauseWhenHidden && typeof document !== 'undefined' && document.hidden;
+    const timer = setInterval(() => { if (!hidden()) run(); }, refetchInterval);
+    const onVisible = () => { if (!hidden()) run(); };
+    if (pauseWhenHidden) document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(timer);
+      if (pauseWhenHidden) document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [run, enabled, refetchInterval, pauseWhenHidden]);
 
   const refetch = useCallback(() => run({ force: true }), [run]);
 

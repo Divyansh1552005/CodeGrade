@@ -7,6 +7,7 @@ import { useAuth } from '../auth/AuthContext.jsx';
 import { useTheme } from '../theme/ThemeContext.jsx';
 import { useCachedQuery } from '../api/useCachedQuery.js';
 import { cn } from '../lib/cn.js';
+import NotificationBell from './NotificationBell.jsx';
 import {
   Avatar, Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Icon, Progress,
 } from './ui/index.js';
@@ -114,6 +115,7 @@ function SidebarContent({ user }) {
         {user?.role === 'student' && <XpMeter userId={user._id} />}
         <div className="flex items-center gap-1">
           <div className="min-w-0 flex-1"><UserMenu /></div>
+          <NotificationBell />
           <ThemeToggle />
         </div>
       </div>
@@ -166,7 +168,10 @@ export default function AppShell() {
           </Dialog.Portal>
         </Dialog.Root>
         <Brand isAuthed />
-        <ThemeToggle />
+        <div className="flex items-center">
+          <NotificationBell />
+          <ThemeToggle />
+        </div>
       </header>
     </>
   );
