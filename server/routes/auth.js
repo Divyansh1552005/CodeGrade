@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 import { requireAnyAuth } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
@@ -19,6 +20,10 @@ import { consumeToken, issueToken, mayIssue, supersedeTokens } from '../services
 import { queueEmail } from '../services/emailJob.js';
 import { revokeAllSessions } from '../services/tokenService.js';
 import { maskEmail } from '../utils/maskEmail.js';
+import { adminLoginLimit, isAdminAttempt } from '../middleware/adminLoginLimit.js';
+import { adminConfig, isReservedEmail } from '../services/adminConfig.js';
+import { audit, auditCoalesced } from '../services/audit.js';
+import { verifyCode } from '../utils/totp.js';
 
 const router = Router();
 
@@ -95,6 +100,12 @@ router.post('/register', ...authLimits('register'), validate(registerSchema), as
   try {
     const { name, email, password } = req.body;
 
+    // The admin address is reserved. It answers like any account that already exists and never changes.
+    if (isReservedEmail(email)) {
+      if (!features.emailVerification()) throw httpError(409, 'Resource already exists');
+      return await paced(async () => ({ status: 202, body: { ...GENERIC.signup, email: String(email).toLowerCase() } }))(req, res, next);
+    }
+
     if (features.emailVerification()) {
       return await paced(async () => {
         await registerPending({ name, email, password });
@@ -112,10 +123,52 @@ router.post('/register', ...authLimits('register'), validate(registerSchema), as
   }
 });
 
-// POST /auth/login  { email, password }
-router.post('/login', ...authLimits('login'), validate(loginSchema), async (req, res, next) => {
+// Hash compared when the account does not exist, so an unknown address costs the same bcrypt work as a real one.
+const DUMMY_HASH = bcrypt.hashSync('not-a-real-password', 10);
+
+/**
+ * Login for the admin account, or any attempt that asks for scope "admin". Every failure is the same 401 as
+ * a wrong password, whatever the reason (wrong password, not an admin, wrong or reused authenticator code,
+ * suspended), and does the same work, so neither the answer nor the timing says which one it was. Failures
+ * are audited (coalesced per IP and minute) without the attempted password; a failure creates no session,
+ * no refresh token and no lastLoginAt.
+ */
+async function adminLogin(req, res) {
+  const { email, password, totp } = req.body;
+  const user = await User.findOne({ email: String(email).toLowerCase() });
+  const passwordOk = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
+  const secret = adminConfig().totpSecret;
+  const step = secret ? verifyCode(secret, totp) : null; // computed even when the password is wrong
+  const isAdmin = Boolean(user) && user.role === 'admin' && !user.suspendedAt;
+  let reason = null;
+  if (!user) reason = 'unknown account';
+  else if (!passwordOk) reason = 'wrong password';
+  else if (!isAdmin) reason = 'not an admin';
+  else if (secret && step === null) reason = 'wrong authenticator code';
+  if (!reason && secret) {
+    // The code can be used once: the step is stored atomically, so a replay (also from another process) fails.
+    const fresh = await User.findOneAndUpdate(
+      { _id: user._id, $or: [{ totpLastStep: { $exists: false } }, { totpLastStep: { $lt: step } }] },
+      { $set: { totpLastStep: step } },
+    );
+    if (!fresh) reason = 'authenticator code reused';
+  }
+  if (reason) {
+    await auditCoalesced({ action: 'admin.login_failed', target: user ?? undefined, req, detail: reason });
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
+  await touchLastLogin(user._id);
+  const { accessToken, refreshToken } = await issueTokenPair(user);
+  setRefreshCookie(res, refreshToken);
+  await audit({ action: 'admin.login', actor: user, req });
+  return res.json({ user: user.toJSON(), accessToken });
+}
+
+// POST /auth/login  { email, password, scope?, totp? }
+router.post('/login', ...authLimits('login'), validate(loginSchema), adminLoginLimit, async (req, res, next) => {
   try {
     const { email, password } = req.body;
+    if (isAdminAttempt(req.body)) return await adminLogin(req, res);
     const user = await User.findOne({ email: String(email).toLowerCase() });
     // With email verification on, an unknown address still pays for one bcrypt compare, so the time does not give it away.
     if (!user && features.emailVerification()) await User.hashPassword(password);
@@ -153,14 +206,14 @@ router.post('/verify-email', requireFeature('emailVerification'), ...authLimits(
 // POST /auth/resend-verification  { email }  — the same answer whatever the account's state. The cooldown
 // and the hourly cap are enforced silently for the same reason; only the per-IP limit can answer 429.
 router.post('/resend-verification', requireFeature('emailVerification'), ...authLimits('resend-verification'), validate(emailOnlySchema), paced(async (req) => {
-  const user = await User.findOne({ email: req.body.email.toLowerCase() });
+  const user = isReservedEmail(req.body.email) ? null : await User.findOne({ email: req.body.email.toLowerCase() });
   if (user && user.emailVerified === false) await sendVerification(user);
   return { body: GENERIC.resend };
 }));
 
 // POST /auth/forgot-password  { email }  — an unverified account gets a verification email instead of a reset.
 router.post('/forgot-password', requireFeature('passwordReset'), ...authLimits('forgot-password'), validate(emailOnlySchema), paced(async (req) => {
-  const user = await User.findOne({ email: req.body.email.toLowerCase() });
+  const user = isReservedEmail(req.body.email) ? null : await User.findOne({ email: req.body.email.toLowerCase() });
   if (user) {
     if (features.emailVerification() && user.emailVerified === false) await sendVerification(user);
     else if (await mayIssue(user._id, 'reset')) {

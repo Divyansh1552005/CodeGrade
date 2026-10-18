@@ -15,6 +15,8 @@ import Submission from './models/Submission.js';
 import Doubt from './models/Doubt.js';
 import User from './models/User.js';
 import { connectDB } from './config/db.js';
+import { validateAdminConfig } from './services/adminConfig.js';
+import { bootstrapAdmin } from './services/adminBootstrap.js';
 import { validateMailConfig } from './config/mail.js';
 
 // Load server/.env regardless of where `node` is invoked from (also covers
@@ -29,6 +31,7 @@ async function main() {
   validateMailConfig(); // fail fast, before connecting, when an email flag is on and the config is wrong
   await connectDB();
   await Promise.all([User.init(), WorkItem.init(), Answer.init(), Problem.init(), Submission.init(), Doubt.init(), StudentStats.init(), Notification.init(), UserStats.init(), Badge.init(), UserBadge.init(), GamificationEvent.init()]);
+  await bootstrapAdmin(); // API process only, once at startup
   const app = createApp();
   app.listen(PORT, () => {
     console.log(`API listening on http://localhost:${PORT}`);

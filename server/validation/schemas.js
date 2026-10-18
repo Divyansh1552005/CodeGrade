@@ -112,6 +112,10 @@ export const resetPasswordSchema = tokenSchema.extend({ password: passwordSchema
 export const loginSchema = z.object({
   email: z.string().trim().email('must be a valid email'),
   password: nonEmpty('password'),
+  // "admin" is sent only by the /admin/login page: a non-admin is then refused like a wrong password and
+  // gets no session. `totp` is the authenticator code, checked only for the admin account.
+  scope: z.literal('admin').optional(),
+  totp: z.string().max(12).optional(),
 });
 
 // Shared paging query: `limit` defaults to 10 and is clamped to 50 on the server; anything that is

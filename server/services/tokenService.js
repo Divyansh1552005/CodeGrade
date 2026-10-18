@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import RefreshToken from '../models/RefreshToken.js';
 import User from '../models/User.js';
+import { adminConfig } from './adminConfig.js';
 
 const ACCESS_SECRET = () => process.env.JWT_ACCESS_SECRET;
 const REFRESH_SECRET = () => process.env.JWT_REFRESH_SECRET;
@@ -30,11 +31,14 @@ export function signAccessToken(user) {
  * unique jti. We persist only the jti's hash so the token is revocable (for
  * rotation, logout, and reuse detection). Returns the signed JWT string.
  */
-export async function issueRefreshToken(userId, tokenVersion = 0) {
+export async function issueRefreshToken(userId, tokenVersion = 0, sessionEnd) {
   const jti = crypto.randomBytes(24).toString('hex');
-  const token = jwt.sign({ sub: userId.toString(), jti, tv: tokenVersion }, REFRESH_SECRET(), {
-    expiresIn: REFRESH_EXPIRY(),
-  });
+  // `se` (session end, epoch seconds) is only set for the admin: the token expires then, and rotation carries
+  // the same value forward, so a session can never be stretched past ADMIN_SESSION_HOURS by refreshing.
+  const payload = { sub: userId.toString(), jti, tv: tokenVersion, ...(sessionEnd ? { se: sessionEnd } : {}) };
+  const token = jwt.sign(payload, REFRESH_SECRET(), sessionEnd
+    ? { expiresIn: Math.max(1, sessionEnd - Math.floor(Date.now() / 1000)) }
+    : { expiresIn: REFRESH_EXPIRY() });
   const { exp } = jwt.decode(token);
   await RefreshToken.create({
     userId,
@@ -45,9 +49,17 @@ export async function issueRefreshToken(userId, tokenVersion = 0) {
 }
 
 /** Convenience: mint both tokens for a user (login / register). */
-export async function issueTokenPair(user) {
-  const accessToken = signAccessToken(user);
-  const refreshToken = await issueRefreshToken(user._id, user.tokenVersion ?? 0);
+export async function issueTokenPair(user, { sessionEnd } = {}) {
+  if (user.role !== 'admin') {
+    const accessToken = signAccessToken(user);
+    const refreshToken = await issueRefreshToken(user._id, user.tokenVersion ?? 0);
+    return { accessToken, refreshToken };
+  }
+  // The admin gets a short session: no long-lived refresh token, and an access token that never outlives it.
+  const now = Math.floor(Date.now() / 1000);
+  const end = sessionEnd ?? now + Math.round(adminConfig().sessionHours * 3600);
+  const accessToken = jwt.sign({ sub: user._id.toString(), tv: user.tokenVersion ?? 0 }, ACCESS_SECRET(), { expiresIn: Math.max(1, Math.min(15 * 60, end - now)) });
+  const refreshToken = await issueRefreshToken(user._id, user.tokenVersion ?? 0, end);
   return { accessToken, refreshToken };
 }
 
@@ -94,6 +106,11 @@ export async function rotateRefreshToken(rawToken, userLookup) {
   // A password reset raised the user's version after this token was issued.
   if ((payload.tv ?? 0) !== (user.tokenVersion ?? 0)) throw unauthorized('Session ended; log in again');
 
+  if (user.role === 'admin') {
+    // An admin session always has a fixed end; a token without one is not accepted.
+    if (!payload.se) throw unauthorized('Session ended; log in again');
+    return issueTokenPair(user, { sessionEnd: payload.se });
+  }
   return issueTokenPair(user);
 }
 

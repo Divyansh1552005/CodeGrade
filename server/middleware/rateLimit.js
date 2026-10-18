@@ -34,7 +34,7 @@ export function makeLimiter({ keyPrefix, points, duration }) {
         });
     return real;
   }
-  return { consume: (key) => ensure().consume(key) };
+  return { consume: (key) => ensure().consume(key), reset: (key) => ensure().delete(key) };
 }
 
 // Basic abuse guard applied to every authenticated request (wired into
