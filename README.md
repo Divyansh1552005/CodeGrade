@@ -27,6 +27,12 @@ Captured against sample data in a development build.
 
 ---
 
+## AI doubt triage and hint chat
+
+Two optional features, each behind a flag (`FEATURE_AI_TRIAGE`, `FEATURE_HINT_CHAT`, both off by default): unrelated or abusive doubts are removed automatically and the student is notified, and a per-problem hint chat gives escalating hints with strict daily limits. See `docs/ai-doubts-hints.md` for the environment variables, routes, quota rules and a manual test checklist.
+
+---
+
 ## Tech stack
 
 | Layer | Choice |
