@@ -72,6 +72,26 @@ node scripts/migrateEmailVerified.js
 
 ---
 
+## Teacher access and the admin account
+
+Anyone can sign up, but only as a student or as a teacher *applicant*. A teacher account needs approval from the one admin.
+
+**Roles.** `student`, `teacher`, `admin` and `teacher_applicant`. The role is read from the database on every request (the token only identifies the user), and every check is deny-by-default: `requireAuth` lets only students and teachers in, so an applicant (or the admin) is refused on every product route even if a route forgot a role check. A test walks every route against every role and fails if a route is added without an explicit rule. Role changes, approval, rejection, suspension and a changed admin password end the user's sessions (a `tokenVersion` carried by the tokens).
+
+**Signup.** `POST /auth/register` takes `accountType` (`student` or `teacher`) and nothing privileged: any other key, including `role`, is a 400. A teacher also sends `organization` (up to 120 characters) and an optional `note` (up to 500). All of that text is plain text: control and bidirectional characters are stripped, it is escaped in email and never rendered as HTML or a link.
+
+**Applications.** A teacher signup creates a `teacher_applicant` and an application. After the applicant verifies their email the application appears on the admin Applications page (an unverified, possibly fake, address never does). Until approval the applicant can only log in, see their status and log out. The admin approves (the user becomes a teacher) or rejects with an optional reason (shown to the applicant). Each decision is one atomic update, ends the user's sessions, is audited, and emails the applicant (approved, rejected). A rejected application can later be flipped to approved. At most `TEACHER_APPLICATION_CAP` verified applications can wait, and teacher signups are limited per IP.
+
+**The admin.** `ADMIN_EMAIL` and `ADMIN_PASSWORD` in the environment define the single admin; there is no 2FA, no invites and no mail to the admin (the admin learns about applications from the Applications page and its pending count). At API startup the account is created or promoted first, then any other admin is demoted, so there is never zero admins. A changed password updates the hash and ends the admin's sessions; a changed `ADMIN_EMAIL` moves the role. In production the password must be at least 12 characters and not trivial, or the server refuses to start. The admin address is reserved: signup, forgot-password and resend for it answer like any existing account and change nothing. The admin logs in at `/admin/login` through the normal login API with `scope: "admin"`; every failure is the same 401. Limits: 5 attempts per IP in 15 minutes (429), and 5 failed attempts against the admin address lock the account for 15 minutes (the same 401, no hint, ends by itself). Sessions last `ADMIN_SESSION_HOURS` (default 8) and refreshing never extends them. Admin API routes (`/admin/*`) answer 404 to everyone else. The admin cannot be demoted, suspended or changed through any route, and nobody can be given admin through the API.
+
+**Admin pages.** Applications (pending, approved, rejected), Users (search, filters, demote to student, suspend) and the Audit log, which is append-only (no route or service edits or deletes an entry, and secrets are never stored).
+
+**Legacy teachers.** Accounts that hold the teacher role without ever having been approved (including anyone who self-registered before signup was locked down) keep working and show as "Legacy" in the Users page. `node scripts/legacyTeachers.js [--csv=FILE]` is a read-only report of them and of the answers they approved; review it and demote strangers on the Users page.
+
+> `.env` holds the admin password: never commit it. Whoever can read it can log in as admin.
+
+---
+
 ## Tech stack
 
 | Layer | Choice |
@@ -587,6 +607,8 @@ A hybrid model chosen for security:
 |---|---|---|---|
 | POST | `/auth/register` `/auth/login` | public | issue access + refresh tokens |
 | POST | `/auth/refresh` `/auth/logout` | public | rotate / revoke refresh token |
+| GET | `/teacher-application` | any signed-in | the user's own teacher application status |
+| GET/POST | `/admin/users`, `/admin/teacher-applications`, `/admin/audit-log` | admin (404 for everyone else) | accounts, applications, audit log |
 | GET | `/auth/config` | public | which email features are on |
 | POST | `/auth/verify-email` `/auth/resend-verification` | public | verify an address / send a new link (flag) |
 | POST | `/auth/forgot-password` `/auth/reset-password` | public | request / complete a password reset (flag) |
