@@ -6,7 +6,8 @@ import { requireRole } from '../middleware/roleGuard.js';
 import { validate } from '../middleware/validate.js';
 import { httpError } from '../middleware/errorHandler.js';
 import { ensureWork } from '../services/workService.js';
-import { createDoubtSchema } from '../validation/schemas.js';
+import { createDoubtSchema, pageQuerySchema } from '../validation/schemas.js';
+import { parseCursor } from '../utils/pagination.js';
 import { z } from 'zod';
 import { objectId } from '../validation/schemas.js';
 import { markOffTopicByTeacher } from '../services/doubtTriage.js';
@@ -80,16 +81,17 @@ router.post(
   }
 );
 
-// GET /doubts[?mine=1][&limit=20&cursor=...]  — shared board (list), or (with
-// `mine`) just the requesting user's own doubts — used by the profile page.
+// GET /doubts[?mine=1][&status=][&limit=10&cursor=...]  — shared board (list), or (with
+// `mine`) just the requesting user's own doubts — used by the profile page. Always paged
+// (default 10, at most 50) with light rows (a `preview`, not the body). A bad limit or cursor is a 400.
 // Each doubt is annotated with `hasApprovedAnswer` so the list can render a
 // status badge without N+1 calls. What a viewer may see is decided in one place,
 // services/doubtAccess.js: auto-rejected doubts never appear here for anyone.
 // Optional `status` filter: answered, awaiting_review or awaiting_teacher.
-const listQuery = z.object({ status: z.enum(STATUS_FILTERS).optional() }).passthrough();
+const listQuery = pageQuerySchema.extend({ status: z.enum(STATUS_FILTERS).optional(), mine: z.string().max(10).optional() });
 router.get('/', requireAuth, validate(listQuery, 'query'), async (req, res, next) => {
   try {
-    res.json(await listDoubts({ viewer: req.user, mine: Boolean(req.query.mine), status: req.query.status, limit: req.query.limit, cursor: req.query.cursor }));
+    res.json(await listDoubts({ viewer: req.user, mine: Boolean(req.query.mine), status: req.query.status, limit: req.query.limit, cursor: parseCursor(req.query.cursor) }));
   } catch (err) {
     next(err);
   }

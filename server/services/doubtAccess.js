@@ -1,6 +1,8 @@
 import Doubt, { REJECTED, PENDING_TRIAGE } from '../models/Doubt.js';
 import Answer from '../models/Answer.js';
-import { decodeCursor, encodeCursor, cursorFilter } from '../utils/pagination.js';
+import Problem from '../models/Problem.js';
+import { encodeCursor, cursorFilter } from '../utils/pagination.js';
+import { makePreview } from '../utils/preview.js';
 
 // The single place that decides which doubts a viewer may see. Routes never build
 // a Doubt filter themselves. (The Doubt model also hides auto_rejected doubts from
@@ -37,10 +39,6 @@ export function presentDoubt(doubt, viewer) {
   return out;
 }
 
-/**
- * The board, or with `mine` the viewer's own doubts. Cursor-paginated by default; the
- * legacy own-doubts list stays unpaginated unless it asks for a limit.
- */
 // Board status filters. They match the labels students see: Answered, Awaiting review (an AI draft is
 // with a teacher) and Awaiting teacher (no AI draft, a teacher has to answer it by hand).
 export const STATUS_FILTERS = ['answered', 'awaiting_review', 'awaiting_teacher'];
@@ -57,36 +55,44 @@ async function statusClauses(status) {
   ];
 }
 
-export async function listDoubts({ viewer, mine = false, status, limit: rawLimit, cursor: rawCursor }) {
-  const base = mine ? { studentId: viewer._id } : {};
-  const paginate = !mine || rawLimit !== undefined;
-  const requested = rawLimit === undefined ? 20 : Number(rawLimit);
-  const limit = paginate ? Math.min(Math.max(requested || 20, 1), MAX_PAGE_LIMIT) : null;
+const LIST_FIELDS = 'title body studentId problemId status aiDraftStatus createdAt triage.lowConfidence';
 
-  const parsed = limit ? decodeCursor(rawCursor) : null;
-  const clauses = [base, visibleFor(viewer)];
+/**
+ * One page of the board, or with `mine` the viewer's own doubts. Keyset paging on (createdAt, _id).
+ * `limit` and `cursor` are already validated by the route (default 10, at most 50). Rows are light:
+ * a plain-text `preview` (at most 160 characters) replaces the body, and there is no code snippet;
+ * GET /doubts/:id returns the full doubt. Every visibility rule lives in visibleFor above, so the
+ * Profile list and the board can never disagree about which doubts exist.
+ */
+export async function listDoubts({ viewer, mine = false, status, limit = 10, cursor }) {
+  const size = Math.min(Math.max(Number(limit) || 10, 1), MAX_PAGE_LIMIT);
+  const clauses = [mine ? { studentId: viewer._id } : {}, visibleFor(viewer)];
   if (status) clauses.push(...(await statusClauses(status)));
-  if (parsed) clauses.push(cursorFilter(parsed));
-  let query = Doubt.find({ $and: clauses }).sort({ createdAt: -1, _id: -1 });
-  if (limit) query = query.limit(limit + 1);
+  if (cursor) clauses.push(cursorFilter(cursor));
 
-  const doubts = await query.populate('studentId', 'name').lean();
-  let nextCursor = null;
-  if (limit && doubts.length > limit) {
-    nextCursor = encodeCursor(doubts[limit - 1]);
-    doubts.length = limit;
-  }
+  const rows = await Doubt.find({ $and: clauses })
+    .sort({ createdAt: -1, _id: -1 })
+    .limit(size + 1)
+    .select(LIST_FIELDS)
+    .populate('studentId', 'name')
+    .lean();
+  const hasMore = rows.length > size;
+  if (hasMore) rows.length = size;
 
-  const approvedIds = await Answer.find({ doubtId: { $in: doubts.map((d) => d._id) }, state: 'approved' }).distinct('doubtId');
+  const [approvedIds, problems] = await Promise.all([
+    Answer.find({ doubtId: { $in: rows.map((d) => d._id) }, state: 'approved' }).distinct('doubtId'),
+    Problem.find({ _id: { $in: [...new Set(rows.filter((d) => d.problemId).map((d) => String(d.problemId)))] } }).select('title').lean(),
+  ]);
   const approved = new Set(approvedIds.map(String));
-  const presented = doubts.map((d) => ({ ...presentDoubt(d, viewer), hasApprovedAnswer: approved.has(String(d._id)) }));
+  const titles = new Map(problems.map((p) => [String(p._id), p.title]));
 
-  const body = { doubts: presented };
-  if (limit) {
-    body.nextCursor = nextCursor;
-    body.hasMore = Boolean(nextCursor);
-  }
-  return body;
+  const doubts = rows.map((d) => {
+    const item = { ...presentDoubt(d, viewer), hasApprovedAnswer: approved.has(String(d._id)), preview: makePreview(d.body) };
+    delete item.body;
+    if (d.problemId) { item.problemId = String(d.problemId); item.problemTitle = titles.get(String(d.problemId)) ?? null; }
+    return item;
+  });
+  return { doubts, nextCursor: hasMore ? encodeCursor(rows[rows.length - 1]) : null, hasMore };
 }
 
 /** One doubt the viewer may see, or null (the route answers 404 either way). */
