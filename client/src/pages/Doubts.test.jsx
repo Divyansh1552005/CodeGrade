@@ -16,11 +16,13 @@ vi.mock('react-router-dom', async (orig) => ({ ...(await orig()), useNavigate: (
 vi.mock('react-hot-toast', () => ({ default: { error: vi.fn(), success: vi.fn() } }));
 vi.mock('../auth/AuthContext.jsx', () => ({ useAuth: () => ({ user: { _id: 'u1', name: 'Alex', role: session.role } }) }));
 vi.mock('../api/client.js', () => ({ api: { post: vi.fn() } }));
-vi.mock('../api/usePaginatedQuery.js', () => ({ usePaginatedQuery: () => ({ ...paged, loadingMore: false, loadMore: vi.fn(), refetch: vi.fn() }) }));
+const urls = vi.hoisted(() => []);
+vi.mock('../api/usePaginatedQuery.js', () => ({ usePaginatedQuery: (url) => { urls.push(url); return { ...paged, loadingMore: false, loadMore: vi.fn(), refetch: vi.fn() }; } }));
 vi.mock('../api/useCachedQuery.js', () => ({ invalidate: vi.fn(), useCachedQuery: (url) => ({ data: data[url], loading: false, error: errors[url] || '', refetch: vi.fn() }) }));
 vi.mock('../components/Markdown.jsx', () => ({ default: ({ children }) => <div>{children}</div> }));
 beforeEach(() => {
   session.role = 'student'; Object.assign(paged, { items: [], loading: false, error: '' }); navigate.mockClear(); api.post.mockReset();
+  urls.length = 0;
   for (const key of Object.keys(errors)) delete errors[key];
   for (const key of Object.keys(data)) delete data[key];
 });
@@ -150,5 +152,48 @@ describe('asking a doubt about a problem', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Question details' }), { target: { value: 'details' } });
     fireEvent.click(screen.getByRole('button', { name: 'Post doubt' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('at most 10 doubts a day');
+  });
+});
+
+describe('filtering the board', () => {
+  const lastUrl = () => urls[urls.length - 1];
+  it('starts unfiltered and asks the server for the chosen status', () => {
+    render(<MemoryRouter><DoubtBoard /></MemoryRouter>);
+    expect(lastUrl()).toBe('/doubts');
+    const select = screen.getByLabelText('Status');
+    expect([...select.options].map((o) => o.textContent)).toEqual(['All statuses', 'Awaiting review', 'Awaiting teacher', 'Answered']);
+    fireEvent.change(select, { target: { value: 'answered' } });
+    expect(lastUrl()).toBe('/doubts?status=answered');
+    fireEvent.change(select, { target: { value: 'awaiting_review' } });
+    expect(lastUrl()).toBe('/doubts?status=awaiting_review');
+  });
+  it('lets a student show only their own doubts, together with a status', () => {
+    render(<MemoryRouter><DoubtBoard /></MemoryRouter>);
+    fireEvent.click(screen.getByLabelText('My doubts'));
+    expect(lastUrl()).toBe('/doubts?mine=1');
+    fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'awaiting_teacher' } });
+    expect(lastUrl()).toBe('/doubts?status=awaiting_teacher&mine=1');
+  });
+  it('gives teachers the status filter without the My doubts option', () => {
+    session.role = 'teacher';
+    render(<MemoryRouter><DoubtBoard /></MemoryRouter>);
+    expect(screen.getByLabelText('Status')).toBeInTheDocument();
+    expect(screen.queryByLabelText('My doubts')).not.toBeInTheDocument();
+  });
+  it('explains an empty result for a filter and clears the filters', () => {
+    render(<MemoryRouter><DoubtBoard /></MemoryRouter>);
+    fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'answered' } });
+    expect(screen.getByText('No doubts match these filters')).toBeInTheDocument();
+    expect(screen.queryByText('No doubts yet')).not.toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Clear filters' })[0]);
+    expect(lastUrl()).toBe('/doubts');
+    expect(screen.getByLabelText('Status')).toHaveValue('');
+    expect(screen.getByText('No doubts yet')).toBeInTheDocument();
+  });
+  it('keeps the rows from the server as they are', () => {
+    paged.items = [doubt({ hasApprovedAnswer: true })];
+    render(<MemoryRouter><DoubtBoard /></MemoryRouter>);
+    fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'answered' } });
+    expect(within(screen.getByRole('table', { name: 'Doubts' })).getByText('Answered')).toBeInTheDocument();
   });
 });

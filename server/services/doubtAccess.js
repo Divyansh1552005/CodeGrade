@@ -41,7 +41,23 @@ export function presentDoubt(doubt, viewer) {
  * The board, or with `mine` the viewer's own doubts. Cursor-paginated by default; the
  * legacy own-doubts list stays unpaginated unless it asks for a limit.
  */
-export async function listDoubts({ viewer, mine = false, limit: rawLimit, cursor: rawCursor }) {
+// Board status filters. They match the labels students see: Answered, Awaiting review (an AI draft is
+// with a teacher) and Awaiting teacher (no AI draft, a teacher has to answer it by hand).
+export const STATUS_FILTERS = ['answered', 'awaiting_review', 'awaiting_teacher'];
+
+async function statusClauses(status) {
+  const answered = await Answer.find({ state: 'approved' }).distinct('doubtId');
+  if (status === 'answered') return [{ _id: { $in: answered } }];
+  return [
+    { _id: { $nin: answered } },
+    { status: { $ne: PENDING_TRIAGE } },
+    status === 'awaiting_teacher'
+      ? { aiDraftStatus: { $in: ['failed', 'skipped'] } }
+      : { aiDraftStatus: { $nin: ['failed', 'skipped', 'irrelevant'] } },
+  ];
+}
+
+export async function listDoubts({ viewer, mine = false, status, limit: rawLimit, cursor: rawCursor }) {
   const base = mine ? { studentId: viewer._id } : {};
   const paginate = !mine || rawLimit !== undefined;
   const requested = rawLimit === undefined ? 20 : Number(rawLimit);
@@ -49,6 +65,7 @@ export async function listDoubts({ viewer, mine = false, limit: rawLimit, cursor
 
   const parsed = limit ? decodeCursor(rawCursor) : null;
   const clauses = [base, visibleFor(viewer)];
+  if (status) clauses.push(...(await statusClauses(status)));
   if (parsed) clauses.push(cursorFilter(parsed));
   let query = Doubt.find({ $and: clauses }).sort({ createdAt: -1, _id: -1 });
   if (limit) query = query.limit(limit + 1);

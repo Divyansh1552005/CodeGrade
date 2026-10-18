@@ -7,8 +7,9 @@ import { validate } from '../middleware/validate.js';
 import { httpError } from '../middleware/errorHandler.js';
 import { ensureWork } from '../services/workService.js';
 import { createDoubtSchema } from '../validation/schemas.js';
+import { z } from 'zod';
 import {
-  listDoubts, findVisibleDoubt, listManualAnswerQueue, presentDoubt, findRemovedForOwner, presentRemoved, requestAppeal,
+  listDoubts, STATUS_FILTERS, findVisibleDoubt, listManualAnswerQueue, presentDoubt, findRemovedForOwner, presentRemoved, requestAppeal,
 } from '../services/doubtAccess.js';
 import Problem from '../models/Problem.js';
 import { features } from '../config/features.js';
@@ -82,9 +83,11 @@ router.post(
 // Each doubt is annotated with `hasApprovedAnswer` so the list can render a
 // status badge without N+1 calls. What a viewer may see is decided in one place,
 // services/doubtAccess.js: auto-rejected doubts never appear here for anyone.
-router.get('/', requireAuth, async (req, res, next) => {
+// Optional `status` filter: answered, awaiting_review or awaiting_teacher.
+const listQuery = z.object({ status: z.enum(STATUS_FILTERS).optional() }).passthrough();
+router.get('/', requireAuth, validate(listQuery, 'query'), async (req, res, next) => {
   try {
-    res.json(await listDoubts({ viewer: req.user, mine: Boolean(req.query.mine), limit: req.query.limit, cursor: req.query.cursor }));
+    res.json(await listDoubts({ viewer: req.user, mine: Boolean(req.query.mine), status: req.query.status, limit: req.query.limit, cursor: req.query.cursor }));
   } catch (err) {
     next(err);
   }

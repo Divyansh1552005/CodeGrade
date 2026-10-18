@@ -1,10 +1,10 @@
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MessagesSquare, Plus } from 'lucide-react';
+import { MessagesSquare, Plus, SearchX, X } from 'lucide-react';
 import { usePaginatedQuery } from '../api/usePaginatedQuery.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { doubtStatus } from '../lib/doubtStatus.js';
-import { Badge, Button, EmptyState, ErrorState, Icon, PageHeader, TBody, Table, TableSkeleton, Td, Th, THead, Tr } from '../components/ui/index.js';
+import { Badge, Button, Checkbox, EmptyState, ErrorState, Icon, PageHeader, Select, TBody, Table, TableSkeleton, Td, Th, THead, Tr } from '../components/ui/index.js';
 
 // Plain-text excerpt of a markdown body, truncated for the list view.
 function excerpt(body, max = 100) {
@@ -15,10 +15,26 @@ function excerpt(body, max = 100) {
   return text.length > max ? `${text.slice(0, max).trimEnd()}…` : text;
 }
 
+// The same names as the status badges. The server applies the filter, so it covers every page.
+const STATUS_OPTIONS = [
+  ['', 'All statuses'],
+  ['awaiting_review', 'Awaiting review'],
+  ['awaiting_teacher', 'Awaiting teacher'],
+  ['answered', 'Answered'],
+];
+
 export default function DoubtBoard() {
   const { user } = useAuth();
   const isStudent = user.role === 'student';
-  const { items: doubts, loading, loadingMore, hasMore, error, loadMore, refetch } = usePaginatedQuery('/doubts', 'doubts');
+  const [status, setStatus] = useState('');
+  const [mineOnly, setMineOnly] = useState(false);
+  const params = new URLSearchParams();
+  if (status) params.set('status', status);
+  if (mineOnly) params.set('mine', '1');
+  const query = params.toString() ? `/doubts?${params}` : '/doubts';
+  const { items: doubts, loading, loadingMore, hasMore, error, loadMore, refetch } = usePaginatedQuery(query, 'doubts');
+  const filtered = Boolean(status || mineOnly);
+  const clearFilters = () => { setStatus(''); setMineOnly(false); };
 
   return (
     <div>
@@ -26,9 +42,21 @@ export default function DoubtBoard() {
         title="Doubts"
         action={isStudent && <Button variant="primary" to="/doubts/new"><Icon as={Plus} />Ask a doubt</Button>}
       />
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <div className="w-full sm:w-48">
+          <Select aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value)}>
+            {STATUS_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </Select>
+        </div>
+        {isStudent && <Checkbox label="My doubts" checked={mineOnly} onChange={(e) => setMineOnly(e.target.checked)} />}
+        {filtered && <Button variant="ghost" onClick={clearFilters}><Icon as={X} />Clear filters</Button>}
+      </div>
       {error && <ErrorState message={error} onRetry={refetch} />}
       {loading && <TableSkeleton rows={6} columns={3} />}
-      {!loading && !error && doubts.length === 0 && (
+      {!loading && !error && doubts.length === 0 && filtered && (
+        <EmptyState icon={SearchX} title="No doubts match these filters" description="Try another status, or clear the filters to see every doubt." action={<Button onClick={clearFilters}>Clear filters</Button>} />
+      )}
+      {!loading && !error && doubts.length === 0 && !filtered && (
         <EmptyState
           icon={MessagesSquare}
           title="No doubts yet"
@@ -65,7 +93,7 @@ const DoubtRow = memo(function DoubtRow({ doubt, role }) {
   return (
     <Tr>
       <Td className="h-auto py-2">
-        <Link to={`/doubts/${doubt._id}`} className="block max-w-xs rounded-sm sm:max-w-md lg:max-w-xl">
+        <Link to={`/doubts/${doubt._id}`} className="block max-w-36 rounded-sm sm:max-w-md lg:max-w-xl">
           <span className="block truncate font-medium hover:text-accent-text hover:underline">{doubt.title}</span>
           <span className="block truncate text-sm text-fg-muted">{excerpt(doubt.body)}</span>
         </Link>
