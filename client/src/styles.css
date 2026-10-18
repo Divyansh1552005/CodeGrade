@@ -258,3 +258,29 @@
 .markdown td { border: 1px solid var(--border); padding: 0.5rem 0.75rem; text-align: left; }
 .markdown th { background: var(--subtle); font-weight: 500; }
 .markdown hr { border: 0; border-top: 1px solid var(--border); margin: 1.5rem 0; }
+
+/* Hint chat. The dots are a loading indicator; messages fade in only when the user's own
+   action adds them. Both stop under prefers-reduced-motion. */
+@keyframes thinking {
+  0%, 80%, 100% { opacity: 0.25; transform: translateY(0); }
+  40% { opacity: 1; transform: translateY(-0.125rem); }
+}
+.thinking-dot {
+  display: inline-block;
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 9999px;
+  background: var(--fg-subtle);
+  animation: thinking 1.2s ease-in-out infinite;
+}
+.thinking-dot:nth-child(2) { animation-delay: 0.15s; }
+.thinking-dot:nth-child(3) { animation-delay: 0.3s; }
+@keyframes message-in {
+  from { opacity: 0; transform: translateY(0.25rem); }
+  to { opacity: 1; transform: none; }
+}
+.message-in { animation: message-in 150ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .thinking-dot { animation: none; opacity: 0.6; }
+  .message-in { animation: none; }
+}

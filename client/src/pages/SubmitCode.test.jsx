@@ -23,7 +23,7 @@ beforeEach(() => {
     if (url === '/problems') return { data: { problems: [{ _id: 'p1', title: 'Echo', starterCode: { python: '# Python starter', javascript: '// JS starter' }, sampleCases: [{ input: '7', output: '7' }] }] } };
     if (url.startsWith('/submissions?')) return { data: { submissions: accepted ? [structuredClone(submission)] : [] } };
     if (url === '/features') return { data: { features } };
-    if (url === '/problems/p1/hints') return { data: { messages: [], hintsUsed: 0, level: 1, acceptedMode: false, quota: { questionsLeft: 2, messagesLeft: 5, questionCounted: false, retryAfterSeconds: 0, resetAt: '2026-10-19T18:30:00.000Z' } } };
+    if (url === '/problems/p1/hints') return { data: { messages: [], hintsUsed: 0, level: 1, acceptedMode: false, quota: { messagesLeft: 10, retryAfterSeconds: 0, resetAt: '2026-10-19T18:30:00.000Z' } } };
     if (url === '/submissions/s1') return { data: { submission: structuredClone(submission) } };
     throw new Error(`Unexpected URL ${url}`);
   });
@@ -125,5 +125,5 @@ it('adds a Hints tab when the feature is on and opens the hint chat for this pro
   await act(async () => { fireEvent.mouseDown(screen.getByRole('tab', { name: 'Hints' })); });
   expect(api.get).toHaveBeenCalledWith('/problems/p1/hints');
   expect(screen.getByText('Ask for a hint')).toBeInTheDocument();
-  expect(screen.getByText('5 messages left today, 2 questions left')).toBeInTheDocument();
+  expect(screen.getByText('10 messages left today')).toBeInTheDocument();
 });

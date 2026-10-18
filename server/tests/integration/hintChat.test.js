@@ -87,7 +87,7 @@ describe('a hint exchange', () => {
     const res = await ask(student, problem);
     expect(res.status).toBe(200);
     expect(res.body.reply).toMatchObject({ role: 'assistant', content: 'Think about what you must remember while you scan the list.', level: 1, fallback: false });
-    expect(res.body).toMatchObject({ fallback: false, refunded: false, hintsUsed: 1, level: 2, quota: { messagesLeft: 4, questionsLeft: 1 } });
+    expect(res.body).toMatchObject({ fallback: false, refunded: false, hintsUsed: 1, level: 2, quota: { messagesLeft: 9 } });
     expect(res.body.quota.resetAt).toBeTruthy();
     const stored = await thread(student, problem);
     expect(stored.body).toMatchObject({ hintsUsed: 1, level: 2, acceptedMode: false });
@@ -160,7 +160,7 @@ describe('what the model is allowed to see', () => {
     const res = await ask(student, problem, { message: 'is there a faster approach?' });
     expect(sent(0)).toMatch(/already solved this problem/);
     expect(sent(0)).toMatch(/no long code/);
-    expect(res.body.quota).toMatchObject({ messagesLeft: 4, questionsLeft: 1 });
+    expect(res.body.quota).toMatchObject({ messagesLeft: 9 });
     expect((await thread(student, problem)).body.acceptedMode).toBe(true);
   });
 });
@@ -170,7 +170,7 @@ describe('guardrail', () => {
     useModel(reply((n) => (n === 1 ? `Here you go:\n${longCode(20)}` : 'Think about which values you have already seen.')));
     const res = await ask(student, problem, { message: 'just give me the code' });
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ fallback: false, refunded: false, hintsUsed: 1, quota: { messagesLeft: 4 } });
+    expect(res.body).toMatchObject({ fallback: false, refunded: false, hintsUsed: 1, quota: { messagesLeft: 9 } });
     expect(res.body.reply.content).toBe('Think about which values you have already seen.');
     expect(calls).toHaveLength(2);
     expect(sent(1)).toMatch(/STRICTER/);
@@ -190,7 +190,7 @@ describe('guardrail', () => {
     expect(res.body).toMatchObject({ fallback: true, refunded: true, hintsUsed: 0, level: 1 });
     expect(res.body.reply.fallback).toBe(true);
     expect(res.body.reply.content).not.toContain('line_0');
-    expect(res.body.quota).toMatchObject({ messagesLeft: 5, questionsLeft: 2 });
+    expect(res.body.quota).toMatchObject({ messagesLeft: 10 });
     const stored = (await thread(student, problem)).body;
     expect(stored.messages.map((m) => [m.role, m.fallback])).toEqual([['user', false], ['assistant', true]]);
     expect(stored.hintsUsed).toBe(0);
@@ -202,7 +202,7 @@ describe('guardrail', () => {
     const results = [];
     for (let i = 0; i < 4; i += 1) results.push((await ask(student, problem, { message: `try ${i}` })).body);
     expect(results.map((r) => r.refunded)).toEqual([true, true, true, false]);
-    expect(results[3].quota.messagesLeft).toBe(4);
+    expect(results[3].quota.messagesLeft).toBe(9);
   });
   it('keeps the per-minute slot used after a fallback refund', async () => {
     useModel(reply(`Full solution:\n${longCode(30)}`));
@@ -219,11 +219,11 @@ describe('guardrail', () => {
 });
 
 describe('model failures', () => {
-  it('returns 502, saves nothing and refunds the message and the question slot', async () => {
+  it('returns 502, saves nothing and refunds the message', async () => {
     useModel(jest.fn(async () => { throw new Error('upstream 503'); }));
     const res = await ask(student, problem);
     expect(res.status).toBe(502);
-    expect(res.body).toMatchObject({ refunded: true, quota: { messagesLeft: 5, questionsLeft: 2 } });
+    expect(res.body).toMatchObject({ refunded: true, quota: { messagesLeft: 10 } });
     expect(await HintThread.countDocuments()).toBe(0);
     expect((await thread(student, problem)).body).toMatchObject({ messages: [], hintsUsed: 0, level: 1 });
   });
@@ -234,7 +234,7 @@ describe('model failures', () => {
     })));
     const res = await ask(student, problem);
     expect(res.status).toBe(504);
-    expect(res.body).toMatchObject({ refunded: true, quota: { messagesLeft: 5 } });
+    expect(res.body).toMatchObject({ refunded: true, quota: { messagesLeft: 10 } });
   });
   it('returns 503 and refunds when every AI slot is busy', async () => {
     process.env.AI_MAX_CONCURRENT_CALLS = '1'; process.env.AI_QUEUE_WAIT_MS = '20'; wide();
@@ -251,32 +251,26 @@ describe('model failures', () => {
     const quota = await HintQuota.findOne({ userId: student.id });
     expect(quota.messages).toBe(0);
     expect(quota.refunds).toBe(1);
-    expect(quota.questions).toHaveLength(0);
   });
 });
 
 describe('limits', () => {
-  it('blocks a third distinct question with daily_questions and never calls the model for it', async () => {
+  it('has no per-question limit: hints can be used on any number of problems, up to the daily total', async () => {
     wide();
-    expect((await ask(student, problem)).status).toBe(200);
-    expect((await ask(student, problem2)).status).toBe(200);
-    calls = [];
-    const blocked = await ask(student, problem3);
-    expect(blocked.status).toBe(429);
-    expect(blocked.body).toMatchObject({ limit: 'daily_questions', quota: { questionsLeft: 0, messagesLeft: 3 } });
-    expect(blocked.body.resetAt).toBeTruthy();
-    expect(blocked.body.retryAfterSeconds).toBeGreaterThan(0);
-    expect(calls).toHaveLength(0);
-    expect((await ask(student, problem)).status).toBe(200); // an already counted question still works
+    for (const p of [problem, problem2, problem3]) expect((await ask(student, p)).status).toBe(200);
+    expect((await thread(student, problem3)).body.quota.messagesLeft).toBe(7);
   });
-  it('blocks the sixth message with daily_messages and the same question needs no new slot', async () => {
+  it('blocks the eleventh message with daily_messages, across problems, and never calls the model for it', async () => {
     wide();
-    for (let i = 0; i < 5; i += 1) expect((await ask(student, problem, { message: `m${i}` })).status).toBe(200);
+    const problems = [problem, problem2, problem3];
+    for (let i = 0; i < 10; i += 1) expect((await ask(student, problems[i % 3], { message: `m${i}` })).status).toBe(200);
     calls = [];
-    const sixth = await ask(student, problem);
-    expect(sixth.status).toBe(429);
-    expect(sixth.body.limit).toBe('daily_messages');
-    expect(sixth.headers['retry-after']).toBeTruthy();
+    const eleventh = await ask(student, problem);
+    expect(eleventh.status).toBe(429);
+    expect(eleventh.body).toMatchObject({ limit: 'daily_messages', quota: { messagesLeft: 0 } });
+    expect(eleventh.body.resetAt).toBeTruthy();
+    expect(eleventh.body.retryAfterSeconds).toBeGreaterThan(0);
+    expect(eleventh.headers['retry-after']).toBeTruthy();
     expect(calls).toHaveLength(0);
   });
   it('blocks a third message inside 60 seconds with retryAfterSeconds and a Retry-After header', async () => {
@@ -289,7 +283,7 @@ describe('limits', () => {
     expect(third.body.retryAfterSeconds).toBeGreaterThan(0);
     expect(third.body.retryAfterSeconds).toBeLessThanOrEqual(60);
     expect(Number(third.headers['retry-after'])).toBe(third.body.retryAfterSeconds);
-    expect(third.body.quota).toMatchObject({ messagesLeft: 3 });
+    expect(third.body.quota).toMatchObject({ messagesLeft: 8 });
     expect(calls).toHaveLength(0);
   });
   it('lets parallel requests use at most the allowance, and calls the model only for those', async () => {
@@ -299,16 +293,14 @@ describe('limits', () => {
     expect(calls).toHaveLength(2);
     expect((await HintQuota.findOne({ userId: student.id })).messages).toBe(2);
   });
-  it('reports the quota on GET, including whether this question is already counted', async () => {
-    const before = (await thread(student, problem)).body.quota;
-    expect(before).toMatchObject({ questionsLeft: 2, messagesLeft: 5, questionCounted: false });
+  it('reports the quota on GET', async () => {
+    expect((await thread(student, problem)).body.quota).toMatchObject({ messagesLeft: 10, retryAfterSeconds: 0 });
     await ask(student, problem);
-    const after = (await thread(student, problem)).body.quota;
-    expect(after).toMatchObject({ questionsLeft: 1, messagesLeft: 4, questionCounted: true });
+    expect((await thread(student, problem)).body.quota).toMatchObject({ messagesLeft: 9 });
   });
   it('keeps students independent', async () => {
     wide();
-    for (let i = 0; i < 5; i += 1) await ask(student, problem);
+    for (let i = 0; i < 10; i += 1) await ask(student, problem);
     expect((await ask(student, problem)).status).toBe(429);
     expect((await ask(other, problem)).status).toBe(200);
   });

@@ -33,7 +33,7 @@ async function findProblem(problemId) {
 }
 
 const present = (m) => ({ id: String(m._id), role: m.role, content: m.content, level: m.level, fallback: Boolean(m.fallback), createdAt: m.createdAt });
-const quotaView = (q) => ({ questionsLeft: q.questionsLeft, messagesLeft: q.messagesLeft, resetAt: q.resetAt, retryAfterSeconds: q.retryAfterSeconds });
+const quotaView = (q) => ({ messagesLeft: q.messagesLeft, resetAt: q.resetAt, retryAfterSeconds: q.retryAfterSeconds });
 const secondsUntil = (date) => Math.max(1, Math.ceil((date.getTime() - Date.now()) / 1000));
 
 // GET /problems/:problemId/hints — the student's own thread and what is left today.
@@ -42,12 +42,12 @@ router.get('/', validate(params, 'params'), async (req, res, next) => {
     await findProblem(req.params.problemId);
     const [thread, quota, accepted] = await Promise.all([
       loadThread(req.user._id, req.params.problemId),
-      getQuota({ userId: req.user._id, problemId: req.params.problemId }),
+      getQuota({ userId: req.user._id }),
       hasAccepted(req.user._id, req.params.problemId),
     ]);
     res.json({
       messages: thread.messages.map(present), hintsUsed: thread.hintsUsed, level: nextLevel(thread.hintsUsed),
-      acceptedMode: accepted, quota: { ...quotaView(quota), questionCounted: Boolean(quota.questionCounted) },
+      acceptedMode: accepted, quota: quotaView(quota),
     });
   } catch (err) { next(err); }
 });
@@ -58,7 +58,6 @@ function blockedBody(block) {
   const retryAfterSeconds = limit === 'rate' ? quota.retryAfterSeconds : secondsUntil(quota.resetAt);
   const error = {
     daily_messages: `You have used all ${hints.maxMessagesPerDay} hint messages for today. They reset at midnight India time.`,
-    daily_questions: `You can ask for hints on ${hints.maxQuestionsPerDay} questions a day. They reset at midnight India time.`,
     rate: `You can send ${hints.maxMessagesPerWindow} hint messages per ${hints.windowSeconds} seconds. Try again in ${retryAfterSeconds} seconds.`,
   }[limit];
   return { status: 429, retryAfterSeconds, body: { error, limit, retryAfterSeconds, resetAt: quota.resetAt, quota: quotaView(quota) } };
@@ -73,7 +72,7 @@ router.post('/', validate(params, 'params'), (req, res, next) => validate(bodySc
   const giveBack = async () => {
     if (!attempt) return { refunded: false };
     try {
-      return await refund({ userId, attemptId: attempt.attemptId, day: attempt.day, problemId });
+      return await refund({ userId, attemptId: attempt.attemptId, day: attempt.day });
     } catch (err) {
       req.log.error('hint.refund.failed', { error: err.message });
       return { refunded: false };
@@ -104,7 +103,7 @@ router.post('/', validate(params, 'params'), (req, res, next) => validate(bodySc
     } catch (err) {
       if (!(err instanceof HintAiError)) throw err;
       const given = await giveBack();
-      const quota = await getQuota({ userId, problemId });
+      const quota = await getQuota({ userId });
       req.log.warn('hint.failed', { kind: err.kind, refunded: given.refunded, durationMs: Date.now() - started });
       const status = { busy: 503, timeout: 504 }[err.kind] || 502;
       return res.status(status).json({
@@ -116,7 +115,7 @@ router.post('/', validate(params, 'params'), (req, res, next) => validate(bodySc
     // A guardrail fallback is saved and marked, never raises the level, and gives the message back.
     const saved = await saveExchange({ userId, problemId, userText: message, reply: hint.text, level, fallback: hint.fallback });
     const given = hint.fallback ? await giveBack() : { refunded: false };
-    const quota = await getQuota({ userId, problemId });
+    const quota = await getQuota({ userId });
     req.log.info('hint.reply', {
       problemId: String(problemId), level, fallback: hint.fallback, attempts: hint.attempts, reasons: hint.reasons,
       refunded: given.refunded, messageLength: message.length, replyLength: hint.text.length, hasCode: Boolean(code),
@@ -125,7 +124,7 @@ router.post('/', validate(params, 'params'), (req, res, next) => validate(bodySc
     const [userMessage, reply] = saved.messages;
     return res.json({
       userMessage: present(userMessage), reply: present(reply), fallback: hint.fallback, refunded: given.refunded,
-      hintsUsed: saved.hintsUsed, level: nextLevel(saved.hintsUsed), quota: { ...quotaView(quota), questionCounted: true },
+      hintsUsed: saved.hintsUsed, level: nextLevel(saved.hintsUsed), quota: quotaView(quota),
     });
   } catch (err) {
     // Anything unexpected after a message was reserved gives it back before the error is reported.

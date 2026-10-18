@@ -80,12 +80,13 @@ describe('feature flags and limits', () => {
   });
   it('exposes the spec defaults and honours env overrides', () => {
     const { hints, triage } = aiLimits();
-    expect([hints.maxQuestionsPerDay, hints.maxMessagesPerDay, hints.maxMessagesPerWindow, hints.windowSeconds]).toEqual([2, 5, 2, 60]);
+    expect([hints.maxMessagesPerDay, hints.maxMessagesPerWindow, hints.windowSeconds]).toEqual([10, 2, 60]);
+    expect(hints.maxQuestionsPerDay).toBeUndefined();
     expect([hints.maxCodeLines, hints.refundCapPerDay, triage.rejectThreshold, triage.maxDoubtsPerDay, triage.stuckMinutes]).toEqual([8, 3, 0.85, 10, 5]);
     process.env.HINT_MAX_MESSAGES_PER_DAY = '9';
     expect(aiLimits().hints.maxMessagesPerDay).toBe(9);
     process.env.HINT_MAX_MESSAGES_PER_DAY = 'not a number';
-    expect(aiLimits().hints.maxMessagesPerDay).toBe(5);
+    expect(aiLimits().hints.maxMessagesPerDay).toBe(10);
   });
 });
 

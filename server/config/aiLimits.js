@@ -20,8 +20,7 @@ export function aiLimits(env = process.env) {
       maxDoubtsPerDay: num(env, 'MAX_DOUBTS_PER_DAY', 10),
     },
     hints: {
-      maxQuestionsPerDay: num(env, 'HINT_MAX_QUESTIONS_PER_DAY', 2),
-      maxMessagesPerDay: num(env, 'HINT_MAX_MESSAGES_PER_DAY', 5),
+      maxMessagesPerDay: num(env, 'HINT_MAX_MESSAGES_PER_DAY', 10),
       maxMessagesPerWindow: num(env, 'HINT_MAX_MESSAGES_PER_WINDOW', 2),
       windowSeconds: num(env, 'HINT_WINDOW_SECONDS', 60),
       refundCapPerDay: num(env, 'REFUND_CAP_PER_DAY', 3),
