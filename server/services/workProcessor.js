@@ -7,6 +7,9 @@ import { processDoubtTriage, failOpen } from './doubtTriage.js';
 import { processCompletion } from './progressService.js';
 import { processNotification } from './notificationProcessor.js';
 import { processBulk } from './bulkProcessor.js';
+import { processEmail } from './emailJob.js';
+import { retryPolicy } from './workPolicy.js';
+import { UnrecoverableError } from 'bullmq';
 
 export async function failWork(work, error) {
   const message = error?.message || String(error);
@@ -31,7 +34,7 @@ export async function processWork(job) {
   const work = await WorkItem.findById(job.data.workItemId);
   if (!work) throw new Error('Work item not found');
   if (work.status === 'completed') return work.result;
-  if (work.attempts >= 3) {
+  if (work.attempts >= retryPolicy(work.type).attempts) {
     const err = new Error('Job retry budget exhausted');
     await failWork(work, err);
     throw err;
@@ -49,12 +52,18 @@ export async function processWork(job) {
       case 'doubt-draft': result = await processDoubtDraft(input); break;
       case 'completion': result = await processCompletion(input); break;
       case 'notification': result = await processNotification(input); break;
+      case 'send-email': result = await processEmail(input); break;
       default: result = await processBulk(work);
     }
     await WorkItem.updateOne({ _id: work.id, status: { $ne: 'completed' } }, { $set: { status: 'completed', result: result ?? {}, finishedAt: new Date() }, $unset: { error: '' } });
     return result ?? {};
   } catch (err) {
-    if (job.attemptsMade + 1 >= (job.opts?.attempts ?? 3)) await failWork(work, err);
+    if (err.permanent) {
+      // The provider rejected the request: retrying cannot help, so end the job now.
+      await failWork(work, err);
+      throw new UnrecoverableError(err.message);
+    }
+    if (job.attemptsMade + 1 >= (job.opts?.attempts ?? retryPolicy(work.type).attempts)) await failWork(work, err);
     else await WorkItem.updateOne({ _id: work.id, status: { $ne: 'completed' } }, { $set: { status: 'queued', error: err.message } });
     throw err;
   }

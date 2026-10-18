@@ -30,7 +30,7 @@ async function main() {
   const connection = createWorkerConnection();
   const queues = createQueues(connection);
   const workers = [...new Set(Object.values(QUEUE_NAMES))].map((name) => {
-    const concurrency = name === 'submission-grading' ? 2 : name === 'bulk-jobs' ? 1 : 2;
+    const concurrency = name === 'submission-grading' ? 2 : name === 'bulk-jobs' || name === 'emails' ? 1 : 2; // one email at a time keeps under Resend's request rate limit
     const worker = new Worker(name, processWork, { ...queueOptions(connection), concurrency });
     worker.on('error', reportQueueError);
     worker.on('failed', (job, err) => {

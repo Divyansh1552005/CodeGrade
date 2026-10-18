@@ -7,6 +7,7 @@ import { ensureWork, recordSubmissionTasks, recordAnswerNotification } from './w
 import { failWork } from './workProcessor.js';
 import { failOpen, notifyRemoval, removeAsOffTopic } from './doubtTriage.js';
 import { aiLimits } from '../config/aiLimits.js';
+import { retryPolicy } from './workPolicy.js';
 
 // Restore domain-to-outbox crash gaps. Existing work keys preserve failed and
 // completed state, so a scan never replenishes an exhausted retry budget.
@@ -65,12 +66,13 @@ export async function dispatchWork(work, queue) {
     // Never duplicate an active, waiting, delayed, or completed job.
     return;
   }
-  if (work.attempts >= 3) {
+  const policy = retryPolicy(work.type);
+  if (work.attempts >= policy.attempts) {
     await failWork(work, new Error(work.error || 'Job retry budget exhausted'));
     return;
   }
   await queue.add(work.type, { workItemId: work.id }, {
-    jobId: work.id, attempts: Math.max(1, 3 - work.attempts), backoff: { type: 'exponential', delay: 5000 },
+    jobId: work.id, attempts: Math.max(1, policy.attempts - work.attempts), backoff: { type: 'exponential', delay: policy.delay },
     removeOnComplete: { age: 86400, count: 1000 },
     removeOnFail: { age: 604800, count: 1000 },
   });
