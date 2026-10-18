@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { ArrowLeft, Code2, Copy, FileSearch, MessagesSquare, RotateCcw, Send, Terminal } from 'lucide-react';
 import { api } from '../api/client.js';
 import { useCachedQuery, invalidate } from '../api/useCachedQuery.js';
+import { usePagedList } from '../api/usePagedList.js';
 import CodeEditor from '../components/CodeEditor.jsx';
 import ProblemStatement from '../components/ProblemStatement.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
@@ -17,6 +18,9 @@ import {
 } from '../components/ui/index.js';
 import { useMediaQuery } from '../lib/useMediaQuery.js';
 import { LANGUAGE_LABELS } from '../data/starterTemplates.js';
+
+// A row is still moving through grading or AI feedback.
+const hasPendingRow = (rows) => rows.some((r) => ['queued', 'running'].includes(r.status) || ['pending', 'running'].includes(r.feedbackStatus));
 
 // Student-selectable languages, in the order shown in the dropdown.
 const LANGUAGES = ['javascript', 'python', 'java', 'cpp'];
@@ -35,7 +39,7 @@ export default function SubmitCode() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [submissions, setSubmissions] = useState([]);
+  const [openSubmissionId, setOpenSubmissionId] = useState(null);
   const [pane, setPane] = useState('description');
   const [consolePane, setConsolePane] = useState('results');
   const [mobileTab, setMobileTab] = useState('description');
@@ -52,8 +56,16 @@ export default function SubmitCode() {
   const polling = pending || pendingFeedback;
   const { data: statusData, error: statusError } = useCachedQuery(
     result ? `/submissions/${result._id}` : '',
-    { enabled: Boolean(polling), refetchInterval: polling ? 2000 : 0 }
+    { enabled: Boolean(polling), refetchInterval: polling ? 2000 : 0, pauseWhenHidden: true }
   );
+  // This problem's submissions, ten at a time, newest first. Only the first page is refreshed, and only
+  // while one of its rows is still being graded; an older page is never polled, so it never shifts.
+  const submissionList = usePagedList({
+    url: `/submissions?problemId=${problemId}`, itemsKey: 'submissions', syncUrl: false, enabled: Boolean(problemId),
+    pollMs: 2000, pollWhen: hasPendingRow,
+  });
+  const listRef = useRef(submissionList);
+  listRef.current = submissionList;
 
   useEffect(() => {
     const updated = statusData?.submission;
@@ -61,35 +73,11 @@ export default function SubmitCode() {
     setResult(updated);
     if (['graded', 'error'].includes(updated.status)) {
       invalidate();
-      loadSubmissions(problemId);
+      if (listRef.current.isFirstPage) listRef.current.reload(); // a finished grade changes a row on the first page
     }
   }, [statusData, result?._id, problemId]);
 
   const starterFor = (problem, lang) => problem?.starterCode?.[lang] || '';
-
-  // Load this student's past submissions for the selected problem.
-  async function loadSubmissions(pid) {
-    if (!pid) return;
-    try {
-      const res = await api.get(`/submissions?problemId=${pid}`);
-      if (activeProblem.current === pid) setSubmissions(res.data.submissions);
-    } catch {
-      /* non-critical */
-    }
-  }
-
-  useEffect(() => {
-    if (problemId) loadSubmissions(problemId);
-    else setSubmissions([]);
-  }, [problemId]);
-
-  // Resume status refresh for pending history entries after revisiting the page.
-  const hasPendingHistory = submissions.some((s) => ['queued', 'running'].includes(s.status) || ['pending', 'running'].includes(s.feedbackStatus));
-  useEffect(() => {
-    if (!problemId || !hasPendingHistory) return;
-    const timer = setInterval(() => loadSubmissions(problemId), 2000);
-    return () => clearInterval(timer);
-  }, [problemId, hasPendingHistory]);
 
   useEffect(() => {
     const id = locked ? routeProblemId : problemId || problems[0]?._id;
@@ -117,7 +105,7 @@ export default function SubmitCode() {
   function onSelectProblem(id) {
     drafts.current.set(`${problemId}:${language}`, code);
     setProblemId(id);
-    setSubmissions([]);
+    setOpenSubmissionId(null);
     setError('');
   }
 
@@ -155,7 +143,7 @@ export default function SubmitCode() {
       setConsolePane('results');
       setMobileTab('results');
       toast.success('Submission queued.', { id: 'submission-queued' });
-      loadSubmissions(problemId); // refresh the history
+      listRef.current.goNewest(); // show the new submission at the top of the history
       invalidate('/problems'); // so the "Solved" badge updates on the list
     } catch (err) {
       // Covers rate-limit responses (429, e.g. "You can submit once per
@@ -186,7 +174,7 @@ export default function SubmitCode() {
     </div>
   );
 
-  const historyPane = <div className="p-4"><SubmissionHistory submissions={submissions} /></div>;
+  const historyPane = <div className="p-4"><SubmissionHistory list={submissionList} openId={openSubmissionId} onOpenChange={setOpenSubmissionId} /></div>;
   // Kept mounted when its tab is hidden so a draft message and the cooldown survive switching tabs.
   const hintsPane = problemId ? <HintChat key={problemId} problemId={problemId} code={code} /> : null;
 
@@ -253,7 +241,7 @@ export default function SubmitCode() {
         <Tabs value={pane} onValueChange={setPane} className={`${surface} flex flex-col`}>
           <TabsList className="shrink-0">
             <TabsTrigger value="description">Description</TabsTrigger>
-            <TabsTrigger value="submissions">Submissions ({submissions.length})</TabsTrigger>
+            <TabsTrigger value="submissions">Submissions{typeof submissionList.meta.total === 'number' ? ` (${submissionList.meta.total})` : ''}</TabsTrigger>
             {hintChat && <TabsTrigger value="hints">Hints</TabsTrigger>}
           </TabsList>
           <TabsContent value="description" className="min-h-0 flex-1 overflow-y-auto">{descriptionPane}</TabsContent>
