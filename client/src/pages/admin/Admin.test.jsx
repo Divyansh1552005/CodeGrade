@@ -270,3 +270,29 @@ describe('audit log page', () => {
     expect(await screen.findByText('No entries')).toBeInTheDocument();
   });
 });
+
+describe('admin paging', () => {
+  const user = (id) => ({ _id: id, name: `User ${id}`, email: `${id}@x.com`, role: 'student', emailVerified: true, status: 'active', legacy: false, isAdmin: false, createdAt: '2026-01-01T00:00:00Z', lastLoginAt: null });
+  const chain = (url) => {
+    const page = url.includes('cursor=c2') ? { users: [user('s3')], nextCursor: null } : url.includes('cursor=c1') ? { users: [user('s2')], nextCursor: 'c2' } : { users: [user('s1')], nextCursor: 'c1' };
+    return { data: { ...page, hasMore: Boolean(page.nextCursor) } };
+  };
+  it('walks Older twice, then Newer once, then Newest back to the first page', async () => {
+    api.get.mockImplementation(async (url) => chain(url));
+    render(<MemoryRouter initialEntries={['/admin/users']}><Routes><Route path="/admin/users" element={<Users />} /></Routes><Where /></MemoryRouter>);
+    await screen.findByText('User s1');
+    expect(screen.getByRole('button', { name: 'Newer users' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Back to the newest users' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Older users' }));
+    await screen.findByText('User s2');
+    fireEvent.click(screen.getByRole('button', { name: 'Older users' }));
+    await screen.findByText('User s3');
+    expect(screen.getByRole('button', { name: 'Older users' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Newer users' }));
+    await screen.findByText('User s2');
+    expect(screen.getByTestId('where')).toHaveTextContent('page=c1');
+    fireEvent.click(screen.getByRole('button', { name: 'Back to the newest users' }));
+    await screen.findByText('User s1');
+    expect(screen.getByTestId('where').textContent).not.toContain('page=');
+  });
+});
