@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Code2, Copy, FileSearch, RotateCcw, Send, Terminal } from 'lucide-react';
+import { ArrowLeft, Code2, Copy, FileSearch, MessagesSquare, RotateCcw, Send, Terminal } from 'lucide-react';
 import { api } from '../api/client.js';
 import { useCachedQuery, invalidate } from '../api/useCachedQuery.js';
 import CodeEditor from '../components/CodeEditor.jsx';
@@ -291,6 +291,7 @@ export default function SubmitCode() {
         <Button to={locked ? '/problems' : '/dashboard'} variant="ghost" size="sm" iconOnly aria-label={locked ? 'Back to problems' : 'Back to dashboard'}><Icon as={ArrowLeft} /></Button>
         <h1 className="min-w-0 truncate text-md font-semibold" title={title}>{title}</h1>
         {selected && <DifficultyBadge level={selected.difficulty || 'easy'} />}
+        {locked && selected && <Button to={`/doubts/new?problem=${problemId}`} size="sm" className="ml-auto" aria-label="Ask a doubt"><Icon as={MessagesSquare} /><span className="hidden sm:inline">Ask a doubt</span><span className="sm:hidden">Doubt</span></Button>}
       </header>
       {loading && <div role="status" aria-label="Loading problems" className="space-y-3"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-64 w-full" /></div>}
       {(error || loadError) && <ErrorState message={error || loadError} />}

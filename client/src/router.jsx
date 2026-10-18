@@ -13,6 +13,7 @@ const SubmitCode = lazy(() => import('./pages/SubmitCode.jsx'));
 const DoubtBoard = lazy(() => import('./pages/DoubtBoard.jsx'));
 const AskDoubt = lazy(() => import('./pages/AskDoubt.jsx'));
 const DoubtDetail = lazy(() => import('./pages/DoubtDetail.jsx'));
+const DoubtRemoved = lazy(() => import('./pages/DoubtRemoved.jsx'));
 const TeacherReview = lazy(() => import('./pages/TeacherReview.jsx'));
 const ProblemList = lazy(() => import('./pages/ProblemList.jsx'));
 const CreateProblem = lazy(() => import('./pages/CreateProblem.jsx'));
@@ -82,6 +83,14 @@ const routes = [
     element: (
       <ProtectedRoute role="student">
         <AskDoubt />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/doubts/:id/removed',
+    element: (
+      <ProtectedRoute role="student">
+        <DoubtRemoved />
       </ProtectedRoute>
     ),
   },

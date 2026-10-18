@@ -47,7 +47,7 @@ export default function DoubtBoard() {
             </Tr>
           </THead>
           <TBody>
-            {doubts.map((d) => <DoubtRow key={d._id} doubt={d} />)}
+            {doubts.map((d) => <DoubtRow key={d._id} doubt={d} role={user.role} />)}
           </TBody>
         </Table>
       )}
@@ -60,8 +60,8 @@ export default function DoubtBoard() {
   );
 }
 
-const DoubtRow = memo(function DoubtRow({ doubt }) {
-  const status = doubtStatus(doubt);
+const DoubtRow = memo(function DoubtRow({ doubt, role }) {
+  const status = doubtStatus(doubt, role);
   return (
     <Tr>
       <Td className="h-auto py-2">

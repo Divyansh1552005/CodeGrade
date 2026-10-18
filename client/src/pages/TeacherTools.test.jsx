@@ -77,3 +77,19 @@ it('keeps at least one example and test case', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Add test case' }));
   expect(screen.getByRole('button', { name: 'Remove test case 2' })).toBeEnabled();
 });
+
+it('marks appealed and low-confidence doubts for teachers', () => {
+  data['/answers?state=pending'] = { answers: [{ _id: 'a1', source: 'ai', state: 'pending', content: 'Draft', doubtId: { title: 'Why loops?', body: 'x', appealed: true, triage: { lowConfidence: true } } }] };
+  data['/doubts/failed'] = { doubts: [{ _id: 'd9', title: 'Heap help', body: 'y', aiDraftStatus: 'failed', appealed: true, triage: { lowConfidence: true }, studentId: { name: 'Sam' } }] };
+  render(<MemoryRouter><TeacherReview /></MemoryRouter>);
+  for (const name of ['Why loops?', 'Heap help']) {
+    const card = within(screen.getByRole('region', { name }));
+    expect(card.getByText('Appealed')).toBeInTheDocument();
+    expect(card.getByText('Low confidence')).toBeInTheDocument();
+  }
+});
+it('shows no marker on an ordinary doubt', () => {
+  render(<MemoryRouter><TeacherReview /></MemoryRouter>);
+  expect(screen.queryByText('Appealed')).not.toBeInTheDocument();
+  expect(screen.queryByText('Low confidence')).not.toBeInTheDocument();
+});

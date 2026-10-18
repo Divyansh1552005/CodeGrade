@@ -103,3 +103,8 @@ it('requires confirmation before replacing a solution with starter code', async 
   fireEvent.click(screen.getByRole('button', { name: 'Reset code' }));
   expect(screen.getByLabelText('Code editor')).toHaveValue('# Python starter');
 });
+
+it('links to a new doubt with the current problem preselected', async () => {
+  await act(async () => { render(<MemoryRouter initialEntries={['/submit/p1']}><Routes><Route path="/submit/:problemId" element={<SubmitCode />} /></Routes></MemoryRouter>); });
+  expect(screen.getByRole('link', { name: 'Ask a doubt' })).toHaveAttribute('href', '/doubts/new?problem=p1');
+});

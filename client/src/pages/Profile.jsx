@@ -91,7 +91,7 @@ export default function Profile() {
                 </THead>
                 <TBody>
                   {doubtList.map((d) => {
-                    const status = doubtStatus(d);
+                    const status = doubtStatus(d, 'student');
                     return (
                       <Tr key={d._id}>
                         <Td><Link to={`/doubts/${d._id}`} className="block max-w-xs truncate rounded-sm font-medium hover:text-accent-text hover:underline sm:max-w-md">{d.title}</Link></Td>

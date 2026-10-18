@@ -106,16 +106,18 @@ function UserMenu() {
   );
 }
 
-function SidebarContent({ user }) {
+function SidebarContent({ user, showBell = false }) {
   return (
     <div className="flex h-full flex-col gap-4 p-3">
-      <div className="px-2 pt-1"><Brand isAuthed /></div>
+      <div className="flex items-center justify-between px-2 pt-1">
+        <Brand isAuthed />
+        {showBell && <NotificationBell />}
+      </div>
       <nav aria-label="Main navigation" className="flex flex-col gap-0.5"><NavItems role={user?.role} /></nav>
       <div className="mt-auto flex flex-col gap-3">
         {user?.role === 'student' && <XpMeter userId={user._id} />}
         <div className="flex items-center gap-1">
           <div className="min-w-0 flex-1"><UserMenu /></div>
-          <NotificationBell />
           <ThemeToggle />
         </div>
       </div>
@@ -149,7 +151,7 @@ export default function AppShell() {
   return (
     <>
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-56 border-r border-border bg-surface lg:block">
-        <SidebarContent user={user} />
+        <SidebarContent user={user} showBell />
       </aside>
       <header className="sticky top-0 z-20 flex h-12 items-center justify-between border-b border-border bg-surface px-3 lg:hidden">
         <Dialog.Root open={open} onOpenChange={setOpen}>

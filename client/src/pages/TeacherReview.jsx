@@ -85,7 +85,11 @@ const ReviewCard = memo(function ReviewCard({ answer, onReviewed }) {
 
   return (
     <Panel aria-label={answer.doubtId?.title || 'Doubt'}>
-      <PanelHeader title={answer.doubtId?.title || 'Doubt'} action={<><Badge>{answer.source === 'ai' ? 'AI draft' : answer.source}</Badge><Badge tone="warning">{answer.state}</Badge></>} />
+      <PanelHeader title={answer.doubtId?.title || 'Doubt'} action={<>
+        {answer.doubtId?.appealed && <Badge tone="warning">Appealed</Badge>}
+        {answer.doubtId?.triage?.lowConfidence && <Badge tone="info" title="The AI was not confident this doubt is relevant.">Low confidence</Badge>}
+        <Badge>{answer.source === 'ai' ? 'AI draft' : answer.source}</Badge><Badge tone="warning">{answer.state}</Badge>
+      </>} />
       <PanelBody className="space-y-4">
         {answer.doubtId?.body && <Question body={answer.doubtId.body} />}
         <div className="flex flex-col gap-1.5">
@@ -132,7 +136,11 @@ const FailedDoubtCard = memo(function FailedDoubtCard({ doubt, onAnswered }) {
 
   return (
     <Panel aria-label={doubt.title}>
-      <PanelHeader title={doubt.title} action={irrelevant ? <Badge>Off topic</Badge> : <Badge tone="danger">AI draft failed</Badge>} />
+      <PanelHeader title={doubt.title} action={<>
+        {doubt.appealed && <Badge tone="warning">Appealed</Badge>}
+        {doubt.triage?.lowConfidence && <Badge tone="info" title="The AI was not confident this doubt is relevant.">Low confidence</Badge>}
+        {irrelevant ? <Badge>Off topic</Badge> : <Badge tone="danger">AI draft failed</Badge>}
+      </>} />
       <PanelBody className="space-y-4">
         <p className="text-sm text-fg-muted">Asked by {doubt.studentId?.name || 'a student'}</p>
         <Question body={doubt.body} />

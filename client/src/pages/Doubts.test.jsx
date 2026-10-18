@@ -4,20 +4,26 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import DoubtBoard from './DoubtBoard.jsx';
 import DoubtDetail from './DoubtDetail.jsx';
 import AskDoubt from './AskDoubt.jsx';
+import { doubtStatus } from '../lib/doubtStatus.js';
 import { api } from '../api/client.js';
 
 const session = vi.hoisted(() => ({ role: 'student' }));
 const paged = vi.hoisted(() => ({ items: [], loading: false, error: '', hasMore: false }));
 const data = vi.hoisted(() => ({}));
+const errors = vi.hoisted(() => ({}));
 const navigate = vi.fn();
 vi.mock('react-router-dom', async (orig) => ({ ...(await orig()), useNavigate: () => navigate }));
 vi.mock('react-hot-toast', () => ({ default: { error: vi.fn(), success: vi.fn() } }));
 vi.mock('../auth/AuthContext.jsx', () => ({ useAuth: () => ({ user: { _id: 'u1', name: 'Alex', role: session.role } }) }));
 vi.mock('../api/client.js', () => ({ api: { post: vi.fn() } }));
 vi.mock('../api/usePaginatedQuery.js', () => ({ usePaginatedQuery: () => ({ ...paged, loadingMore: false, loadMore: vi.fn(), refetch: vi.fn() }) }));
-vi.mock('../api/useCachedQuery.js', () => ({ invalidate: vi.fn(), useCachedQuery: (url) => ({ data: data[url], loading: false, error: '', refetch: vi.fn() }) }));
+vi.mock('../api/useCachedQuery.js', () => ({ invalidate: vi.fn(), useCachedQuery: (url) => ({ data: data[url], loading: false, error: errors[url] || '', refetch: vi.fn() }) }));
 vi.mock('../components/Markdown.jsx', () => ({ default: ({ children }) => <div>{children}</div> }));
-beforeEach(() => { session.role = 'student'; Object.assign(paged, { items: [], loading: false, error: '' }); navigate.mockClear(); api.post.mockReset(); });
+beforeEach(() => {
+  session.role = 'student'; Object.assign(paged, { items: [], loading: false, error: '' }); navigate.mockClear(); api.post.mockReset();
+  for (const key of Object.keys(errors)) delete errors[key];
+  for (const key of Object.keys(data)) delete data[key];
+});
 
 const doubt = (over = {}) => ({ _id: 'd1', title: 'Why recursion?', body: '**Help** with loops', studentId: { name: 'Sam' }, createdAt: new Date().toISOString(), aiDraftStatus: 'completed', ...over });
 
@@ -76,4 +82,72 @@ it('requires details, posts the doubt, and opens it', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Post doubt' }));
   await waitFor(() => expect(api.post).toHaveBeenCalledWith('/doubts', { title: 'My loop', body: 'It skips the last item' }));
   await waitFor(() => expect(navigate).toHaveBeenCalledWith('/doubts/new1'));
+});
+
+describe('doubts in the checking, appealed and removed states', () => {
+  it('maps statuses to labels, showing Appealed only to teachers', () => {
+    expect(doubtStatus({ status: 'pending_triage' })).toEqual({ label: 'Checking', tone: 'info' });
+    expect(doubtStatus({ status: 'appealed' }, 'teacher')).toEqual({ label: 'Appealed', tone: 'warning' });
+    expect(doubtStatus({ status: 'appealed' }, 'student').label).toBe('Awaiting review');
+    expect(doubtStatus({ status: 'appealed', hasApprovedAnswer: true }, 'teacher').label).toBe('Answered');
+    expect(doubtStatus({ status: 'pending_review', aiDraftStatus: 'failed' }).label).toBe('Awaiting teacher');
+  });
+  it('shows a Checking badge on the board for a doubt still being checked', () => {
+    paged.items = [doubt({ status: 'pending_triage' })];
+    render(<MemoryRouter><DoubtBoard /></MemoryRouter>);
+    expect(within(screen.getByRole('table', { name: 'Doubts' })).getByText('Checking')).toBeInTheDocument();
+  });
+  it('explains on the detail page that a new doubt is being checked', () => {
+    data['/doubts/d1'] = { doubt: doubt({ status: 'pending_triage' }) };
+    data['/doubts/d1/answer'] = { answer: null };
+    renderDetail();
+    expect(screen.getByText('Checking')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('We are checking your doubt before it is shared');
+  });
+  it('points to notifications when a doubt is not available', () => {
+    errors['/doubts/d1'] = 'Doubt not found';
+    renderDetail();
+    expect(screen.getByText('This doubt is not available')).toBeInTheDocument();
+    expect(screen.getByText(/check your notifications/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Go to doubts' })).toHaveAttribute('href', '/doubts');
+  });
+  it('shows the code snippet and a link to the related problem to students', () => {
+    data['/doubts/d1'] = { doubt: doubt({ code: 'print(missing)', problemId: 'p9' }) };
+    data['/doubts/d1/answer'] = { answer: null };
+    renderDetail();
+    expect(screen.getByText('print(missing)')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open the related problem' })).toHaveAttribute('href', '/submit/p9');
+  });
+});
+
+describe('asking a doubt about a problem', () => {
+  const renderAsk = (path = '/doubts/new') => render(<MemoryRouter initialEntries={[path]}><AskDoubt /></MemoryRouter>);
+  beforeEach(() => { data['/problems'] = { problems: [{ _id: 'p1', title: 'Two sum' }, { _id: 'p2', title: 'Anagrams' }] }; });
+  it('preselects the problem when opened from a problem page and sends it with the code snippet', async () => {
+    api.post.mockResolvedValue({ data: { doubt: { _id: 'new1' } } });
+    renderAsk('/doubts/new?problem=p2');
+    expect(screen.getByLabelText('Problem (optional)')).toHaveValue('p2');
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'My loop' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Question details' }), { target: { value: 'It skips the last item' } });
+    fireEvent.change(screen.getByLabelText('Code snippet (optional)'), { target: { value: 'for i in range(n - 1): pass' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Post doubt' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/doubts', { title: 'My loop', body: 'It skips the last item', problemId: 'p2', code: 'for i in range(n - 1): pass' }));
+  });
+  it('sends neither problem nor code when they are left empty', async () => {
+    api.post.mockResolvedValue({ data: { doubt: { _id: 'new1' } } });
+    renderAsk();
+    expect(screen.getByLabelText('Problem (optional)')).toHaveValue('');
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'My loop' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Question details' }), { target: { value: 'details' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Post doubt' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/doubts', { title: 'My loop', body: 'details' }));
+  });
+  it('shows the daily limit message from the server', async () => {
+    api.post.mockRejectedValue({ response: { status: 429, data: { error: 'You can post at most 10 doubts a day. You can post again after the daily reset.' } } });
+    renderAsk();
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'My loop' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Question details' }), { target: { value: 'details' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Post doubt' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('at most 10 doubts a day');
+  });
 });
