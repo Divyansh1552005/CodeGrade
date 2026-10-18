@@ -31,6 +31,8 @@ export function presentDoubt(doubt, viewer) {
   } else {
     delete out.triage;
     delete out.appeal;
+    // Other students must not learn that a doubt was ever removed and appealed.
+    if (out.status === 'appealed') out.status = 'pending_review';
   }
   return out;
 }

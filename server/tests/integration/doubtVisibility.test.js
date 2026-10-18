@@ -83,8 +83,11 @@ describe('board, search-style listing, totals and pagination', () => {
     const student = (await request(app).get(`/doubts/${ids.appealed}`).set(as(other))).body.doubt;
     expect(student.triage).toBeUndefined();
     expect(student.appeal).toBeUndefined();
+    expect(student.status).toBe('pending_review');
+    expect((await request(app).get('/doubts').set(as(other))).body.doubts.find((d) => d._id === ids.appealed).status).toBe('pending_review');
     const teach = (await request(app).get(`/doubts/${ids.appealed}`).set(as(teacher))).body.doubt;
     expect(teach.appealed).toBe(true);
+    expect(teach.status).toBe('appealed');
     expect(teach.triage).toEqual({ lowConfidence: true });
   });
 });
