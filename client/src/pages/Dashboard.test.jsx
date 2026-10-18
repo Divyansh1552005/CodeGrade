@@ -10,7 +10,7 @@ const data = vi.hoisted(() => ({}));
 vi.mock('../auth/AuthContext.jsx', () => ({ useAuth: () => ({ user: { _id: 'u1', name: 'Alex', role: session.role } }) }));
 vi.mock('../api/client.js', () => ({ api: { patch: vi.fn() } }));
 vi.mock('../api/useCachedQuery.js', () => ({
-  useCachedQuery: (url, { enabled = true } = {}) => ({ data: enabled ? data[url] : undefined, loading: false, error: '', refetch: data.refetch }),
+  useCachedQuery: (url, { enabled = true } = {}) => { data.ask?.(url); return { data: enabled ? data[url] : undefined, loading: false, error: '', refetch: data.refetch }; },
 }));
 
 const problems = [
@@ -18,14 +18,15 @@ const problems = [
   { _id: 'p2', number: 2, title: 'Merge intervals', difficulty: 'medium', topics: ['Arrays', 'Sorting'], solved: false },
   { _id: 'p3', number: 3, title: 'Course schedule', difficulty: 'hard', topics: ['Graphs'], solved: false },
 ];
-const submission = (over = {}) => ({ _id: 's1', problemId: { _id: 'p2', title: 'Merge intervals' }, status: 'graded', passCount: 1, totalCount: 3, language: 'python', createdAt: new Date().toISOString(), ...over });
+const submission = (over = {}) => ({ _id: 's1', problemId: 'p2', problemTitle: 'Merge intervals', status: 'graded', passCount: 1, totalCount: 3, language: 'python', createdAt: new Date().toISOString(), ...over });
 beforeEach(() => {
+  delete data.ask;
   session.role = 'student';
   Object.assign(data, {
     refetch: vi.fn(),
     '/problems': { problems },
     '/problems/stats/counts': { total: 3, byTopic: {} },
-    '/submissions': { submissions: [submission()] },
+    '/submissions?limit=5': { submissions: [submission()] },
     '/activity/progress': { progress: { level: 2, xp: 300, xpIntoLevel: 200, xpForNextLevel: 300, solvedCount: 1, currentStreak: 2, longestStreak: 5, badges: [{ key: 'first-solve', name: 'First solve', description: 'Solve your first problem.', icon: 'x' }] } },
     '/activity/notifications': { notifications: [{ _id: 'n1', message: 'Your doubt was answered', href: '/doubts/d1', readAt: null }] },
     '/answers?state=pending': { answers: [{}, {}] },
@@ -34,8 +35,8 @@ beforeEach(() => {
 const renderDashboard = () => render(<MemoryRouter><Dashboard /></MemoryRouter>);
 
 it('resumes the last unsolved attempt, else the lowest-numbered unsolved problem, else reports done', () => {
-  expect(pickNext(problems, [submission({ problemId: { _id: 'p3' } })]).problem._id).toBe('p3');
-  expect(pickNext(problems, [submission({ problemId: { _id: 'p1' } })])).toMatchObject({ kind: 'start', problem: { _id: 'p2' } });
+  expect(pickNext(problems, [submission({ problemId: 'p3' })]).problem._id).toBe('p3');
+  expect(pickNext(problems, [submission({ problemId: 'p1' })])).toMatchObject({ kind: 'start', problem: { _id: 'p2' } });
   expect(pickNext(problems, [])).toMatchObject({ kind: 'start', problem: { _id: 'p2' } });
   expect(pickNext(problems.map((p) => ({ ...p, solved: true })), []).kind).toBe('done');
 });
@@ -56,7 +57,7 @@ it('shows what to do next, progress, recent submissions and breakdowns for a stu
   expect(screen.queryByText(/leaderboard/i)).not.toBeInTheDocument();
 });
 it('uses empty states when there are no submissions or badges', () => {
-  data['/submissions'] = { submissions: [] };
+  data['/submissions?limit=5'] = { submissions: [] };
   data['/activity/progress'].progress.badges = [];
   renderDashboard();
   expect(screen.getByText('No submissions yet')).toBeInTheDocument();
@@ -77,4 +78,14 @@ it('keeps student gamification off the teacher dashboard', () => {
   expect(within(screen.getByRole('region', { name: 'Review queue' })).getByText('2')).toBeInTheDocument();
   expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
   expect(screen.queryByText('Your progress')).not.toBeInTheDocument();
+});
+
+it('asks the server for only the five latest submissions, and never shows an "of N" count', () => {
+  const asked = [];
+  data.ask = (url) => asked.push(url);
+  renderDashboard();
+  expect(asked).toContain('/submissions?limit=5');
+  expect(asked).not.toContain('/submissions');
+  expect(screen.queryByText(/Showing the latest/)).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'All submissions' })).toHaveAttribute('href', '/profile');
 });

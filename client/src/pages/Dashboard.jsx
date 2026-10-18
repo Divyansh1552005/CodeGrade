@@ -15,7 +15,7 @@ export default function Dashboard() {
   const isTeacher = user.role === 'teacher';
   const library = useCachedQuery('/problems/stats/counts');
   const problems = useCachedQuery('/problems', { enabled: isStudent });
-  const history = useCachedQuery('/submissions', { key: `dashboard-submissions:${user._id}`, enabled: isStudent, refetchInterval: 10000 });
+  const history = useCachedQuery('/submissions?limit=5', { key: `dashboard-submissions:${user._id}`, enabled: isStudent, refetchInterval: 10000, pauseWhenHidden: true });
   const progress = useCachedQuery('/activity/progress', { key: `progress:${user._id}`, enabled: isStudent, refetchInterval: 10000 });
   const pending = useCachedQuery('/answers?state=pending', { key: 'answers:pending', enabled: isTeacher, refetchInterval: 10000 });
   const notifications = useCachedQuery('/activity/notifications', { key: `notifications:${user._id}`, refetchInterval: 10000 });
