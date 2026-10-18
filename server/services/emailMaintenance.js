@@ -2,7 +2,6 @@ import User from '../models/User.js';
 import EmailToken from '../models/EmailToken.js';
 import WorkItem from '../models/WorkItem.js';
 import TeacherApplication from '../models/TeacherApplication.js';
-import { features } from '../config/features.js';
 import { mailConfig } from '../config/mail.js';
 import { logger } from '../utils/logger.js';
 
@@ -22,10 +21,9 @@ export async function markLegacyUsersVerified({ dryRun = false } = {}) {
 /**
  * Delete signups that never verified within UNVERIFIED_TTL_DAYS, with their tokens and queued emails, so a
  * pending signup does not hold an address forever. Only users whose emailVerified is exactly false are
- * touched, and nothing runs while the verification flag is off (then nobody is waiting on a link).
+ * touched.
  */
 export async function cleanupUnverified({ now = new Date() } = {}) {
-  if (!features.emailVerification()) return { skipped: 'flag_off', deleted: 0 };
   const cutoff = new Date(now.getTime() - mailConfig().unverifiedTtlMs);
   let deleted = 0;
   for (;;) {

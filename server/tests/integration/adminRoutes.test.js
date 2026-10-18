@@ -37,7 +37,7 @@ async function applicant(extra = {}, application = {}) {
 }
 
 beforeEach(async () => {
-  process.env = { ...saved, FEATURE_EMAIL_VERIFICATION: 'true', FEATURE_PASSWORD_RESET: 'true', EMAIL_TOKEN_SECRET: 'a-test-secret-that-is-at-least-32-characters', APP_BASE_URL: 'https://app.example.com', MAIL_FROM: 'CodeGrade <no-reply@example.com>', ADMIN_EMAIL: 'boss@example.com', ADMIN_PASSWORD: 'correct-horse-battery-staple-42' };
+  process.env = { ...saved, EMAIL_TOKEN_SECRET: 'a-test-secret-that-is-at-least-32-characters', APP_BASE_URL: 'https://app.example.com', MAIL_FROM: 'CodeGrade <no-reply@example.com>', ADMIN_EMAIL: 'boss@example.com', ADMIN_PASSWORD: 'correct-horse-battery-staple-42' };
   transport.mockReset().mockResolvedValue({ id: 'm' });
   sentBefore = 0;
   setMailTransport(transport);
@@ -66,7 +66,7 @@ describe('who can reach /admin', () => {
     expect((await get('/admin/users')).status).toBe(404);
   });
   it('keeps the admin out of every product route', async () => {
-    for (const path of ['/problems', '/doubts', '/notifications', '/features', '/submissions']) expect((await get(path)).status).toBe(403);
+    for (const path of ['/problems', '/doubts', '/notifications', '/submissions']) expect((await get(path)).status).toBe(403);
     expect((await get('/auth/me')).status).toBe(200);
   });
   it('has no route that edits or deletes an audit entry', async () => {
@@ -275,12 +275,6 @@ describe('approving', () => {
     expect(results.filter((r) => r.status === 200)).toHaveLength(1);
     const final = await TeacherApplication.findById(person.application._id);
     expect((await User.findById(person.user._id)).role).toBe(final.status === 'approved' ? 'teacher' : 'teacher_applicant');
-  });
-  it('sends no email, but still decides, when email is not configured', async () => {
-    process.env.FEATURE_EMAIL_VERIFICATION = 'false'; process.env.FEATURE_PASSWORD_RESET = 'false';
-    const person = await applicant();
-    expect((await post(`/admin/teacher-applications/${person.application._id}/approve`)).status).toBe(200);
-    expect(await WorkItem.countDocuments({ type: 'send-email' })).toBe(0);
   });
 });
 

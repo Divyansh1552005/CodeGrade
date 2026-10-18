@@ -1,6 +1,7 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import request from 'supertest';
 import { registerAs } from '../helpers/users.js';
+import { draftWork } from '../helpers/doubts.js';
 
 const svc = (p) => new URL(`../../services/${p}`, import.meta.url).pathname;
 const generateDraftAnswer = jest.fn();
@@ -23,7 +24,7 @@ async function register(role, name = role) {
   return { token: res.body.accessToken, id: res.body.user._id };
 }
 const as = (u) => ({ Authorization: `Bearer ${u.token}` });
-const runDraft = async (id) => processWork({ data: { workItemId: (await WorkItem.findOne({ key: `draft-${id}` })).id }, attemptsMade: 0, opts: { attempts: 3 } });
+const runDraft = async (id) => processWork({ data: { workItemId: (await draftWork(id)).id }, attemptsMade: 0, opts: { attempts: 3 } });
 const raw = (id) => Doubt.findById(id).setOptions({ includeRemoved: true });
 const post = (title = 'How do I cook pasta?') => request(app).post('/doubts').set(as(student)).send({ title, body: 'Boil water, add pasta.' });
 
@@ -61,11 +62,10 @@ describe('a doubt the AI marks off topic', () => {
     expect((await request(app).get(note.link).set(as(other))).status).toBe(404);
     expect((await request(app).get(note.link).set(as(teacher))).status).toBe(404);
   });
-  it('does this whether or not AI triage is switched on', async () => {
-    delete process.env.FEATURE_AI_TRIAGE;
+  it('removes it once the draft marks it off topic, whatever triage said earlier', async () => {
     generateDraftAnswer.mockRejectedValue(new NotRelevantError());
     const id = (await post()).body.doubt._id;
-    expect((await raw(id)).status).toBeUndefined();
+    expect((await raw(id)).status).toBe('pending_triage');
     await runDraft(id);
     expect((await raw(id)).status).toBe('auto_rejected');
   });

@@ -8,7 +8,7 @@ import AuthCard, { AuthChallenge } from '../components/AuthCard.jsx';
 const navigate = vi.fn();
 const auth = vi.hoisted(() => ({ login: vi.fn(), register: vi.fn() }));
 vi.mock('react-router-dom', async (orig) => ({ ...(await orig()), useNavigate: () => navigate }));
-vi.mock('../api/client.js', () => ({ api: { get: vi.fn().mockResolvedValue({ data: { emailVerification: false, passwordReset: false } }), post: vi.fn() } }));
+vi.mock('../api/client.js', () => ({ api: { get: vi.fn(), post: vi.fn() } }));
 vi.mock('react-hot-toast', () => ({ default: { error: vi.fn(), success: vi.fn() } }));
 vi.mock('../auth/AuthContext.jsx', () => ({ useAuth: () => auth }));
 beforeEach(() => { navigate.mockClear(); auth.login.mockReset(); auth.register.mockReset(); });

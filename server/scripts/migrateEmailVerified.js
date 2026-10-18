@@ -1,5 +1,5 @@
 // Marks every user that existed before email verification as verified, so nobody is locked out when
-// FEATURE_EMAIL_VERIFICATION is switched on. Run it BEFORE turning the flag on. Safe to run repeatedly.
+// email verification is in use (it always is now). Run it once on a database that already has users. Safe to run repeatedly.
 //
 //   node scripts/migrateEmailVerified.js --dry-run   # count the users it would change, change nothing
 //   node scripts/migrateEmailVerified.js             # do it

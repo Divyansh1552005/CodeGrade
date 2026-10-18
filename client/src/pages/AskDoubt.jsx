@@ -3,7 +3,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { api } from '../api/client.js';
 import { invalidate, useCachedQuery } from '../api/useCachedQuery.js';
-import { useFeatures } from '../lib/useFeatures.js';
 import MarkdownEditor from '../components/MarkdownEditor.jsx';
 import { Button, ErrorState, Field, Input, PageHeader, Select, Textarea } from '../components/ui/index.js';
 
@@ -12,7 +11,6 @@ const CODE_MAX = 4000;
 export default function AskDoubt() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const { aiTriage } = useFeatures();
   // Opened from a problem page, the problem is already selected.
   const [form, setForm] = useState({ title: '', body: '', code: '', problemId: params.get('problem') || '' });
   const [busy, setBusy] = useState(false);
@@ -34,7 +32,7 @@ export default function AskDoubt() {
       if (form.code.trim()) payload.code = form.code;
       const { data } = await api.post('/doubts', payload);
       invalidate('/doubts');
-      toast.success(aiTriage ? 'Doubt posted. We are checking it before it is shared.' : 'Doubt posted. An AI draft is being prepared.');
+      toast.success('Doubt posted. We are checking it before it is shared.');
       navigate(`/doubts/${data.doubt._id}`);
     } catch (err) {
       const msg = err.response?.data?.error || 'Failed to post the doubt. Check your connection and try again.';

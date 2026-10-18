@@ -27,20 +27,19 @@ Captured against sample data in a development build.
 
 ## AI doubt triage and hint chat
 
-Two optional features, each behind a flag (`FEATURE_AI_TRIAGE`, `FEATURE_HINT_CHAT`, both off by default): unrelated or abusive doubts are removed automatically and the student is notified, and a per-problem hint chat gives escalating hints with strict daily limits. See `docs/ai-doubts-hints.md` for the environment variables, routes, quota rules and a manual test checklist.
+Unrelated or abusive doubts are removed automatically and the student is notified, and a per-problem hint chat gives escalating hints with strict daily limits. See `docs/ai-doubts-hints.md` for the environment variables, routes, quota rules and a manual test checklist.
 
 ---
 
 ## Email
 
-Account verification and password reset send email through [Brevo](https://www.brevo.com) (its transactional API, called with axios). Each feature has its own flag, both off by default: `FEATURE_EMAIL_VERIFICATION` and `FEATURE_PASSWORD_RESET`. With both off, signup and login behave exactly as before.
+Account verification and password reset send email through [Brevo](https://www.brevo.com) (its transactional API, called with axios).
 
 **Flows**
 - **Signup:** `POST /auth/register` creates an unverified account and answers 202 "check your inbox" with no session. The answer is the same for a new address, an unverified one and a verified one. An unverified address is replaced by the new request (name, password, role) and gets a fresh link that says a new request was submitted; a verified account is never touched and its owner gets an "you already have an account" email.
 - **Verify:** the email links to `/verify-email?token=...`; the page calls `POST /auth/verify-email` (POST, so link scanners cannot use the token). Links expire after 24 hours, work once, and a new link retires the older ones. Login before verifying returns 403 with `code: "EMAIL_NOT_VERIFIED"`, only after the password was correct.
 - **Resend:** `POST /auth/resend-verification` always answers the same. The 60 second cooldown and the 5 per hour cap are enforced silently per account, and per IP and email with a 429.
 - **Reset:** `POST /auth/forgot-password` always answers the same (an unverified account gets a verification email instead). The link `/reset-password?token=...` expires after 30 minutes and works once. `POST /auth/reset-password` changes the password, ends every session (a `tokenVersion` on the user is carried by the access and refresh tokens, and every refresh token is revoked) and sends a "your password was changed" notice with no link.
-- `GET /auth/config` is public and returns only `{ emailVerification, passwordReset }`, so the login page knows what to offer.
 
 **How tokens are kept safe.** A token is `HMAC(EMAIL_TOKEN_SECRET, tokenId)` for a random 32 byte `tokenId`. The database stores the token's SHA-256 and the `tokenId`, never the token, and the queued job holds ids only; the worker recomputes the link when it sends. Single use is one atomic `findOneAndUpdate`. Links are built from `APP_BASE_URL`, never from the `Host` header. Emails go through the outbox and the `emails` queue (5 attempts, exponential backoff from 10 seconds, no retry on a provider 4xx other than 408 and 429), and a work key per email. Brevo has no idempotency-key header, so the outbox is what prevents a double send once a job has completed; only a request Brevo accepted whose response was lost could be sent twice on retry. Emails are masked in logs, and tokens and links are never logged except in dev log-only mode.
 
@@ -48,17 +47,16 @@ Account verification and password reset send email through [Brevo](https://www.b
 
 | Variable | Notes |
 |---|---|
-| `FEATURE_EMAIL_VERIFICATION`, `FEATURE_PASSWORD_RESET` | `true` to enable |
 | `EMAIL_TOKEN_SECRET` | at least 32 characters; **identical for the web service and the worker** |
 | `APP_BASE_URL` | frontend origin used in links; https in production |
 | `BREVO_API_KEY`, `MAIL_FROM` | required in production; without a key elsewhere, emails are logged by the worker |
 | `EMAIL_VERIFY_TTL_HOURS` (24), `PASSWORD_RESET_TTL_MINUTES` (30), `EMAIL_RESEND_COOLDOWN_SECONDS` (60), `EMAIL_RESEND_HOURLY_CAP` (5), `UNVERIFIED_TTL_DAYS` (7) | optional |
 
-Both processes check this at startup while a flag is on and stop with one message listing what is missing.
+Both processes check this at startup and stop with one message listing what is missing.
 
 **Brevo setup.** In Brevo, create an API key (SMTP & API > API keys) and set it as `BREVO_API_KEY`. Under Senders, domains & dedicated IPs, add and verify the sender address used in `MAIL_FROM`; for deliverability also authenticate the domain by publishing the SPF, DKIM and DMARC records Brevo shows. If you use Brevo's authorised IP list, add the API host's IPs or turn the restriction off, otherwise the API answers 401 ("unrecognised IP"). The free plan has a daily sending limit.
 
-**Migration.** Run this once, before switching `FEATURE_EMAIL_VERIFICATION` on, so existing users are not locked out (it is safe to repeat):
+**Migration.** Run this once on an existing database so existing users are not locked out (it is safe to repeat):
 
 ```bash
 cd server
@@ -66,7 +64,7 @@ node scripts/migrateEmailVerified.js --dry-run   # shows how many users it would
 node scripts/migrateEmailVerified.js
 ```
 
-**Testing locally.** Email goes through the queue, so run Redis, the API (`npm run dev`) and the worker (`npm run worker`). With both flags on and no `BREVO_API_KEY` (and `NODE_ENV` not production), the **worker terminal** prints the masked recipient, the subject and the link instead of sending. Open the link in the browser. Unverified signups older than `UNVERIFIED_TTL_DAYS` are deleted hourly by the worker.
+**Testing locally.** Email goes through the queue, so run Redis, the API (`npm run dev`) and the worker (`npm run worker`). With no `BREVO_API_KEY` (and `NODE_ENV` not production), the **worker terminal** prints the masked recipient, the subject and the link instead of sending. Open the link in the browser. Unverified signups older than `UNVERIFIED_TTL_DAYS` are deleted hourly by the worker.
 
 ---
 
@@ -111,7 +109,7 @@ Anyone can sign up, but only as a student or as a teacher *applicant*. A teacher
 
 ```
 /server
-  /config        db.js, redis.js (lazy ioredis), features.js (flags), mail.js, teacherAccess.js, aiLimits.js
+  /config        db.js, redis.js (lazy ioredis), mail.js, teacherAccess.js, aiLimits.js
   /constants     topics.js (fixed problem-tag list, mirrored on the client)
   /models        User, Problem, Submission, Doubt, Answer, RefreshToken, EmailToken, TeacherApplication, AuditLog,
                  WorkItem, StudentStats, UserStats, Badge, UserBadge, GamificationEvent, Notification,
@@ -566,11 +564,9 @@ A hybrid model chosen for security:
 | POST | `/admin/users/:id/role` `/suspend` `/unsuspend` | admin | demote to student, suspend, unsuspend |
 | GET/POST | `/admin/teacher-applications`, `/:id/approve`, `/:id/reject` | admin | the application queue and decisions |
 | GET | `/admin/audit-log` | admin | append-only audit log |
-| GET/POST | `/problems/:problemId/hints` | student | hint chat (flag `FEATURE_HINT_CHAT`) |
-| GET | `/features` | auth | which optional features are on |
-| GET | `/auth/config` | public | which email features are on |
-| POST | `/auth/verify-email` `/auth/resend-verification` | public | verify an address / send a new link (flag) |
-| POST | `/auth/forgot-password` `/auth/reset-password` | public | request / complete a password reset (flag) |
+| GET/POST | `/problems/:problemId/hints` | student | hint chat |
+| POST | `/auth/verify-email` `/auth/resend-verification` | public | verify an address / send a new link |
+| POST | `/auth/forgot-password` `/auth/reset-password` | public | request / complete a password reset |
 | GET | `/auth/me` | auth | current user |
 | GET | `/problems` `?topics=a,b` | auth | list problems, optional topic filter, stable numbering |
 | GET | `/problems/stats/counts` | auth | global + per-topic problem counts |

@@ -2,6 +2,7 @@ import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import request from 'supertest';
 import mongoose from 'mongoose';
 import { registerAs } from '../helpers/users.js';
+import { draftWork } from '../helpers/doubts.js';
 
 const svc = (p) => new URL(`../../services/${p}`, import.meta.url).pathname;
 
@@ -60,7 +61,7 @@ describe('Prompt injection resistance', () => {
     expect(res.status).toBe(201);
 
     // AI draft runs in the background — wait for it, then inspect.
-    const work = await WorkItem.findOne({ key: `draft-${res.body.doubt._id}` });
+    const work = await draftWork(res.body.doubt._id);
     await processWork({ data: { workItemId: work.id }, attemptsMade: 0, opts: { attempts: 3 } });
     const answer = await waitFor(() => Answer.findOne({ doubtId: res.body.doubt._id }));
     // State is decided ONLY by our route code, never by model output.

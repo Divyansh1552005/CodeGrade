@@ -2,14 +2,11 @@ import { describe, it, expect, jest, afterEach } from '@jest/globals';
 import request from 'supertest';
 import { dayKey, nextResetAt, DAY_TIMEZONE } from '../../utils/istDay.js';
 import { redact, createLogger } from '../../utils/logger.js';
-import { features, featureSnapshot } from '../../config/features.js';
 import { aiLimits } from '../../config/aiLimits.js';
 import { withAiSlot, AiBusyError, __activeForTest } from '../../services/aiGate.js';
 import { createApp } from '../../app.js';
 
 afterEach(() => {
-  delete process.env.FEATURE_AI_TRIAGE;
-  delete process.env.FEATURE_HINT_CHAT;
   delete process.env.AI_MAX_CONCURRENT_CALLS;
   delete process.env.AI_QUEUE_WAIT_MS;
   delete process.env.HINT_MAX_MESSAGES_PER_DAY;
@@ -70,14 +67,6 @@ describe('request id middleware', () => {
 });
 
 describe('feature flags and limits', () => {
-  it('are off unless the env var is truthy, and are read at call time', () => {
-    expect(features.aiTriage()).toBe(false);
-    process.env.FEATURE_AI_TRIAGE = 'true';
-    process.env.FEATURE_HINT_CHAT = '1';
-    expect(featureSnapshot()).toEqual({ aiTriage: true, hintChat: true });
-    process.env.FEATURE_AI_TRIAGE = 'false';
-    expect(features.aiTriage()).toBe(false);
-  });
   it('exposes the spec defaults and honours env overrides', () => {
     const { hints, triage } = aiLimits();
     expect([hints.maxMessagesPerDay, hints.maxMessagesPerWindow, hints.windowSeconds]).toEqual([10, 2, 60]);

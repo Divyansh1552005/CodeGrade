@@ -31,13 +31,12 @@ const run = async (key, attemptsMade = 0) => processWork({ data: { workItemId: (
 const verdict = (v, c, reason = 'Because of the content.') => classify.mockResolvedValue({ result: { verdict: v, confidence: c, reason } });
 
 beforeEach(async () => {
-  process.env.FEATURE_AI_TRIAGE = 'true';
   classify.mockReset();
   student = await register('student', 'author');
   other = await register('student', 'other');
   teacher = await register('teacher');
 });
-afterEach(() => { delete process.env.FEATURE_AI_TRIAGE; delete process.env.MAX_DOUBTS_PER_DAY; jest.restoreAllMocks(); });
+afterEach(() => { delete process.env.MAX_DOUBTS_PER_DAY; jest.restoreAllMocks(); });
 
 describe('creating a doubt', () => {
   it('saves it as pending_triage, queues triage only, and returns immediately without calling the AI', async () => {
@@ -56,15 +55,6 @@ describe('creating a doubt', () => {
     expect(await board(student)).toContain(id);
     expect(await board(other)).not.toContain(id);
     expect(await board(teacher)).not.toContain(id);
-  });
-  it('with triage off behaves exactly as before: no status, draft queued, no triage work', async () => {
-    delete process.env.FEATURE_AI_TRIAGE;
-    const res = await post(student);
-    expect(res.status).toBe(201);
-    expect(res.body.doubt.status).toBeUndefined();
-    expect(await work(`draft-${res.body.doubt._id}`)).toMatchObject({ type: 'doubt-draft' });
-    expect(await WorkItem.countDocuments({ type: 'doubt-triage' })).toBe(0);
-    expect((await Doubt.findById(res.body.doubt._id)).status).toBeUndefined();
   });
   it('registers the triage queue and work type', () => {
     expect(QUEUE_NAMES['doubt-triage']).toBe('doubt-triage');
@@ -191,10 +181,6 @@ describe('daily doubt cap', () => {
     expect(results.filter((r) => r.status === 201)).toHaveLength(10);
     expect(results.filter((r) => r.status === 429)).toHaveLength(5);
     expect(await Doubt.countDocuments({ studentId: student.id })).toBe(10);
-  });
-  it('applies only when triage is on', async () => {
-    delete process.env.FEATURE_AI_TRIAGE;
-    for (let i = 0; i < 12; i += 1) expect((await post(student)).status).toBe(201);
   });
 });
 

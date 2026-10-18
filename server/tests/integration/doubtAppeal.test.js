@@ -32,14 +32,13 @@ const removedDoubt = (over = {}) => Doubt.create({
 });
 
 beforeEach(async () => {
-  process.env.FEATURE_AI_TRIAGE = 'true';
   classify.mockReset(); generateDraftAnswer.mockReset();
   generateDraftAnswer.mockResolvedValue({ draftAnswer: 'A draft answer.' });
   student = await register('student', 'author');
   other = await register('student', 'other');
   teacher = await register('teacher');
 });
-afterEach(() => { delete process.env.FEATURE_AI_TRIAGE; });
+afterEach(() => { });
 
 describe('GET /doubts/:id/removed', () => {
   it('shows the owner the reason and the appeal option, and nothing about the model', async () => {

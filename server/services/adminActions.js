@@ -3,7 +3,6 @@ import TeacherApplication from '../models/TeacherApplication.js';
 import { audit } from './audit.js';
 import { revokeAllSessions } from './tokenService.js';
 import { queueEmail } from './emailJob.js';
-import { emailFeaturesOn } from '../config/mail.js';
 import { cleanText } from '../utils/plainText.js';
 
 const fail = (status, message, code) => Object.assign(new Error(message), { status, code });
@@ -79,9 +78,7 @@ export async function approveApplication({ admin, id, req }) {
   }
   await revokeAllSessions(user._id);
   await audit({ action: 'teacher_application.approved', actor: admin, target: user, before: { status: application.status, role: 'teacher_applicant' }, after: { status: 'approved', role: 'teacher' }, req });
-  if (emailFeaturesOn()) {
-    await queueEmail({ kind: 'teacher-approved', userId: user._id, ref: `${id}-${decided.decisionSeq}`, extra: { applicationId: String(id), decisionSeq: decided.decisionSeq } });
-  }
+  await queueEmail({ kind: 'teacher-approved', userId: user._id, ref: `${id}-${decided.decisionSeq}`, extra: { applicationId: String(id), decisionSeq: decided.decisionSeq } });
   return decided;
 }
 
@@ -90,7 +87,7 @@ export async function rejectApplication({ admin, id, reason, req }) {
   const { application, decided, user } = await decide({ admin, id, to: 'rejected', from: ['pending'], reason: clean, req });
   if (user) await revokeAllSessions(user._id);
   await audit({ action: 'teacher_application.rejected', actor: admin, target: user, before: { status: application.status }, after: { status: 'rejected' }, detail: clean || undefined, req });
-  if (user && emailFeaturesOn()) {
+  if (user) {
     await queueEmail({ kind: 'teacher-rejected', userId: user._id, ref: `${id}-${decided.decisionSeq}`, extra: { applicationId: String(id), decisionSeq: decided.decisionSeq } });
   }
   return decided;

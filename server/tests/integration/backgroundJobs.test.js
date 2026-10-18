@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import request from 'supertest';
 import mongoose from 'mongoose';
 import { registerAs } from '../helpers/users.js';
+import { draftWork } from '../helpers/doubts.js';
 
 const svc = (name) => new URL(`../../services/${name}`, import.meta.url).pathname;
 const draft = jest.fn();
@@ -53,7 +54,7 @@ describe('durable drafts and retries', () => {
     const res = await request(app).post('/doubts').set('Authorization', auth(student)).send({ title: 'Loop', body: 'How do loops work?' });
     expect(res.status).toBe(201);
     expect(draft).not.toHaveBeenCalled();
-    const work = await WorkItem.findOne({ key: `draft-${res.body.doubt._id}` });
+    const work = await draftWork(res.body.doubt._id);
     expect(work.status).toBe('pending');
     await run(work); await run(work);
     expect(await Answer.countDocuments({ doubtId: res.body.doubt._id })).toBe(1);

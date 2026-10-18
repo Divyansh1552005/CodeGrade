@@ -50,7 +50,6 @@ describe('migrateEmailVerified', () => {
 });
 
 describe('cleanupUnverified', () => {
-  beforeEach(() => { process.env.FEATURE_EMAIL_VERIFICATION = 'true'; });
   afterEach(() => { process.env = { ...saved }; });
   it('removes stale unverified signups with their tokens and queued emails, and keeps everyone else', async () => {
     const stale = (await insertRaw('stale@example.com', { emailVerified: false }, 8 * DAY)).insertedId;
@@ -79,11 +78,5 @@ describe('cleanupUnverified', () => {
     expect(res.status).toBe(202);
     expect((await User.findOne({ email: 'squatted@example.com' })).name).toBe('Real');
     setMailTransport(undefined);
-  });
-  it('does nothing while the verification flag is off', async () => {
-    process.env.FEATURE_EMAIL_VERIFICATION = 'false';
-    await insertRaw('stale@example.com', { emailVerified: false }, 30 * DAY);
-    expect(await cleanupUnverified()).toEqual({ skipped: 'flag_off', deleted: 0 });
-    expect(await User.countDocuments()).toBe(1);
   });
 });

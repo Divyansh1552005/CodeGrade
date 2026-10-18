@@ -14,15 +14,13 @@ vi.mock('../auth/AuthContext.jsx', () => ({ useAuth: () => ({ isAuthed: true, us
 vi.mock('react-hot-toast', () => ({ default: { error: vi.fn(), success: vi.fn() } }));
 let submission;
 let accepted;
-let features;
 const initial = () => ({ _id: 's1', problemId: 'p1', language: 'python', code: 'print(input())',
   status: 'queued', feedbackStatus: 'completed', passCount: 0, totalCount: 0, testResults: [], createdAt: new Date().toISOString() });
 beforeEach(() => {
-  vi.clearAllMocks(); vi.useFakeTimers(); invalidate(); accepted = false; submission = initial(); features = { aiTriage: false, hintChat: false };
+  vi.clearAllMocks(); vi.useFakeTimers(); invalidate(); accepted = false; submission = initial();
   api.get.mockReset().mockImplementation(async (url) => {
     if (url === '/problems') return { data: { problems: [{ _id: 'p1', title: 'Echo', starterCode: { python: '# Python starter', javascript: '// JS starter' }, sampleCases: [{ input: '7', output: '7' }] }] } };
     if (url.startsWith('/submissions?')) return { data: { submissions: accepted ? [structuredClone(submission)] : [] } };
-    if (url === '/features') return { data: { features } };
     if (url === '/problems/p1/hints') return { data: { messages: [], hintsUsed: 0, level: 1, acceptedMode: false, quota: { messagesLeft: 10, retryAfterSeconds: 0, resetAt: '2026-10-19T18:30:00.000Z' } } };
     if (url === '/submissions/s1') return { data: { submission: structuredClone(submission) } };
     throw new Error(`Unexpected URL ${url}`);
@@ -113,13 +111,7 @@ it('links to a new doubt with the current problem preselected', async () => {
   expect(screen.getByRole('link', { name: 'Ask a doubt' })).toHaveAttribute('href', '/doubts/new?problem=p1');
 });
 
-it('shows no Hints tab while the feature is off', async () => {
-  await act(async () => { render(<MemoryRouter initialEntries={['/submit/p1']}><Routes><Route path="/submit/:problemId" element={<SubmitCode />} /></Routes></MemoryRouter>); });
-  expect(screen.queryByRole('tab', { name: 'Hints' })).not.toBeInTheDocument();
-  expect(api.get).not.toHaveBeenCalledWith('/problems/p1/hints');
-});
-it('adds a Hints tab when the feature is on and opens the hint chat for this problem', async () => {
-  features = { aiTriage: false, hintChat: true };
+it('always has a Hints tab and opens the hint chat for this problem', async () => {
   await act(async () => { render(<MemoryRouter initialEntries={['/submit/p1']}><Routes><Route path="/submit/:problemId" element={<SubmitCode />} /></Routes></MemoryRouter>); });
   expect(screen.getByRole('tab', { name: 'Hints' })).toBeInTheDocument();
   await act(async () => { fireEvent.mouseDown(screen.getByRole('tab', { name: 'Hints' })); });

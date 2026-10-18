@@ -41,7 +41,7 @@ async function verifiedApplicant(extra) {
 const login = (email, password = 'password123') => post('/auth/login', { email, password });
 
 beforeEach(async () => {
-  process.env = { ...saved, FEATURE_EMAIL_VERIFICATION: 'true', FEATURE_PASSWORD_RESET: 'true', EMAIL_TOKEN_SECRET: 'a-test-secret-that-is-at-least-32-characters', APP_BASE_URL: 'https://app.example.com', MAIL_FROM: 'CodeGrade <no-reply@example.com>', ADMIN_EMAIL: 'boss@example.com', ADMIN_PASSWORD: 'correct-horse-battery-staple-42' };
+  process.env = { ...saved, EMAIL_TOKEN_SECRET: 'a-test-secret-that-is-at-least-32-characters', APP_BASE_URL: 'https://app.example.com', MAIL_FROM: 'CodeGrade <no-reply@example.com>', ADMIN_EMAIL: 'boss@example.com', ADMIN_PASSWORD: 'correct-horse-battery-staple-42' };
   transport.mockReset().mockResolvedValue({ id: 'm' });
   sentBefore = 0;
   setMailTransport(transport);
@@ -87,7 +87,7 @@ describe('teacher signup', () => {
     expect((await request(app).get('/auth/me').set(auth)).status).toBe(200);
     const status = await request(app).get('/teacher-application').set(auth);
     expect(status.body.application).toMatchObject({ status: 'pending', organization: 'Open University', note: 'I teach algorithms.' });
-    for (const path of ['/problems', '/doubts', '/submissions', '/notifications', '/features', '/leaderboard', '/answers?state=pending']) {
+    for (const path of ['/problems', '/doubts', '/submissions', '/notifications', '/leaderboard', '/answers?state=pending']) {
       const res = await request(app).get(path).set(auth);
       expect({ path, status: res.status, code: res.body.code, applicationStatus: res.body.applicationStatus }).toEqual({ path, status: 403, code: 'TEACHER_PENDING', applicationStatus: 'pending' });
     }
@@ -239,19 +239,5 @@ describe('housekeeping', () => {
     await bootstrapAdmin();
     expect((await User.findById(applicant.user._id)).role).toBe('admin');
     expect(await TeacherApplication.countDocuments({ userId: applicant.user._id })).toBe(0);
-  });
-});
-
-describe('with email verification off', () => {
-  beforeEach(() => { process.env.FEATURE_EMAIL_VERIFICATION = 'false'; process.env.FEATURE_PASSWORD_RESET = 'false'; });
-  it('creates the applicant with a session and a visible application, and sends no email', async () => {
-    const res = await post('/auth/register', teacherBody());
-    expect(res.status).toBe(201);
-    expect(res.body.user.role).toBe('teacher_applicant');
-    const application = await TeacherApplication.findOne({ userId: res.body.user._id });
-    expect(application.visibleAt).toBeInstanceOf(Date);
-    expect(await WorkItem.countDocuments()).toBe(0);
-    const denied = await request(app).get('/problems').set('Authorization', `Bearer ${res.body.accessToken}`);
-    expect([denied.status, denied.body.code]).toEqual([403, 'TEACHER_PENDING']);
   });
 });

@@ -39,12 +39,3 @@ describe('consumeDaily', () => {
   });
 });
 
-describe('GET /features', () => {
-  it('requires login and reports both flags off by default', async () => {
-    const app = createApp();
-    expect((await request(app).get('/features')).status).toBe(401);
-    const reg = await request(app).post('/auth/register').send({ name: 'S', email: 's@x.com', password: 'password123', accountType: 'student' });
-    const res = await request(app).get('/features').set('Authorization', `Bearer ${reg.body.accessToken}`);
-    expect(res.body).toEqual({ features: { aiTriage: false, hintChat: false } });
-  });
-});

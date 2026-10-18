@@ -24,7 +24,6 @@ const POLICY = {
   'POST /auth/verify-email': 'public', 'POST /auth/resend-verification': 'public', 'POST /auth/forgot-password': 'public', 'POST /auth/reset-password': 'public',
   'GET /auth/me': 'any',
   'GET /teacher-application': 'any',
-  'GET /features': 'app',
   'GET /activity/leaderboard': 'app', 'GET /activity/notifications': 'app', 'PATCH /activity/notifications/:id/read': 'app', 'GET /activity/progress': 'app',
   'GET /leaderboard': 'app',
   'GET /notifications': 'app', 'GET /notifications/unread-count': 'app', 'POST /notifications/read-all': 'app', 'PATCH /notifications/:id/read': 'app',

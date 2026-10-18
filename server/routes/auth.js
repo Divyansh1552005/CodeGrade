@@ -11,10 +11,8 @@ import {
 } from '../services/tokenService.js';
 import { setRefreshCookie, clearRefreshCookie, REFRESH_COOKIE } from '../utils/cookies.js';
 import { registerSchema, loginSchema, emailOnlySchema, tokenSchema, resetPasswordSchema } from '../validation/schemas.js';
-import { requireFeature } from '../middleware/featureGate.js';
 import { authLimits } from '../middleware/authLimits.js';
 import { paced } from '../middleware/paced.js';
-import { authConfig, features } from '../config/features.js';
 import { isVerified } from '../models/User.js';
 import { consumeToken, issueToken, mayIssue, supersedeTokens } from '../services/emailTokens.js';
 import { queueEmail } from '../services/emailJob.js';
@@ -39,12 +37,6 @@ const GENERIC = {
   forgot: { message: 'If an account exists for that email, we sent a reset link.' },
 };
 const INVALID_LINK = { error: 'This link is invalid or has expired.', code: 'TOKEN_INVALID' };
-
-// GET /auth/config  — public: which email features are on, so the login page knows what to offer.
-router.get('/config', (_req, res) => {
-  res.set('Cache-Control', 'public, max-age=60');
-  res.json(authConfig());
-});
 
 // Records the login time, at most once an hour, so a login costs a write only now and then.
 const touchLastLogin = (userId) => User.updateOne(
@@ -80,7 +72,7 @@ async function registerPending({ name, email, password, accountType, ...details 
   if (!user) {
     try {
       user = await User.create({ name, email: address, passwordHash, role, emailVerified: false });
-      if (teacher) await createApplication(user, details, { verified: false, req });
+      if (teacher) await createApplication(user, details, { req });
       await sendVerification(user, { ignoreCooldown: true });
       return;
     } catch (err) {
@@ -96,7 +88,7 @@ async function registerPending({ name, email, password, accountType, ...details 
     );
     if (replaced) {
       await TeacherApplication.deleteOne({ userId: replaced._id, status: 'pending' }); // a new request replaces the old one
-      if (teacher) await createApplication(replaced, details, { verified: false, req });
+      if (teacher) await createApplication(replaced, details, { req });
       await sendVerification(replaced, { resubmitted: true, ignoreCooldown: true });
       return;
     }
@@ -125,26 +117,15 @@ router.post('/register', ...authLimits('register'), validate(registerSchema), te
 
     // The admin address is reserved. It answers like any account that already exists and never changes.
     if (isReservedEmail(email)) {
-      if (!features.emailVerification()) throw httpError(409, 'Resource already exists');
       return await paced(async () => ({ status: 202, body: { ...GENERIC.signup, email: String(email).toLowerCase() } }))(req, res, next);
     }
 
     if (teacher && !(await hasRoomForApplication())) return res.status(503).json(TEACHER_SIGNUPS_FULL);
 
-    if (features.emailVerification()) {
-      return await paced(async () => {
-        await registerPending({ name, email, password, accountType, ...details }, req);
-        return { status: 202, body: { ...GENERIC.signup, email: String(email).toLowerCase() } };
-      })(req, res, next);
-    }
-
-    const passwordHash = await User.hashPassword(password);
-    const user = await User.create({ name, email, passwordHash, role: teacher ? 'teacher_applicant' : 'student' });
-    // Without email verification there is nothing to wait for: the application is visible straight away.
-    if (teacher) await createApplication(user, details, { verified: true, req });
-    const { accessToken, refreshToken } = await issueTokenPair(user);
-    setRefreshCookie(res, refreshToken);
-    return res.status(201).json({ user: user.toJSON(), accessToken });
+    return await paced(async () => {
+      await registerPending({ name, email, password, accountType, ...details }, req);
+      return { status: 202, body: { ...GENERIC.signup, email: String(email).toLowerCase() } };
+    })(req, res, next);
   } catch (err) {
     return next(err);
   }
@@ -190,15 +171,15 @@ router.post('/login', ...authLimits('login'), validate(loginSchema), adminLoginL
     const { email, password } = req.body;
     if (isAdminAttempt(req.body)) return await adminLogin(req, res);
     const user = await User.findOne({ email: String(email).toLowerCase() });
-    // With email verification on, an unknown address still pays for one bcrypt compare, so the time does not give it away.
-    if (!user && features.emailVerification()) await User.hashPassword(password);
+    // An unknown address still pays for one bcrypt compare, so the time does not give it away.
+    if (!user) await User.hashPassword(password);
     if (!user || !(await user.comparePassword(password))) {
       throw httpError(401, 'Invalid credentials');
     }
     // A suspended account looks exactly like a wrong password.
     if (user.suspendedAt) throw httpError(401, 'Invalid credentials');
     // Only after the password is right, so the code cannot be used to probe which emails are registered.
-    if (features.emailVerification() && !isVerified(user)) {
+    if (!isVerified(user)) {
       return res.status(403).json({ error: 'Verify your email address before logging in.', code: 'EMAIL_NOT_VERIFIED' });
     }
     await touchLastLogin(user._id);
@@ -211,7 +192,7 @@ router.post('/login', ...authLimits('login'), validate(loginSchema), adminLoginL
 });
 
 // POST /auth/verify-email  { token }  — POST, not GET, so mail scanners and link prefetchers cannot use the token.
-router.post('/verify-email', requireFeature('emailVerification'), ...authLimits('verify-email'), validate(tokenSchema), async (req, res, next) => {
+router.post('/verify-email', ...authLimits('verify-email'), validate(tokenSchema), async (req, res, next) => {
   try {
     const used = await consumeToken(req.body.token, 'verify');
     if (!used) return res.status(400).json(INVALID_LINK);
@@ -228,17 +209,17 @@ router.post('/verify-email', requireFeature('emailVerification'), ...authLimits(
 
 // POST /auth/resend-verification  { email }  — the same answer whatever the account's state. The cooldown
 // and the hourly cap are enforced silently for the same reason; only the per-IP limit can answer 429.
-router.post('/resend-verification', requireFeature('emailVerification'), ...authLimits('resend-verification'), validate(emailOnlySchema), paced(async (req) => {
+router.post('/resend-verification', ...authLimits('resend-verification'), validate(emailOnlySchema), paced(async (req) => {
   const user = isReservedEmail(req.body.email) ? null : await User.findOne({ email: req.body.email.toLowerCase() });
   if (user && user.emailVerified === false) await sendVerification(user);
   return { body: GENERIC.resend };
 }));
 
 // POST /auth/forgot-password  { email }  — an unverified account gets a verification email instead of a reset.
-router.post('/forgot-password', requireFeature('passwordReset'), ...authLimits('forgot-password'), validate(emailOnlySchema), paced(async (req) => {
+router.post('/forgot-password', ...authLimits('forgot-password'), validate(emailOnlySchema), paced(async (req) => {
   const user = isReservedEmail(req.body.email) ? null : await User.findOne({ email: req.body.email.toLowerCase() });
   if (user) {
-    if (features.emailVerification() && user.emailVerified === false) await sendVerification(user);
+    if (user.emailVerified === false) await sendVerification(user);
     else if (await mayIssue(user._id, 'reset')) {
       const tokenId = await issueToken(user._id, 'reset');
       await queueEmail({ kind: 'password-reset', userId: user._id, tokenId });
@@ -248,7 +229,7 @@ router.post('/forgot-password', requireFeature('passwordReset'), ...authLimits('
 }));
 
 // POST /auth/reset-password  { token, password }
-router.post('/reset-password', requireFeature('passwordReset'), ...authLimits('reset-password'), validate(resetPasswordSchema), async (req, res, next) => {
+router.post('/reset-password', ...authLimits('reset-password'), validate(resetPasswordSchema), async (req, res, next) => {
   try {
     const used = await consumeToken(req.body.token, 'reset');
     if (!used) return res.status(400).json(INVALID_LINK);

@@ -3,7 +3,6 @@ import { z } from 'zod';
 import Problem from '../models/Problem.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roleGuard.js';
-import { requireFeature } from '../middleware/featureGate.js';
 import { validate } from '../middleware/validate.js';
 import { httpError } from '../middleware/errorHandler.js';
 import { objectId } from '../validation/schemas.js';
@@ -14,7 +13,7 @@ import { generateHint, HintAiError } from '../services/hintChain.js';
 import { latestVerdict, hasAccepted, nextLevel, loadThread, saveExchange } from '../services/hintContext.js';
 
 const router = Router({ mergeParams: true });
-router.use(requireAuth, requireRole('student'), requireFeature('hintChat'));
+router.use(requireAuth, requireRole('student'));
 
 const params = z.object({ problemId: objectId });
 // Built per request so the limit follows the environment. Unknown fields (a client-supplied

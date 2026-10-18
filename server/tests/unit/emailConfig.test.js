@@ -2,13 +2,12 @@ import { afterEach, describe, expect, it } from '@jest/globals';
 import { maskEmail } from '../../utils/maskEmail.js';
 import { redact } from '../../utils/logger.js';
 import { devLogOnly, mailConfig, validateMailConfig } from '../../config/mail.js';
-import { authConfig } from '../../config/features.js';
 import { registerSchema, passwordSchema } from '../../validation/schemas.js';
 
 const SECRET = 'x'.repeat(32);
 const saved = { ...process.env };
 afterEach(() => { process.env = { ...saved }; });
-const withEnv = (extra) => { process.env = { ...saved, FEATURE_EMAIL_VERIFICATION: 'true', ...extra }; };
+const withEnv = (extra) => { process.env = { ...saved, ...extra }; };
 
 describe('maskEmail', () => {
   it('keeps the first letters and the top-level domain only', () => {
@@ -24,12 +23,7 @@ describe('maskEmail', () => {
 });
 
 describe('validateMailConfig', () => {
-  it('does nothing while both flags are off', () => {
-    process.env = { ...saved };
-    delete process.env.FEATURE_EMAIL_VERIFICATION; delete process.env.FEATURE_PASSWORD_RESET;
-    expect(() => validateMailConfig({})).not.toThrow();
-  });
-  it('lists every problem when a flag is on', () => {
+  it('lists every problem at once', () => {
     withEnv({ EMAIL_TOKEN_SECRET: 'short', APP_BASE_URL: '', NODE_ENV: 'production', BREVO_API_KEY: '', MAIL_FROM: '' });
     expect(() => validateMailConfig()).toThrow(/EMAIL_TOKEN_SECRET[\s\S]*APP_BASE_URL[\s\S]*BREVO_API_KEY[\s\S]*MAIL_FROM/);
   });
@@ -48,10 +42,6 @@ describe('validateMailConfig', () => {
     expect(mailConfig({}).verifyTtlMs).toBe(24 * 3600 * 1000);
     expect(mailConfig({}).resetTtlMs).toBe(30 * 60 * 1000);
     expect(mailConfig({ EMAIL_VERIFY_TTL_HOURS: '2', PASSWORD_RESET_TTL_MINUTES: '5' })).toMatchObject({ verifyTtlMs: 7200000, resetTtlMs: 300000 });
-  });
-  it('exposes only the two flags on the public config', () => {
-    withEnv({ FEATURE_PASSWORD_RESET: 'false' });
-    expect(authConfig()).toEqual({ emailVerification: true, passwordReset: false });
   });
 });
 

@@ -11,7 +11,6 @@ import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import SubmissionResult from '../components/workspace/SubmissionResult.jsx';
 import SubmissionHistory from '../components/workspace/SubmissionHistory.jsx';
 import HintChat from '../components/workspace/HintChat.jsx';
-import { useFeatures } from '../lib/useFeatures.js';
 import {
   Button, CodeBlock, DifficultyBadge, EmptyState, ErrorState, Field, Icon, ResizableGroup, ResizeHandle, ResizablePanel, Select,
   Skeleton, Tabs, TabsContent, TabsList, TabsTrigger,
@@ -44,7 +43,6 @@ export default function SubmitCode() {
   const [consolePane, setConsolePane] = useState('results');
   const [mobileTab, setMobileTab] = useState('description');
   const isDesktop = useMediaQuery('(min-width: 1024px)');
-  const { hintChat } = useFeatures();
   const [resetOpen, setResetOpen] = useState(false);
   const drafts = useRef(new Map());
   const activeProblem = useRef(problemId);
@@ -242,11 +240,11 @@ export default function SubmitCode() {
           <TabsList className="shrink-0">
             <TabsTrigger value="description">Description</TabsTrigger>
             <TabsTrigger value="submissions">Submissions{typeof submissionList.meta.total === 'number' ? ` (${submissionList.meta.total})` : ''}</TabsTrigger>
-            {hintChat && <TabsTrigger value="hints">Hints</TabsTrigger>}
+            <TabsTrigger value="hints">Hints</TabsTrigger>
           </TabsList>
           <TabsContent value="description" className="min-h-0 flex-1 overflow-y-auto">{descriptionPane}</TabsContent>
           <TabsContent value="submissions" className="min-h-0 flex-1 overflow-y-auto">{historyPane}</TabsContent>
-          {hintChat && <TabsContent value="hints" forceMount className="min-h-0 flex-1 data-[state=inactive]:hidden">{hintsPane}</TabsContent>}
+          <TabsContent value="hints" forceMount className="min-h-0 flex-1 data-[state=inactive]:hidden">{hintsPane}</TabsContent>
         </Tabs>
       </ResizablePanel>
       <ResizeHandle orientation="horizontal" />
@@ -272,13 +270,13 @@ export default function SubmitCode() {
         <TabsTrigger value="code">Code</TabsTrigger>
         <TabsTrigger value="results">Results</TabsTrigger>
         <TabsTrigger value="submissions">Submissions</TabsTrigger>
-        {hintChat && <TabsTrigger value="hints">Hints</TabsTrigger>}
+        <TabsTrigger value="hints">Hints</TabsTrigger>
       </TabsList>
       <TabsContent value="description" className="min-h-0 flex-1 overflow-y-auto">{descriptionPane}</TabsContent>
       <TabsContent value="code" forceMount className="min-h-0 flex-1 data-[state=inactive]:hidden">{editorPane}</TabsContent>
       <TabsContent value="results" className="min-h-0 flex-1">{consolePanel}</TabsContent>
       <TabsContent value="submissions" className="min-h-0 flex-1 overflow-y-auto">{historyPane}</TabsContent>
-      {hintChat && <TabsContent value="hints" forceMount className="min-h-0 flex-1 data-[state=inactive]:hidden">{hintsPane}</TabsContent>}
+      <TabsContent value="hints" forceMount className="min-h-0 flex-1 data-[state=inactive]:hidden">{hintsPane}</TabsContent>
     </Tabs>
   );
 

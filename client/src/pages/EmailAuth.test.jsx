@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { api } from '../api/client.js';
-import { resetAuthConfigCache } from '../api/useAuthConfig.js';
 import CheckInbox from '../components/CheckInbox.jsx';
 import Login from './Login.jsx';
 import Register from './Register.jsx';
@@ -26,9 +25,8 @@ const type = (label, value) => fireEvent.change(screen.getByLabelText(label), { 
 
 beforeEach(() => {
   navigate.mockClear(); auth.login.mockReset(); auth.register.mockReset();
-  api.get.mockReset().mockResolvedValue({ data: { emailVerification: true, passwordReset: true } });
+  api.get.mockReset();
   api.post.mockReset().mockResolvedValue({ data: {} });
-  resetAuthConfigCache();
 });
 afterEach(() => { vi.useRealTimers(); });
 
@@ -101,14 +99,9 @@ describe('login', () => {
     await screen.findByRole('alert');
     expect(screen.queryByRole('button', { name: /Resend verification/ })).not.toBeInTheDocument();
   });
-  it('links to forgot password only when the server has it on', async () => {
+  it('always links to forgot password', async () => {
     render(<MemoryRouter><Login /></MemoryRouter>);
     expect(await screen.findByRole('link', { name: 'Forgot password?' })).toHaveAttribute('href', '/forgot-password');
-    resetAuthConfigCache();
-    api.get.mockResolvedValue({ data: { emailVerification: false, passwordReset: false } });
-    render(<MemoryRouter><Login /></MemoryRouter>);
-    await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2));
-    expect(screen.getAllByRole('link', { name: 'Forgot password?' })).toHaveLength(1);
   });
 });
 

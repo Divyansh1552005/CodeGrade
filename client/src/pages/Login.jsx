@@ -4,7 +4,6 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext.jsx';
 import AuthCard from '../components/AuthCard.jsx';
 import ResendVerification from '../components/ResendVerification.jsx';
-import { useAuthConfig } from '../api/useAuthConfig.js';
 import { homeFor } from '../components/ProtectedRoute.jsx';
 import { Button, ErrorState, Field, Input } from '../components/ui/index.js';
 
@@ -16,7 +15,6 @@ export default function Login() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [unverified, setUnverified] = useState(false); // the server answered EMAIL_NOT_VERIFIED
-  const { passwordReset } = useAuthConfig();
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -52,9 +50,7 @@ export default function Login() {
         <Field label="Password">
           <Input value={password} onChange={(e) => setPassword(e.target.value)} type="password" autoComplete="current-password" required />
         </Field>
-        {passwordReset && (
-          <p className="-mt-2 text-sm"><Link className="rounded-sm font-medium text-accent-text hover:underline" to="/forgot-password">Forgot password?</Link></p>
-        )}
+        <p className="-mt-2 text-sm"><Link className="rounded-sm font-medium text-accent-text hover:underline" to="/forgot-password">Forgot password?</Link></p>
         <Button type="submit" variant="primary" size="lg" className="w-full" loading={busy}>Log in</Button>
         {error && <ErrorState message={error} />}
         {unverified && <ResendVerification email={email.trim()} label="Resend verification email" />}

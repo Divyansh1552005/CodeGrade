@@ -44,7 +44,7 @@ async function verifiedUser(password = 'password123') {
 const login = (email, password = 'password123') => post('/auth/login', { email, password });
 
 beforeEach(() => {
-  process.env = { ...saved, FEATURE_EMAIL_VERIFICATION: 'true', FEATURE_PASSWORD_RESET: 'true', EMAIL_TOKEN_SECRET: 'a-test-secret-that-is-at-least-32-characters', APP_BASE_URL: 'https://app.example.com', MAIL_FROM: 'CodeGrade <no-reply@example.com>' };
+  process.env = { ...saved, EMAIL_TOKEN_SECRET: 'a-test-secret-that-is-at-least-32-characters', APP_BASE_URL: 'https://app.example.com', MAIL_FROM: 'CodeGrade <no-reply@example.com>' };
   transport.mockReset().mockResolvedValue({ id: 'msg' });
   sentBefore = 0;
   setMailTransport(transport);
@@ -371,47 +371,6 @@ describe('links and headers', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ emailVerification: true, passwordReset: true });
     expect(res.headers['cache-control']).toMatch(/max-age=\d+/);
-  });
-});
-
-describe('with both flags off', () => {
-  beforeEach(() => { process.env.FEATURE_EMAIL_VERIFICATION = 'false'; process.env.FEATURE_PASSWORD_RESET = 'false'; });
-  it('signs up and logs in exactly as before, and queues nothing', async () => {
-    const body = signupBody();
-    const res = await signup(body);
-    expect(res.status).toBe(201);
-    expect(typeof res.body.accessToken).toBe('string');
-    expect(res.body.user.email).toBe(body.email);
-    expect(res.headers['set-cookie'].some((c) => c.startsWith('refreshToken='))).toBe(true);
-    expect((await signup(body)).status).toBe(409);
-    expect((await login(body.email)).status).toBe(200);
-    expect((await login(body.email, 'wrong-password')).body).toEqual({ error: 'Invalid credentials' });
-    expect(await WorkItem.countDocuments()).toBe(0);
-    expect(await EmailToken.countDocuments()).toBe(0);
-  });
-  it('lets a user flagged unverified log in while the feature is off, and does not limit the auth routes', async () => {
-    const email = newEmail();
-    await User.create({ name: 'U', email, passwordHash: await User.hashPassword('password123'), role: 'student', emailVerified: false });
-    const ip = nextIp();
-    for (let i = 0; i < 12; i += 1) expect((await post('/auth/login', { email, password: 'password123' }, { ip })).status).toBe(200);
-  });
-  it('answers 404 on the email routes and reports both flags off', async () => {
-    for (const path of ['/auth/verify-email', '/auth/resend-verification', '/auth/forgot-password', '/auth/reset-password']) {
-      expect((await post(path, { email: 'a@b.co', token: 'x', password: 'password123' })).status).toBe(404);
-    }
-    expect((await request(app).get('/auth/config')).body).toEqual({ emailVerification: false, passwordReset: false });
-  });
-});
-
-describe('password reset alone', () => {
-  it('works for every account while verification is off, and sends no verification mail', async () => {
-    process.env.FEATURE_EMAIL_VERIFICATION = 'false';
-    const email = newEmail();
-    await User.create({ name: 'U', email, passwordHash: await User.hashPassword('password123'), role: 'student', emailVerified: false });
-    await post('/auth/forgot-password', { email });
-    const [mail] = await deliver();
-    expect(mail.subject).toBe('Reset your CodeGrade password');
-    expect((await post('/auth/reset-password', { token: tokenIn(mail), password: 'new-password-1' })).status).toBe(200);
   });
 });
 

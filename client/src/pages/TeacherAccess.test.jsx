@@ -24,7 +24,7 @@ const tick = async (seconds) => { for (let i = 0; i < seconds; i += 1) await act
 beforeEach(() => {
   navigate.mockClear(); auth.user = null; auth.loading = false; auth.notice = '';
   auth.login.mockReset(); auth.register.mockReset();
-  api.get.mockReset().mockResolvedValue({ data: { emailVerification: false, passwordReset: false } });
+  api.get.mockReset();
   api.post.mockReset();
 });
 afterEach(() => { vi.useRealTimers(); document.head.querySelectorAll('meta[name="robots"]').forEach((m) => m.remove()); });

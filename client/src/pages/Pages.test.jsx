@@ -22,7 +22,7 @@ import BulkJobs from './BulkJobs.jsx';
 const session = vi.hoisted(() => ({ role: 'student', isAuthed: true }));
 vi.mock('../auth/AuthContext.jsx', () => ({ useAuth: () => ({ user: { _id: 'u1', name: 'Alex', email: 'alex@example.test', role: session.role }, isAuthed: session.isAuthed, loading: false, login: vi.fn(), register: vi.fn() }) }));
 vi.mock('../components/CodeEditor.jsx', () => ({ default: ({ value, onChange }) => <textarea aria-label="Solution code editor" value={value} onChange={(event) => onChange(event.target.value)} /> }));
-vi.mock('../api/client.js', () => ({ api: { get: vi.fn(async () => ({ data: { submissions: [], problem: { title: 'Echo', difficulty: 'easy', topics: ['Arrays'], sampleCases: [], testCases: [] } } })), post: vi.fn(), patch: vi.fn() } }));
+vi.mock('../api/client.js', () => ({ api: { get: vi.fn(async (url) => (String(url).endsWith('/hints') ? { data: { messages: [], hintsUsed: 0, level: 1, acceptedMode: false, quota: { messagesLeft: 10, retryAfterSeconds: 0, resetAt: '2026-10-19T18:30:00.000Z' } } } : { data: { submissions: [], problem: { title: 'Echo', difficulty: 'easy', topics: ['Arrays'], sampleCases: [], testCases: [] } } })), post: vi.fn(), patch: vi.fn() } }));
 vi.mock('../api/usePaginatedQuery.js', () => ({ usePaginatedQuery: () => ({ items: [], loading: false, loadingMore: false, hasMore: false, error: '', refetch: vi.fn(), loadMore: vi.fn() }) }));
 vi.mock('../api/useCachedQuery.js', () => ({ invalidate: vi.fn(), useCachedQuery: (url) => ({ data: responses[url], loading: false, error: '', refetch: vi.fn() }) }));
 const responses = {

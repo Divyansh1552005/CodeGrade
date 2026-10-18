@@ -34,16 +34,7 @@ envVarGroups:
         value: https://judge0-ce.p.rapidapi.com
       - key: JUDGE0_API_KEY
         sync: false
-      # Optional AI features, off unless "true" (see docs/ai-doubts-hints.md).
-      - key: FEATURE_AI_TRIAGE
-        value: "false"
-      - key: FEATURE_HINT_CHAT
-        value: "false"
-      # Email (Brevo). Turn the two flags on only after BREVO_API_KEY and MAIL_FROM are filled in.
-      - key: FEATURE_EMAIL_VERIFICATION
-        value: "true"
-      - key: FEATURE_PASSWORD_RESET
-        value: "true"
+      # Email (Brevo). BREVO_API_KEY and MAIL_FROM must be filled in.
       # The API and the worker MUST have the identical value (at least 32 characters).
       - key: EMAIL_TOKEN_SECRET
         sync: false

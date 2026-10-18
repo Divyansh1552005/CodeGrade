@@ -1,6 +1,7 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import request from 'supertest';
 import { registerAs } from '../helpers/users.js';
+import { draftWork } from '../helpers/doubts.js';
 
 const svc = (p) => new URL(`../../services/${p}`, import.meta.url).pathname;
 
@@ -24,7 +25,7 @@ const app = createApp();
 
 // Wait for the background AI processing to resolve the doubt's status.
 const waitForStatus = async (doubtId, status) => {
-  const work = await WorkItem.findOne({ key: `draft-${doubtId}` });
+  const work = await draftWork(doubtId);
   await processWork({ data: { workItemId: work.id }, attemptsMade: 2, opts: { attempts: 3 } }).catch(() => {});
   return waitFor(async () => {
     const d = await Doubt.findById(doubtId).setOptions({ includeRemoved: true });

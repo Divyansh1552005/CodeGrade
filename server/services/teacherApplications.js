@@ -10,8 +10,8 @@ export async function hasRoomForApplication() {
 }
 
 /** Record the application of a freshly created teacher_applicant. */
-export async function createApplication(user, { organization, note, degree, degreeLink, proofLinks }, { verified, req } = {}) {
-  const application = await TeacherApplication.create({ userId: user._id, organization, note: note ?? '', degree: degree ?? '', degreeLink: degreeLink ?? '', proofLinks: proofLinks ?? [], ...(verified ? { visibleAt: new Date() } : {}) });
+export async function createApplication(user, { organization, note, degree, degreeLink, proofLinks }, { req } = {}) {
+  const application = await TeacherApplication.create({ userId: user._id, organization, note: note ?? '', degree: degree ?? '', degreeLink: degreeLink ?? '', proofLinks: proofLinks ?? [] });
   await audit({ action: 'teacher_application.submitted', target: user, after: { status: 'pending' }, req });
   return application;
 }

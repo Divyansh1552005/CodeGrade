@@ -15,7 +15,6 @@ import {
   listDoubts, STATUS_FILTERS, findVisibleDoubt, listManualAnswerQueue, presentDoubt, findRemovedForOwner, presentRemoved, requestAppeal,
 } from '../services/doubtAccess.js';
 import Problem from '../models/Problem.js';
-import { features } from '../config/features.js';
 import { aiLimits } from '../config/aiLimits.js';
 import { consumeDaily } from '../services/usageCounter.js';
 
@@ -37,20 +36,17 @@ router.post(
         throw httpError(404, 'Problem not found');
       }
 
-      const triage = features.aiTriage();
-      if (triage) {
-        // Daily cap, counted atomically before anything is created. Every doubt counts,
-        // including ones triage later removes. A blocked request creates nothing.
-        const { maxDoubtsPerDay } = aiLimits().triage;
-        const slot = await consumeDaily({ userId: req.user._id, kind: 'doubt', max: maxDoubtsPerDay });
-        if (!slot.allowed) {
-          const retryAfterSeconds = Math.max(1, Math.ceil((slot.resetAt.getTime() - Date.now()) / 1000));
-          res.set('Retry-After', String(retryAfterSeconds));
-          return res.status(429).json({
-            error: `You can post at most ${maxDoubtsPerDay} doubts a day. You can post again after the daily reset.`,
-            retryAfterSeconds, resetAt: slot.resetAt,
-          });
-        }
+      // Daily cap, counted atomically before anything is created. Every doubt counts,
+      // including ones triage later removes. A blocked request creates nothing.
+      const { maxDoubtsPerDay } = aiLimits().triage;
+      const slot = await consumeDaily({ userId: req.user._id, kind: 'doubt', max: maxDoubtsPerDay });
+      if (!slot.allowed) {
+        const retryAfterSeconds = Math.max(1, Math.ceil((slot.resetAt.getTime() - Date.now()) / 1000));
+        res.set('Retry-After', String(retryAfterSeconds));
+        return res.status(429).json({
+          error: `You can post at most ${maxDoubtsPerDay} doubts a day. You can post again after the daily reset.`,
+          retryAfterSeconds, resetAt: slot.resetAt,
+        });
       }
 
       const doubt = await Doubt.create({
@@ -59,20 +55,14 @@ router.post(
         body,
         ...(problemId ? { problemId } : {}),
         ...(code ? { code } : {}),
-        // With triage off the doubt is created exactly as before, with no status.
-        ...(triage ? { status: 'pending_triage' } : {}),
+        status: 'pending_triage',
         aiDraftStatus: 'pending',
       });
 
-      // Durable outbox rows; the worker does the AI calls. With triage on, the draft is
-      // queued only after triage lets the doubt through.
-      if (triage) {
-        await ensureWork({ key: `triage-${doubt.id}`, type: 'doubt-triage', ownerId: req.user._id,
-          payload: { doubtId: doubt.id, requestId: req.id } });
-      } else {
-        await ensureWork({ key: `draft-${doubt.id}`, type: 'doubt-draft',
-          ownerId: req.user._id, payload: { doubtId: doubt.id } });
-      }
+      // Durable outbox row; the worker does the AI calls. The draft is queued only after
+      // triage lets the doubt through.
+      await ensureWork({ key: `triage-${doubt.id}`, type: 'doubt-triage', ownerId: req.user._id,
+        payload: { doubtId: doubt.id, requestId: req.id } });
 
       res.status(201).json({ doubt: presentDoubt(doubt, req.user) });
     } catch (err) {

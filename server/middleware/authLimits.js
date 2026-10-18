@@ -1,10 +1,9 @@
 import crypto from 'node:crypto';
 import { makeLimiter, rateLimitBy } from './rateLimit.js';
-import { mailConfig, emailFeaturesOn } from '../config/mail.js';
+import { mailConfig, authLimitsActive } from '../config/mail.js';
 
 // Limits for the routes that have no signed-in user. Each route gets one limit per client IP and one per
 // email address (hashed, and counted whether or not the account exists, so a 429 reveals nothing).
-// They are active only while an email flag is on: with both off the auth routes behave as before.
 // Redis is the shared store; if it is unreachable rate-limiter-flexible falls back to an in-memory
 // limiter in each process, so the limits still apply (per process) instead of opening up. Fail-closed
 // would lock everyone out of login on a Redis outage, so it is not used.
@@ -31,7 +30,7 @@ function limiterFor(route, scope) {
 }
 
 const MESSAGE = (wait) => `Too many attempts. Try again in ${wait}.`;
-const whenOn = (middleware) => (req, res, next) => (emailFeaturesOn() ? middleware(req, res, next) : next());
+const whenOn = (middleware) => (req, res, next) => (authLimitsActive() ? middleware(req, res, next) : next());
 const emailKey = (req) => {
   const email = req.body?.email;
   return typeof email === 'string' && email ? crypto.createHash('sha256').update(email.trim().toLowerCase()).digest('hex') : null;

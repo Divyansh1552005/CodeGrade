@@ -1,6 +1,5 @@
 // Everything the email features read from the environment, with its default, in one place.
 // Read lazily (server.js loads .env after its static imports, and tests flip values per test).
-import { features } from './features.js';
 
 function num(env, name, fallback) {
   const raw = env[name];
@@ -30,14 +29,16 @@ export function devLogOnly(env = process.env) {
   return !env.BREVO_API_KEY && env.NODE_ENV !== 'production';
 }
 
-export const emailFeaturesOn = () => features.emailVerification() || features.passwordReset();
+/**
+ * The per-route limits on the public auth routes are always on. Under Jest the in-memory counters would add up
+ * across unrelated tests, so tests switch them on only where they test the limits (AUTH_LIMITS_IN_TEST=true).
+ */
+export const authLimitsActive = (env = process.env) => env.NODE_ENV !== 'test' || env.AUTH_LIMITS_IN_TEST === 'true';
 
 /**
- * Called at startup by the API and the worker. Does nothing while both email flags are off;
- * otherwise throws one error that lists everything that is wrong.
+ * Called at startup by the API and the worker. Throws one error that lists everything that is wrong.
  */
 export function validateMailConfig(env = process.env) {
-  if (!features.emailVerification() && !features.passwordReset()) return;
   const config = mailConfig(env);
   const production = env.NODE_ENV === 'production';
   const problems = [];

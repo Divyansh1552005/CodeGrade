@@ -155,8 +155,7 @@ describe('reserved admin address', () => {
     const admin = await User.findOne({ role: 'admin' });
     return JSON.stringify(admin.toObject());
   };
-  it('refuses signup like any existing account, with the email flags off, and changes nothing', async () => {
-    process.env.FEATURE_EMAIL_VERIFICATION = 'false';
+  it('refuses signup like any existing account, and changes nothing', async () => {
     const before = await unchanged();
     const reserved = await post('/auth/register', { name: 'Eve', email: 'BOSS@example.com', password: 'password123', accountType: 'student' });
     const normal = await createUser({ email: 'someone@example.com' });
@@ -164,8 +163,8 @@ describe('reserved admin address', () => {
     expect([reserved.status, reserved.body]).toEqual([existing.status, existing.body]);
     expect(await unchanged()).toBe(before);
   });
-  it('answers the generic response and does nothing on signup, resend and forgot-password with the flags on', async () => {
-    Object.assign(process.env, { FEATURE_EMAIL_VERIFICATION: 'true', FEATURE_PASSWORD_RESET: 'true', EMAIL_TOKEN_SECRET: 'a-test-secret-that-is-at-least-32-characters', APP_BASE_URL: 'https://app.example.com', MAIL_FROM: 'a@b.co' });
+  it('answers the generic response and does nothing on signup, resend and forgot-password ', async () => {
+    Object.assign(process.env, { EMAIL_TOKEN_SECRET: 'a-test-secret-that-is-at-least-32-characters', APP_BASE_URL: 'https://app.example.com', MAIL_FROM: 'a@b.co' });
     const before = await unchanged();
     const verified = await createUser({ email: 'real@example.com' });
     const [s1, s2] = [await post('/auth/register', { name: 'Eve', email: 'boss@example.com', password: 'password123', accountType: 'student' }), await post('/auth/register', { name: 'Eve', email: verified.email, password: 'password123', accountType: 'student' })];
@@ -184,12 +183,12 @@ describe('reserved admin address', () => {
 
 describe('the admin does not depend on the mail setup', () => {
   it('bootstraps and logs in with no mail configuration at all', async () => {
-    for (const name of ['BREVO_API_KEY', 'MAIL_FROM', 'EMAIL_TOKEN_SECRET', 'APP_BASE_URL', 'FEATURE_EMAIL_VERIFICATION', 'FEATURE_PASSWORD_RESET']) delete process.env[name];
+    for (const name of ['BREVO_API_KEY', 'MAIL_FROM', 'EMAIL_TOKEN_SECRET', 'APP_BASE_URL']) delete process.env[name];
     await bootstrapAdmin();
     expect((await loginAdmin()).status).toBe(200);
   });
   it('logs in while the mail provider is down, because logging in sends nothing', async () => {
-    Object.assign(process.env, { FEATURE_EMAIL_VERIFICATION: 'true', FEATURE_PASSWORD_RESET: 'true', EMAIL_TOKEN_SECRET: 'a-test-secret-that-is-at-least-32-characters', APP_BASE_URL: 'https://app.example.com', MAIL_FROM: 'a@b.co' });
+    Object.assign(process.env, { EMAIL_TOKEN_SECRET: 'a-test-secret-that-is-at-least-32-characters', APP_BASE_URL: 'https://app.example.com', MAIL_FROM: 'a@b.co' });
     const down = jest.fn().mockRejectedValue(new Error('provider down'));
     setMailTransport(down);
     await bootstrapAdmin();

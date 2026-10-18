@@ -31,7 +31,6 @@ const makeProblem = (title, extra = {}) => Problem.create({
 const wide = () => { process.env.HINT_MAX_MESSAGES_PER_WINDOW = '100'; };
 
 beforeEach(async () => {
-  process.env.FEATURE_HINT_CHAT = 'true';
   await HintQuota.init(); await HintThread.init();
   calls = [];
   useModel(reply('Think about what you must remember while you scan the list.'));
@@ -42,16 +41,10 @@ beforeEach(async () => {
 });
 afterEach(() => {
   __setModelForTest(null);
-  for (const key of ['FEATURE_HINT_CHAT', 'HINT_MAX_MESSAGES_PER_WINDOW', 'HINT_MAX_MESSAGES_PER_DAY', 'REFUND_CAP_PER_DAY', 'HINT_TIMEOUT_MS', 'AI_MAX_CONCURRENT_CALLS', 'AI_QUEUE_WAIT_MS']) delete process.env[key];
+  for (const key of ['HINT_MAX_MESSAGES_PER_WINDOW', 'HINT_MAX_MESSAGES_PER_DAY', 'REFUND_CAP_PER_DAY', 'HINT_TIMEOUT_MS', 'AI_MAX_CONCURRENT_CALLS', 'AI_QUEUE_WAIT_MS']) delete process.env[key];
 });
 
 describe('access', () => {
-  it('is hidden (404) when the feature flag is off', async () => {
-    delete process.env.FEATURE_HINT_CHAT;
-    expect((await thread(student, problem)).status).toBe(404);
-    expect((await ask(student, problem)).status).toBe(404);
-    expect(calls).toHaveLength(0);
-  });
   it('requires login and a student account', async () => {
     expect((await request(app).get(`/problems/${problem.id}/hints`)).status).toBe(401);
     expect((await request(app).post(`/problems/${problem.id}/hints`).send({ message: 'hi' })).status).toBe(401);

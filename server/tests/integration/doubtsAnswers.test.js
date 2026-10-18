@@ -1,6 +1,7 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import request from 'supertest';
 import { registerAs } from '../helpers/users.js';
+import { draftWork } from '../helpers/doubts.js';
 
 const svc = (p) => new URL(`../../services/${p}`, import.meta.url).pathname;
 
@@ -35,7 +36,7 @@ async function createDoubt(token) {
     .set('Authorization', `Bearer ${token}`)
     .send({ title: 'Why is my loop slow?', body: 'It is O(n^2), how to fix?' });
   // Execute the queued draft explicitly; tests never connect to Redis.
-  const work = await WorkItem.findOne({ key: `draft-${res.body.doubt._id}` });
+  const work = await draftWork(res.body.doubt._id);
   await processWork({ data: { workItemId: work.id }, attemptsMade: 0, opts: { attempts: 3 } });
   await waitFor(() => Answer.findOne({ doubtId: res.body.doubt._id }));
   return res.body.doubt;
