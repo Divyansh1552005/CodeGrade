@@ -33,6 +33,45 @@ Two optional features, each behind a flag (`FEATURE_AI_TRIAGE`, `FEATURE_HINT_CH
 
 ---
 
+## Email
+
+Account verification and password reset send email through [Resend](https://resend.com). Each feature has its own flag, both off by default: `FEATURE_EMAIL_VERIFICATION` and `FEATURE_PASSWORD_RESET`. With both off, signup and login behave exactly as before.
+
+**Flows**
+- **Signup:** `POST /auth/register` creates an unverified account and answers 202 "check your inbox" with no session. The answer is the same for a new address, an unverified one and a verified one. An unverified address is replaced by the new request (name, password, role) and gets a fresh link that says a new request was submitted; a verified account is never touched and its owner gets an "you already have an account" email.
+- **Verify:** the email links to `/verify-email?token=...`; the page calls `POST /auth/verify-email` (POST, so link scanners cannot use the token). Links expire after 24 hours, work once, and a new link retires the older ones. Login before verifying returns 403 with `code: "EMAIL_NOT_VERIFIED"`, only after the password was correct.
+- **Resend:** `POST /auth/resend-verification` always answers the same. The 60 second cooldown and the 5 per hour cap are enforced silently per account, and per IP and email with a 429.
+- **Reset:** `POST /auth/forgot-password` always answers the same (an unverified account gets a verification email instead). The link `/reset-password?token=...` expires after 30 minutes and works once. `POST /auth/reset-password` changes the password, ends every session (a `tokenVersion` on the user is carried by the access and refresh tokens, and every refresh token is revoked) and sends a "your password was changed" notice with no link.
+- `GET /auth/config` is public and returns only `{ emailVerification, passwordReset }`, so the login page knows what to offer.
+
+**How tokens are kept safe.** A token is `HMAC(EMAIL_TOKEN_SECRET, tokenId)` for a random 32 byte `tokenId`. The database stores the token's SHA-256 and the `tokenId`, never the token, and the queued job holds ids only; the worker recomputes the link when it sends. Single use is one atomic `findOneAndUpdate`. Links are built from `APP_BASE_URL`, never from the `Host` header. Emails go through the outbox and the `emails` queue (5 attempts, exponential backoff from 10 seconds, no retry on a provider 4xx), with the work key as the Resend idempotency key (`resend.emails.send(payload, { idempotencyKey })`). Emails are masked in logs, and tokens and links are never logged except in dev log-only mode.
+
+**Environment** (all in `server/.env.example`; the API **and** the worker need them)
+
+| Variable | Notes |
+|---|---|
+| `FEATURE_EMAIL_VERIFICATION`, `FEATURE_PASSWORD_RESET` | `true` to enable |
+| `EMAIL_TOKEN_SECRET` | at least 32 characters; **identical for the web service and the worker** |
+| `APP_BASE_URL` | frontend origin used in links; https in production |
+| `RESEND_API_KEY`, `MAIL_FROM` | required in production; without a key elsewhere, emails are logged by the worker |
+| `EMAIL_VERIFY_TTL_HOURS` (24), `PASSWORD_RESET_TTL_MINUTES` (30), `EMAIL_RESEND_COOLDOWN_SECONDS` (60), `EMAIL_RESEND_HOURLY_CAP` (5), `UNVERIFIED_TTL_DAYS` (7) | optional |
+
+Both processes check this at startup while a flag is on and stop with one message listing what is missing.
+
+**Resend domain setup.** In Resend, add your sending domain and publish the DNS records it shows: an SPF record (a TXT record that authorises Resend to send for the domain) and DKIM (a TXT record with the public key Resend signs with). Wait for the domain to show as verified, then create an API key limited to sending and set `MAIL_FROM` to an address on that domain. Adding a DMARC record is recommended.
+
+**Migration.** Run this once, before switching `FEATURE_EMAIL_VERIFICATION` on, so existing users are not locked out (it is safe to repeat):
+
+```bash
+cd server
+node scripts/migrateEmailVerified.js --dry-run   # shows how many users it would change
+node scripts/migrateEmailVerified.js
+```
+
+**Testing locally.** Email goes through the queue, so run Redis, the API (`npm run dev`) and the worker (`npm run worker`). With both flags on and no `RESEND_API_KEY` (and `NODE_ENV` not production), the **worker terminal** prints the masked recipient, the subject and the link instead of sending. Open the link in the browser. Unverified signups older than `UNVERIFIED_TTL_DAYS` are deleted hourly by the worker.
+
+---
+
 ## Tech stack
 
 | Layer | Choice |
@@ -548,6 +587,9 @@ A hybrid model chosen for security:
 |---|---|---|---|
 | POST | `/auth/register` `/auth/login` | public | issue access + refresh tokens |
 | POST | `/auth/refresh` `/auth/logout` | public | rotate / revoke refresh token |
+| GET | `/auth/config` | public | which email features are on |
+| POST | `/auth/verify-email` `/auth/resend-verification` | public | verify an address / send a new link (flag) |
+| POST | `/auth/forgot-password` `/auth/reset-password` | public | request / complete a password reset (flag) |
 | GET | `/auth/me` | auth | current user |
 | GET | `/problems` `?topics=a,b` | auth | list problems, optional topic filter, stable numbering |
 | GET | `/problems/stats/counts` | auth | global + per-topic problem counts |
