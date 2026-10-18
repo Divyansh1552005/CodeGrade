@@ -11,6 +11,7 @@ import leaderboardRoutes from './routes/leaderboard.js';
 import activityRoutes from './routes/activity.js';
 import jobRoutes from './routes/jobs.js';
 import featureRoutes from './routes/features.js';
+import notificationRoutes from './routes/notifications.js';
 import { requestId } from './middleware/requestId.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
@@ -77,6 +78,7 @@ export function createApp() {
   app.use('/leaderboard', leaderboardRoutes);
   app.use('/jobs', jobRoutes);
   app.use('/features', featureRoutes);
+  app.use('/notifications', notificationRoutes);
 
   app.use((req, res) => res.status(404).json({ error: 'Not found' }));
   app.use(errorHandler);
