@@ -1,6 +1,7 @@
 import User from '../models/User.js';
 import EmailToken from '../models/EmailToken.js';
 import WorkItem from '../models/WorkItem.js';
+import TeacherApplication from '../models/TeacherApplication.js';
 import { features } from '../config/features.js';
 import { mailConfig } from '../config/mail.js';
 import { logger } from '../utils/logger.js';
@@ -33,6 +34,7 @@ export async function cleanupUnverified({ now = new Date() } = {}) {
     const ids = batch.map((user) => user._id);
     await EmailToken.deleteMany({ userId: { $in: ids } });
     await WorkItem.deleteMany({ type: 'send-email', ownerId: { $in: ids } });
+    await TeacherApplication.deleteMany({ userId: { $in: ids } });
     const result = await User.deleteMany({ _id: { $in: ids }, emailVerified: false });
     deleted += result.deletedCount;
     if (result.deletedCount === 0) break;

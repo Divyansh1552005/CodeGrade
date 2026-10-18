@@ -3,6 +3,7 @@ import User from '../models/User.js';
 import { adminConfig, validateAdminConfig } from './adminConfig.js';
 import { revokeAllSessions } from './tokenService.js';
 import { audit } from './audit.js';
+import TeacherApplication from '../models/TeacherApplication.js';
 import { logger } from '../utils/logger.js';
 
 const name = 'Administrator';
@@ -56,6 +57,7 @@ export async function bootstrapAdmin(env = process.env) {
         $unset: { suspendedAt: 1, suspendedBy: 1, teacherApprovedAt: 1 },
       });
       await revokeAllSessions(target._id);
+      if (promoted) await TeacherApplication.deleteOne({ userId: target._id }); // an admin has no use for a pending application
       passwordChanged = !promoted;
     } else if (target.emailVerified !== true || target.suspendedAt) {
       await User.updateOne({ _id: target._id }, { $set: { emailVerified: true }, $unset: { suspendedAt: 1, suspendedBy: 1 } });

@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import User, { isVerified } from '../models/User.js';
+import TeacherApplication from '../models/TeacherApplication.js';
 import { mailConfig } from '../config/mail.js';
 import { logger } from '../utils/logger.js';
 import { ensureWork } from './workService.js';
@@ -13,6 +14,9 @@ const KINDS = {
   'password-reset': { token: 'reset', tag: 'password_reset' },
   'password-changed': { token: null, tag: 'password_changed' },
   'account-exists': { token: null, tag: 'account_exists' },
+  'teacher-application': { token: null, tag: 'teacher_application' },
+  'teacher-approved': { token: null, tag: 'teacher_approved' },
+  'teacher-rejected': { token: null, tag: 'teacher_rejected' },
 };
 export const EMAIL_KINDS = Object.keys(KINDS);
 
@@ -20,14 +24,16 @@ export const EMAIL_KINDS = Object.keys(KINDS);
  * Put an email in the outbox. The payload holds ids only: no address and no token (the worker looks the
  * user up and recomputes the link). The work key doubles as the provider idempotency key, so a retried or
  * replayed job cannot send the same email twice. `tokenId` is the token's id for link emails, and a fresh
- * random event id for the notices. `resubmitted` is for a verification that replaces an earlier signup.
+ * random event id for the notices unless `ref` names the event (an application, a decision), which makes
+ * the email once per event. `resubmitted` is for a verification that replaces an earlier signup; `extra`
+ * carries ids such as the application id.
  */
-export function queueEmail({ kind, userId, tokenId, resubmitted = false }) {
+export function queueEmail({ kind, userId, tokenId, ref, resubmitted = false, extra = {} }) {
   if (!KINDS[kind]) throw new Error(`Unknown email kind ${kind}`);
-  const ref = tokenId || crypto.randomBytes(16).toString('hex');
+  const key = tokenId || ref || crypto.randomBytes(16).toString('hex');
   return ensureWork({
-    key: `email-${kind}-${ref}`, type: 'send-email', ownerId: userId,
-    payload: { kind, userId: String(userId), ref, ...(resubmitted ? { resubmitted: true } : {}) },
+    key: `email-${kind}-${key}`, type: 'send-email', ownerId: userId,
+    payload: { kind, userId: String(userId), ref: key, ...(resubmitted ? { resubmitted: true } : {}), ...extra },
   });
 }
 
@@ -39,21 +45,47 @@ async function staleReason(kind, user, tokenType, ref) {
   return null;
 }
 
+// The three teacher emails depend on an application. Each is skipped if the application has moved on since
+// it was queued (a later decision supersedes an earlier one).
+async function teacherContext(data, user) {
+  const application = await TeacherApplication.findById(data.applicationId);
+  if (!application) return { stale: 'application_missing' };
+  const base = mailConfig().baseUrl;
+  if (data.kind === 'teacher-application') {
+    if (application.status !== 'pending') return { stale: 'application_decided' };
+    const applicant = await User.findById(application.userId);
+    if (!applicant) return { stale: 'user_missing' };
+    return { args: { applicant: { name: applicant.name, email: applicant.email, organization: application.organization, note: application.note } }, link: `${base}/admin/applications` };
+  }
+  const wanted = data.kind === 'teacher-approved' ? 'approved' : 'rejected';
+  if (application.status !== wanted || application.decisionSeq !== data.decisionSeq) return { stale: 'decision_superseded' };
+  return data.kind === 'teacher-approved'
+    ? { args: {}, link: `${base}/login` }
+    : { args: { reason: application.decisionReason || '' }, link: null };
+}
+
 /** Worker handler for 'send-email'. A skipped email completes the job: there is nothing to retry. */
 export async function processEmail({ data }) {
   const spec = KINDS[data.kind];
   if (!spec) return { skipped: 'unknown_kind' };
   const user = await User.findById(data.userId);
-  const reason = await staleReason(data.kind, user, spec.token, data.ref);
+  let reason = await staleReason(data.kind, user, spec.token, data.ref);
+  let extra = { args: {}, link: spec.token ? tokenLink(spec.token, data.ref) : null };
+  if (!reason && data.applicationId) {
+    const context = await teacherContext(data, user);
+    if (context.stale) reason = context.stale;
+    else extra = context;
+  }
   if (reason) {
     logger.info('email.skipped', { kind: data.kind, reason });
     return { skipped: reason };
   }
-  const link = spec.token ? tokenLink(spec.token, data.ref) : null;
-  const mail = TEMPLATES[data.kind]({ name: user.name, link, expiresInMs: spec.token ? ttlFor(spec.token) : undefined, resubmitted: data.resubmitted });
+  const mail = TEMPLATES[data.kind]({
+    name: user.name, link: extra.link, expiresInMs: spec.token ? ttlFor(spec.token) : undefined, resubmitted: data.resubmitted, ...extra.args,
+  });
   await sendEmail({
     to: user.email, subject: mail.subject, html: mail.html, text: mail.text,
-    tags: [{ name: 'type', value: spec.tag }], idempotencyKey: `email-${data.kind}-${data.ref}`, devLink: link || undefined,
+    tags: [{ name: 'type', value: spec.tag }], idempotencyKey: `email-${data.kind}-${data.ref}`, devLink: extra.link || undefined,
   });
   return { sent: true };
 }

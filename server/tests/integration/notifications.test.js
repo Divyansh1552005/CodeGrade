@@ -8,7 +8,7 @@ const app = createApp();
 let alice, bob;
 
 async function register(name) {
-  const res = await request(app).post('/auth/register').send({ name, email: `${name}${Math.random()}@x.com`, password: 'password123', role: 'student' });
+  const res = await request(app).post('/auth/register').send({ name, email: `${name}${Math.random()}@x.com`, password: 'password123', accountType: 'student' });
   return { token: res.body.accessToken, id: res.body.user._id };
 }
 const as = (user) => ({ Authorization: `Bearer ${user.token}` });

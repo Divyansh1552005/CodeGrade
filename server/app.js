@@ -13,6 +13,7 @@ import jobRoutes from './routes/jobs.js';
 import featureRoutes from './routes/features.js';
 import notificationRoutes from './routes/notifications.js';
 import hintRoutes from './routes/hints.js';
+import teacherApplicationRoutes from './routes/teacherApplication.js';
 import { requestId } from './middleware/requestId.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
@@ -81,6 +82,7 @@ export function createApp() {
   app.use('/jobs', jobRoutes);
   app.use('/features', featureRoutes);
   app.use('/notifications', notificationRoutes);
+  app.use('/teacher-application', teacherApplicationRoutes);
 
   app.use((req, res) => res.status(404).json({ error: 'Not found' }));
   app.use(errorHandler);

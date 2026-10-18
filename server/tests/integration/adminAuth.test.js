@@ -160,7 +160,7 @@ describe('reserved admin address', () => {
   it('refuses signup like any existing account, with the email flags off, and changes nothing', async () => {
     process.env.FEATURE_EMAIL_VERIFICATION = 'false';
     const before = await unchanged();
-    const reserved = await post('/auth/register', { name: 'Eve', email: 'BOSS@example.com', password: 'password123', accountType: 'student', role: 'admin' });
+    const reserved = await post('/auth/register', { name: 'Eve', email: 'BOSS@example.com', password: 'password123', accountType: 'student' });
     const normal = await createUser({ email: 'someone@example.com' });
     const existing = await post('/auth/register', { name: 'Eve', email: normal.email, password: 'password123', accountType: 'student' });
     expect([reserved.status, reserved.body]).toEqual([existing.status, existing.body]);

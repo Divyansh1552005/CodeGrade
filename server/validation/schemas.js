@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { TOPICS } from '../constants/topics.js';
 import { SUPPORTED_LANGUAGES } from '../services/languageMap.js';
 import { LIMITS } from '../utils/sanitize.js';
+import { cleanText } from '../utils/plainText.js';
 
 // Shape-level validation only — domain rules that need DB state (ownership,
 // state-machine transitions, "does this problem exist") stay in the routes.
@@ -97,11 +98,29 @@ export const passwordSchema = z
   .min(6, 'password must be at least 6 characters')
   .refine((value) => Buffer.byteLength(value, 'utf8') <= PASSWORD_MAX_BYTES, `password must be at most ${PASSWORD_MAX_BYTES} bytes (characters such as accents and emoji count as more than one)`);
 
+// Free text from a stranger: cleaned (control and bidi characters removed) and length-limited. Plain text only.
+const plain = (label, max, { multiline = false } = {}) => z
+  .string({ required_error: `${label} is required` })
+  .transform((value) => cleanText(value, { multiline }))
+  .refine((value) => value.length <= max, `${label} must be at most ${max} characters`);
+
+// Strict on purpose: an unknown key, above all a `role`, is a 400, never ignored. Public signup chooses
+// only `student` or `teacher` (which creates a teacher_applicant that an admin must approve).
 export const registerSchema = z.object({
-  name: nonEmpty('name'),
+  name: plain('name', 100).refine((v) => v.length >= 1, 'name is required'),
   email: z.string().trim().email('must be a valid email'),
   password: passwordSchema,
-  // No role here: zod drops unknown keys, so a `role` sent by a client never reaches the handler.
+  accountType: z.enum(['student', 'teacher'], { errorMap: () => ({ message: 'accountType must be student or teacher' }) }),
+  organization: plain('organization', 120).optional(),
+  note: plain('note', 500, { multiline: true }).optional(),
+}).strict().superRefine((value, ctx) => {
+  if (value.accountType === 'teacher') {
+    if (!value.organization || value.organization.length < 2) ctx.addIssue({ code: 'custom', path: ['organization'], message: 'organization is required for a teacher account' });
+  } else {
+    for (const field of ['organization', 'note']) {
+      if (value[field] !== undefined) ctx.addIssue({ code: 'custom', path: [field], message: `${field} is only for teacher accounts` });
+    }
+  }
 });
 
 const emailField = z.string().trim().email('must be a valid email');

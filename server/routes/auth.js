@@ -21,6 +21,10 @@ import { queueEmail } from '../services/emailJob.js';
 import { revokeAllSessions } from '../services/tokenService.js';
 import { maskEmail } from '../utils/maskEmail.js';
 import { adminLoginLimit, isAdminAttempt } from '../middleware/adminLoginLimit.js';
+import { makeLimiter, rateLimitBy } from '../middleware/rateLimit.js';
+import { teacherAccess } from '../config/teacherAccess.js';
+import TeacherApplication from '../models/TeacherApplication.js';
+import { createApplication, hasRoomForApplication, markApplicationVisible } from '../services/teacherApplications.js';
 import { adminConfig, isReservedEmail } from '../services/adminConfig.js';
 import { audit, auditCoalesced } from '../services/audit.js';
 import { verifyCode } from '../utils/totp.js';
@@ -29,9 +33,6 @@ const router = Router();
 
 // Tokens travel in the request body, but a page that links away must never carry one in a Referer header.
 router.use((_req, res, next) => { res.set('Referrer-Policy', 'no-referrer'); next(); });
-
-// Self-service signup can only ever create a student. Teachers are made by other means.
-const SIGNUP_ROLE = 'student';
 
 const GENERIC = {
   signup: { message: 'Check your inbox. If the address can be used, we sent a verification link.' },
@@ -63,18 +64,24 @@ async function sendVerification(user, { resubmitted = false, ignoreCooldown = fa
 /**
  * Signup with email verification on. The answer is the same for a new address, an unverified one and a
  * verified one, so it cannot be used to find out who has an account:
- *  - new address: create the unverified user and send the verification link;
- *  - unverified account: the new request replaces its name and password, never its role (the account has no data and
- *    no session), retires the older links and sends a new one that says a new request was submitted;
- *  - verified account: nothing changes, and the owner gets an "you already have an account" email.
+ *  - new address: create the unverified user (a student, or a teacher_applicant with an application) and send
+ *    the verification link;
+ *  - unverified student or applicant: the new request replaces its name, password and account type (the account
+ *    has no data and no session), retires the older links and sends a new one that says a new request was
+ *    submitted;
+ *  - any other account (verified, or holding another role): nothing changes, and the owner gets an
+ *    "you already have an account" email.
  */
-async function registerPending({ name, email, password }) {
+async function registerPending({ name, email, password, accountType, organization, note }, req) {
   const address = String(email).toLowerCase();
   const passwordHash = await User.hashPassword(password); // always hashed, so the work done does not depend on the branch
+  const teacher = accountType === 'teacher';
+  const role = teacher ? 'teacher_applicant' : 'student';
   let user = await User.findOne({ email: address });
   if (!user) {
     try {
-      user = await User.create({ name, email: address, passwordHash, role: SIGNUP_ROLE, emailVerified: false });
+      user = await User.create({ name, email: address, passwordHash, role, emailVerified: false });
+      if (teacher) await createApplication(user, { organization, note }, { verified: false, req });
       await sendVerification(user, { ignoreCooldown: true });
       return;
     } catch (err) {
@@ -83,9 +90,14 @@ async function registerPending({ name, email, password }) {
     }
   }
   if (user && user.emailVerified === false) {
-    // The filter is what keeps a verified account untouched, even if it became verified a moment ago.
-    const replaced = await User.findOneAndUpdate({ _id: user._id, emailVerified: false }, { $set: { name, passwordHash } }, { new: true });
+    // The filter is what keeps a verified account, and any account with another role, untouched.
+    const replaced = await User.findOneAndUpdate(
+      { _id: user._id, emailVerified: false, role: { $in: ['student', 'teacher_applicant'] } },
+      { $set: { name, passwordHash, role } }, { new: true },
+    );
     if (replaced) {
+      await TeacherApplication.deleteOne({ userId: replaced._id, status: 'pending' }); // a new request replaces the old one
+      if (teacher) await createApplication(replaced, { organization, note }, { verified: false, req });
       await sendVerification(replaced, { resubmitted: true, ignoreCooldown: true });
       return;
     }
@@ -95,10 +107,22 @@ async function registerPending({ name, email, password }) {
 
 const findUserById = (id) => User.findById(id);
 
-// POST /auth/register  { name, email, password }  — public signup always creates a student. A `role` in the body is ignored.
-router.post('/register', ...authLimits('register'), validate(registerSchema), async (req, res, next) => {
+const TEACHER_SIGNUPS_FULL = { error: 'Teacher applications are not being accepted right now. Try again later.', code: 'TEACHER_APPLICATIONS_FULL' };
+
+// Teacher signups are limited per IP, always (not tied to the email flags).
+let teacherSignupLimiter; // built on first use, after the environment is loaded
+const teacherSignupLimit = (req, res, next) => {
+  teacherSignupLimiter ??= makeLimiter({ keyPrefix: 'rl:signup:teacher', points: teacherAccess().signupsPerIpPerHour, duration: 3600 });
+  return rateLimitBy(teacherSignupLimiter, (r) => (r.body?.accountType === 'teacher' ? r.ip || 'unknown' : null), (wait) => `Too many teacher signups from this network. Try again in ${wait}.`)(req, res, next);
+};
+
+// POST /auth/register  { name, email, password, accountType, organization?, note? }
+// accountType "student" creates a student. "teacher" creates a teacher_applicant: no access to anything
+// until an admin approves. The schema is strict, so a `role` or any other unknown key is a 400.
+router.post('/register', ...authLimits('register'), validate(registerSchema), teacherSignupLimit, async (req, res, next) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, accountType, organization, note } = req.body;
+    const teacher = accountType === 'teacher';
 
     // The admin address is reserved. It answers like any account that already exists and never changes.
     if (isReservedEmail(email)) {
@@ -106,15 +130,19 @@ router.post('/register', ...authLimits('register'), validate(registerSchema), as
       return await paced(async () => ({ status: 202, body: { ...GENERIC.signup, email: String(email).toLowerCase() } }))(req, res, next);
     }
 
+    if (teacher && !(await hasRoomForApplication())) return res.status(503).json(TEACHER_SIGNUPS_FULL);
+
     if (features.emailVerification()) {
       return await paced(async () => {
-        await registerPending({ name, email, password });
+        await registerPending({ name, email, password, accountType, organization, note }, req);
         return { status: 202, body: { ...GENERIC.signup, email: String(email).toLowerCase() } };
       })(req, res, next);
     }
 
     const passwordHash = await User.hashPassword(password);
-    const user = await User.create({ name, email, passwordHash, role: SIGNUP_ROLE });
+    const user = await User.create({ name, email, passwordHash, role: teacher ? 'teacher_applicant' : 'student' });
+    // Without email verification there is nothing to wait for: the application is visible straight away.
+    if (teacher) await createApplication(user, { organization, note }, { verified: true, req });
     const { accessToken, refreshToken } = await issueTokenPair(user);
     setRefreshCookie(res, refreshToken);
     return res.status(201).json({ user: user.toJSON(), accessToken });
@@ -197,6 +225,9 @@ router.post('/verify-email', requireFeature('emailVerification'), ...authLimits(
     if (!used) return res.status(400).json(INVALID_LINK);
     await User.updateOne({ _id: used.userId, emailVerified: { $ne: true } }, { $set: { emailVerified: true, emailVerifiedAt: new Date() } });
     await supersedeTokens(used.userId, 'verify');
+    // A teacher applicant becomes visible to the admin only now, once the address is proven.
+    const verified = await User.findById(used.userId).select('role');
+    if (verified?.role === 'teacher_applicant') await markApplicationVisible(used.userId);
     return res.json({ message: 'Your email address is verified. You can log in now.' });
   } catch (err) {
     return next(err);

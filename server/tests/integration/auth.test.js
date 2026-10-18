@@ -91,22 +91,31 @@ describe('Auth: access token (Bearer) + refresh cookie', () => {
 });
 
 describe('Signup role', () => {
-  const body = (extra = {}) => ({ name: 'Mallory', email: `m${Math.random()}@x.com`, password: 'password123', ...extra });
-  it.each(['teacher', 'admin', 'nonsense', undefined])('creates a student whatever role the body asks for (%s)', async (role) => {
-    const res = await request(app).post('/auth/register').send(body({ role }));
+  const body = (extra = {}) => ({ name: 'Mallory', email: `m${Math.random()}@x.com`, password: 'password123', accountType: 'student', ...extra });
+  it('creates a student for accountType student', async () => {
+    const res = await request(app).post('/auth/register').send(body());
     expect(res.status).toBe(201);
     expect(res.body.user.role).toBe('student');
+  });
+  it.each([['role', 'teacher'], ['role', 'admin'], ['isAdmin', true], ['emailVerified', true], ['tokenVersion', 9], ['envAdmin', true], ['suspendedAt', null]])('rejects the unknown key %s with a 400', async (key, value) => {
     const User = (await import('../../models/User.js')).default;
-    expect((await User.findOne({ email: res.body.user.email })).role).toBe('student');
+    const input = body({ [key]: value });
+    const res = await request(app).post('/auth/register').send(input);
+    expect(res.status).toBe(400);
+    expect(await User.countDocuments({ email: input.email })).toBe(0);
   });
-  it('does not let other privileged fields through either', async () => {
-    const res = await request(app).post('/auth/register').send(body({ role: 'teacher', isAdmin: true, emailVerified: false, tokenVersion: 9 }));
+  it.each([undefined, 'admin', 'teacher_applicant', 'student ', 7])('accepts only student or teacher as accountType (%s)', async (accountType) => {
+    const res = await request(app).post('/auth/register').send(body({ accountType }));
+    expect(res.status).toBe(400);
+  });
+  it('creates a teacher_applicant, never a teacher, for accountType teacher', async () => {
+    const User = (await import('../../models/User.js')).default;
+    const res = await request(app).post('/auth/register').send(body({ accountType: 'teacher', organization: 'Open University' }));
     expect(res.status).toBe(201);
-    expect(res.body.user.role).toBe('student');
-  });
-  it('can only reach the teacher routes after the role is set outside the API', async () => {
-    const res = await request(app).post('/auth/register').send(body({ role: 'teacher' }));
+    expect(res.body.user.role).toBe('teacher_applicant');
+    expect((await User.findOne({ email: res.body.user.email })).role).toBe('teacher_applicant');
     const list = await request(app).get('/answers?state=pending').set('Authorization', `Bearer ${res.body.accessToken}`);
     expect(list.status).toBe(403);
+    expect(list.body.code).toBe('TEACHER_PENDING');
   });
 });

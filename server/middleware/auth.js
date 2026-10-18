@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import { generalRateLimit } from './rateLimit.js';
+import TeacherApplication from '../models/TeacherApplication.js';
 import { ALL_ROLES, APP_ROLES, ROLES } from '../utils/roles.js';
 
 /**
@@ -46,7 +47,12 @@ export function authenticate({ roles }) {
     }
     if (!roles.includes(user.role)) {
       if (user.role === ROLES.TEACHER_APPLICANT) {
-        return res.status(403).json({ error: 'Your teacher account is awaiting approval.', code: 'TEACHER_PENDING' });
+        const application = await TeacherApplication.findOne({ userId: user._id }).select('status decisionReason').lean();
+        return res.status(403).json({
+          error: 'Your teacher account is awaiting approval.', code: 'TEACHER_PENDING',
+          applicationStatus: application?.status ?? 'pending',
+          ...(application?.status === 'rejected' && application.decisionReason ? { reason: application.decisionReason } : {}),
+        });
       }
       return res.status(403).json({ error: 'Forbidden', code: 'FORBIDDEN_ROLE' });
     }

@@ -27,7 +27,7 @@ export async function createUser({ role = 'student', name, email, password = 'pa
  * Pass a supertest agent as `agent` when the test needs the refresh cookie to persist.
  */
 export async function registerAs(app, { role = 'student', ...body }, agent = request(app)) {
-  const res = await agent.post('/auth/register').send(body);
+  const res = await agent.post('/auth/register').send({ accountType: 'student', ...body });
   if (res.status === 201 && role !== 'student') {
     await User.updateOne({ _id: res.body.user._id }, { $set: { role } });
     res.body.user.role = role;

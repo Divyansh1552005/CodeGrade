@@ -10,7 +10,7 @@ import { setMailTransport } from '../../services/mail/mailService.js';
 
 const saved = { ...process.env };
 const DAY = 86400000;
-const insertRaw = (email, extra = {}, age = 0) => User.collection.insertOne({ name: email, email, passwordHash: 'x', role: 'student', createdAt: new Date(Date.now() - age), updatedAt: new Date(), ...extra });
+const insertRaw = (email, extra = {}, age = 0) => User.collection.insertOne({ name: email, email, passwordHash: 'x', accountType: 'student', createdAt: new Date(Date.now() - age), updatedAt: new Date(), ...extra });
 const find = (email) => User.collection.findOne({ email });
 
 describe('migrateEmailVerified', () => {
@@ -75,7 +75,7 @@ describe('cleanupUnverified', () => {
     setMailTransport(async () => ({ id: 'm' }));
     await insertRaw('squatted@example.com', { emailVerified: false }, 8 * DAY);
     await cleanupUnverified();
-    const res = await request(createApp()).post('/auth/register').send({ name: 'Real', email: 'squatted@example.com', password: 'password123', role: 'student' });
+    const res = await request(createApp()).post('/auth/register').send({ name: 'Real', email: 'squatted@example.com', password: 'password123', accountType: 'student' });
     expect(res.status).toBe(202);
     expect((await User.findOne({ email: 'squatted@example.com' })).name).toBe('Real');
     setMailTransport(undefined);

@@ -22,7 +22,7 @@ const post = (path, body, { ip = nextIp(), headers = {}, cookie } = {}) => {
   return req.send(body);
 };
 const newEmail = () => { emailSeq += 1; return `user${emailSeq}@example.com`; };
-const signupBody = (email = newEmail(), extra = {}) => ({ name: 'Ada', email, password: 'password123', role: 'student', ...extra });
+const signupBody = (email = newEmail(), extra = {}) => ({ name: 'Ada', email, password: 'password123', accountType: 'student', ...extra });
 const signup = (body = signupBody(), opts) => post('/auth/register', body, opts);
 let sentBefore = 0;
 /** Run every unfinished email job and return the messages the transport received since the last call. */
@@ -112,10 +112,10 @@ describe('signup with an address that already exists', () => {
     const email = 'pending@example.com';
     await signup(signupBody(email, { name: 'First', password: 'first-password' }));
     const [first] = await deliver();
-    await signup(signupBody(email, { name: 'Second', password: 'second-password', role: 'teacher' }));
+    await signup(signupBody(email, { name: 'Second', password: 'second-password' }));
     const [second] = await deliver();
     const user = await User.findOne({ email });
-    expect([user.name, user.role]).toEqual(['Second', 'student']); // the role in the body is ignored
+    expect([user.name, user.role]).toEqual(['Second', 'student']);
     expect(await user.comparePassword('second-password')).toBe(true);
     expect(second.text).toContain('A new signup request was submitted for this email address');
     expect(second.text).toContain('If you did not request this, you can ignore this email');
@@ -127,7 +127,7 @@ describe('signup with an address that already exists', () => {
   it('never touches a verified account and sends its owner a notice with no link', async () => {
     const email = await verifiedUser('real-password');
     const before = await User.findOne({ email });
-    await signup(signupBody(email, { name: 'Attacker', password: 'attacker-password', role: 'teacher' }));
+    await signup(signupBody(email, { name: 'Attacker', password: 'attacker-password', accountType: 'teacher', organization: 'Evil Corp' }));
     const after = await User.findOne({ email });
     expect([after.name, after.passwordHash, after.role, after.emailVerified]).toEqual([before.name, before.passwordHash, before.role, true]);
     const [mail] = await deliver();
@@ -416,25 +416,17 @@ describe('password reset alone', () => {
 });
 
 describe('signup role with email verification on', () => {
-  it('creates a student whatever the body says', async () => {
+  it('rejects a role in the body', async () => {
     const body = signupBody(newEmail(), { role: 'teacher' });
-    await signup(body);
-    expect((await User.findOne({ email: body.email })).role).toBe('student');
+    expect((await signup(body)).status).toBe(400);
+    expect(await User.countDocuments({ email: body.email })).toBe(0);
   });
-  it('never changes the role of an unverified account that signs up again', async () => {
-    const email = newEmail();
-    await signup(signupBody(email, { role: 'teacher' }));
-    await User.updateOne({ email }, { $set: { role: 'teacher' } }); // as if an admin had set it
-    await signup(signupBody(email, { name: 'Again', role: 'student' }));
-    const after = await User.findOne({ email });
-    expect([after.name, after.role]).toEqual(['Again', 'teacher']);
-    await signup(signupBody(email, { role: 'admin' }));
-    expect((await User.findOne({ email })).role).toBe('teacher');
-  });
-  it('keeps student for an unverified account that had no role change', async () => {
+  it('does not touch the role or name of an unverified account that holds another role', async () => {
     const email = newEmail();
     await signup(signupBody(email));
-    await signup(signupBody(email, { role: 'teacher' }));
-    expect((await User.findOne({ email })).role).toBe('student');
+    await User.updateOne({ email }, { $set: { role: 'teacher' } }); // as if an admin had set it
+    await signup(signupBody(email, { name: 'Again' }));
+    const after = await User.findOne({ email });
+    expect([after.name, after.role]).toEqual(['Ada', 'teacher']);
   });
 });
