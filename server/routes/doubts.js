@@ -7,7 +7,10 @@ import { validate } from '../middleware/validate.js';
 import { httpError } from '../middleware/errorHandler.js';
 import { ensureWork } from '../services/workService.js';
 import { createDoubtSchema } from '../validation/schemas.js';
-import { listDoubts, findVisibleDoubt, listManualAnswerQueue, presentDoubt } from '../services/doubtAccess.js';
+import {
+  listDoubts, findVisibleDoubt, listManualAnswerQueue, presentDoubt, findRemovedForOwner, presentRemoved, requestAppeal,
+} from '../services/doubtAccess.js';
+import { ensureDraftWork } from '../services/doubtTriage.js';
 import Problem from '../models/Problem.js';
 import { features } from '../config/features.js';
 import { aiLimits } from '../config/aiLimits.js';
@@ -96,6 +99,35 @@ router.get('/failed', requireAuth, requireRole('teacher'), async (req, res, next
   try {
     const doubts = await listManualAnswerQueue(req.user);
     res.json({ doubts: doubts.map((d) => presentDoubt(d, req.user)) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /doubts/:id/removed  — the author's own removed doubt, with the reason. Not linked from
+// any list; students reach it from the removal notification. Everyone else, including
+// teachers, and any doubt that was not removed, gets the same 404.
+router.get('/:id/removed', requireAuth, async (req, res, next) => {
+  try {
+    const doubt = await findRemovedForOwner(req.params.id, req.user._id);
+    if (!doubt) throw httpError(404, 'Doubt not found');
+    res.json({ doubt: presentRemoved(doubt) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /doubts/:id/appeal  — the author asks for a teacher to review a removed doubt. One
+// appeal per doubt. The doubt becomes `appealed`, joins the teacher queue (the draft job is
+// idempotent, so exactly once) and then follows the normal visibility rules.
+router.post('/:id/appeal', requireAuth, requireRole('student'), async (req, res, next) => {
+  try {
+    const outcome = await requestAppeal(req.params.id, req.user._id);
+    if (!outcome) throw httpError(404, 'Doubt not found');
+    if (outcome.already) throw httpError(409, 'You have already asked for a teacher to review this doubt.');
+    await ensureDraftWork(outcome.doubt);
+    req.log?.info('doubt.appeal.requested', { doubtId: outcome.doubt.id });
+    res.json({ doubt: presentRemoved(outcome.doubt) });
   } catch (err) {
     next(err);
   }

@@ -100,3 +100,43 @@ export function withVisibleDoubts(answers, viewer) {
       return answer;
     });
 }
+
+// ---- The owner's "removed" page and the appeal. These are the only reads that opt in to
+// ---- seeing auto-rejected doubts, and they only ever return the author's own doubt.
+
+const REMOVED_STATES = ['auto_rejected', 'appealed'];
+
+/** The author's own removed (or appealed) doubt. null for anyone else, or any other doubt. */
+export function findRemovedForOwner(id, ownerId) {
+  return Doubt.findOne({ _id: id, studentId: ownerId, status: { $in: REMOVED_STATES } }).setOptions({ includeRemoved: true });
+}
+
+/** What the student may see on the removed page: the reason and what they can do next. Never the verdict, confidence or model. */
+export function presentRemoved(doubt) {
+  return {
+    id: String(doubt._id),
+    title: doubt.title,
+    body: doubt.body,
+    createdAt: doubt.createdAt,
+    status: doubt.status,
+    reason: doubt.triage?.reason || 'It did not look like a question about programming.',
+    appealed: doubt.status === 'appealed',
+    canAppeal: doubt.status === 'auto_rejected' && !doubt.appeal?.requestedAt,
+  };
+}
+
+/**
+ * One appeal per doubt, owner only, as a single atomic transition. Returns
+ * { doubt } on success, { already: true } when it was appealed before, or null when the
+ * doubt is not the caller's removed doubt.
+ */
+export async function requestAppeal(id, ownerId) {
+  const doubt = await Doubt.findOneAndUpdate(
+    { _id: id, studentId: ownerId, status: REJECTED, 'appeal.requestedAt': { $exists: false } },
+    { $set: { status: 'appealed', 'appeal.requestedAt': new Date() } },
+    { new: true }
+  );
+  if (doubt) return { doubt };
+  const existing = await findRemovedForOwner(id, ownerId);
+  return existing ? { already: true } : null;
+}
