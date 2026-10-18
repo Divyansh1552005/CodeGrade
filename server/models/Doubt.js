@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 export const DOUBT_STATUS = ['pending_triage', 'pending_review', 'auto_rejected', 'appealed'];
 export const REJECTED = 'auto_rejected';
+export const APPEALED = 'appealed';
 export const PENDING_TRIAGE = 'pending_triage';
 
 // What the triage model decided, kept for audit. Only teachers ever see `lowConfidence`.

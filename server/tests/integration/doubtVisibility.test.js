@@ -11,14 +11,14 @@ import WorkItem from '../../models/WorkItem.js';
 import { processNotification } from '../../services/notificationProcessor.js';
 import { recoverDomainWork } from '../../services/recoveryService.js';
 import { listDoubts } from '../../services/doubtAccess.js';
-import { registerAs } from '../helpers/users.js';
+import { createUser } from '../helpers/users.js';
 
 const app = createApp();
 let author, other, teacher, ids;
 
 async function register(role, name = role) {
-  const res = await registerAs(app, { name, email: `${name}${Math.random()}@x.com`, password: 'password123', role });
-  return { token: res.body.accessToken, id: res.body.user._id, user: { _id: res.body.user._id, role } };
+  const { user, accessToken } = await createUser({ role, name });
+  return { token: accessToken, id: String(user._id), user: { _id: user._id, role } };
 }
 const as = (u) => ({ Authorization: `Bearer ${u.token}` });
 const doubt = (over = {}) => Doubt.create({ studentId: author.id, title: 'T', body: 'B', ...over });
@@ -58,7 +58,9 @@ describe('board, search-style listing, totals and pagination', () => {
     'never lists an auto_rejected doubt for %s, in any page', async (_label, who) => {
       const found = await allBoardIds(who());
       expect(found).not.toContain(ids.rejected);
-      expect(found).toEqual(expect.arrayContaining([ids.legacy, ids.normal, ids.appealed]));
+      // An appealed doubt waits in the teacher review queue; it is not on the board for anyone.
+      expect(found).not.toContain(ids.appealed);
+      expect(found).toEqual(expect.arrayContaining([ids.legacy, ids.normal]));
       // Pagination loses nothing: every visible doubt appears exactly once.
       expect(new Set(found).size).toBe(found.length);
     }
@@ -81,11 +83,12 @@ describe('board, search-style listing, totals and pagination', () => {
   });
   it('hides triage and appeal internals from students and shows teachers only the flags they need', async () => {
     await Doubt.updateOne({ _id: ids.appealed }, { $set: { triage: { verdict: 'too_vague', confidence: 0.4, reason: 'Vague', lowConfidence: true, source: 'ai' } } });
-    const student = (await request(app).get(`/doubts/${ids.appealed}`).set(as(other))).body.doubt;
+    expect((await request(app).get(`/doubts/${ids.appealed}`).set(as(other))).status).toBe(404);
+    const student = (await request(app).get(`/doubts/${ids.appealed}`).set(as(author))).body.doubt;
     expect(student.triage).toBeUndefined();
     expect(student.appeal).toBeUndefined();
     expect(student.status).toBe('pending_review');
-    expect((await request(app).get('/doubts').set(as(other))).body.doubts.find((d) => d._id === ids.appealed).status).toBe('pending_review');
+    expect((await request(app).get('/doubts?mine=1').set(as(author))).body.doubts.find((d) => d._id === ids.appealed).status).toBe('pending_review');
     const teach = (await request(app).get(`/doubts/${ids.appealed}`).set(as(teacher))).body.doubt;
     expect(teach.appealed).toBe(true);
     expect(teach.status).toBe('appealed');

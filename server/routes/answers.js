@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import Answer from '../models/Answer.js';
+import Doubt from '../models/Doubt.js';
 import { recordAnswerNotification } from '../services/workService.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roleGuard.js';
@@ -54,6 +55,9 @@ router.post(
       answer.reviewedBy = req.user._id;
       answer.reviewedAt = new Date();
       await answer.save();
+
+      // Answering an appealed doubt confirms it is on topic: it joins the board like any other doubt.
+      if (doubt.status === 'appealed') await Doubt.updateOne({ _id: doubt._id, status: 'appealed' }, { $set: { status: 'pending_review' } });
 
       // Recovery also records this event if the process exits after approval.
       await recordAnswerNotification(answer);

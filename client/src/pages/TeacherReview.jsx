@@ -196,7 +196,7 @@ const FailedDoubtCard = memo(function FailedDoubtCard({ doubt, onAnswered, onOff
         <Question body={doubt.body} />
         <p className="text-base text-fg-muted">
           {doubt.appealed
-            ? 'The AI marked this doubt off topic and the student appealed. No AI draft was made. Read it and answer it yourself if it is relevant. Your answer is published to the student immediately.'
+            ? 'The AI marked this doubt off topic and the student appealed. No AI draft was made. It is not on the board yet. If it is relevant, answer it: that publishes your answer and adds the doubt to the board. Otherwise mark it off topic.'
             : irrelevant
               ? 'The AI judged this is not about programming, so it wrote no draft. Answer it manually if it is relevant.'
               : 'The AI could not draft an answer. Your answer is published to the student immediately.'}

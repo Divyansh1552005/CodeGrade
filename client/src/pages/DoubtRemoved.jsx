@@ -63,7 +63,7 @@ export default function DoubtRemoved() {
       </Panel>
       {doubt.appealed ? (
         <div role="status" className="space-y-3">
-          <p className="text-base">You asked for a teacher to review this doubt. It is back on the doubts board and a teacher will answer it directly.</p>
+          <p className="text-base">You asked for a teacher to review this doubt. It is waiting in the teacher review queue, not on the doubts board. If a teacher agrees it is on topic they will answer it and it will appear on the board.</p>
           <Button to={`/doubts/${id}`}>Open the doubt</Button>
         </div>
       ) : doubt.canAppeal ? (

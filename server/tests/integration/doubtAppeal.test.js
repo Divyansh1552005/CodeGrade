@@ -1,6 +1,6 @@
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
 import request from 'supertest';
-import { registerAs } from '../helpers/users.js';
+import { createUser } from '../helpers/users.js';
 
 const svc = (p) => new URL(`../../services/${p}`, import.meta.url).pathname;
 const classify = jest.fn();
@@ -21,8 +21,8 @@ const app = createApp();
 let student, other, teacher;
 
 async function register(role, name = role) {
-  const res = await registerAs(app, { name, email: `${name}${Math.random()}@x.com`, password: 'password123', role });
-  return { token: res.body.accessToken, id: res.body.user._id };
+  const { user, accessToken } = await createUser({ role, name });
+  return { token: accessToken, id: String(user._id) };
 }
 const as = (u) => ({ Authorization: `Bearer ${u.token}` });
 const run = async (key) => processWork({ data: { workItemId: (await WorkItem.findOne({ key })).id }, attemptsMade: 0, opts: { attempts: 3 } });
@@ -89,7 +89,7 @@ describe('GET /doubts/:id/removed', () => {
 });
 
 describe('POST /doubts/:id/appeal', () => {
-  it('moves the doubt to appealed, makes it visible, and goes straight to the teachers with no AI draft', async () => {
+  it('moves the doubt to appealed, keeps it off the board, and goes straight to the teachers with no AI draft', async () => {
     const d = await removedDoubt();
     const res = await request(app).post(`/doubts/${d.id}/appeal`).set(as(student));
     expect(res.status).toBe(200);
@@ -99,8 +99,25 @@ describe('POST /doubts/:id/appeal', () => {
     expect(stored.appeal.requestedAt).toBeInstanceOf(Date);
     expect(await WorkItem.countDocuments({ type: 'doubt-draft' })).toBe(0);
     expect(generateDraftAnswer).not.toHaveBeenCalled();
-    expect((await request(app).get(`/doubts/${d.id}`).set(as(other))).status).toBe(200);
+    expect((await request(app).get(`/doubts/${d.id}`).set(as(other))).status).toBe(404);
     expect((await request(app).get(`/doubts/${d.id}`).set(as(teacher))).body.doubt.appealed).toBe(true);
+    for (const who of [other, teacher]) {
+      expect(JSON.stringify((await request(app).get('/doubts').set(as(who))).body)).not.toContain(d.id);
+    }
+  });
+  it('joins the board only once a teacher answers it', async () => {
+    const d = await removedDoubt();
+    await request(app).post(`/doubts/${d.id}/appeal`).set(as(student));
+    await request(app).post('/answers').set(as(teacher)).send({ doubtId: d.id, content: 'Here is a human answer.' });
+    expect((await Doubt.findById(d.id)).status).toBe('pending_review');
+    expect((await request(app).get(`/doubts/${d.id}`).set(as(other))).status).toBe(200);
+  });
+  it('lets a teacher mark an appealed doubt off topic, and the student cannot appeal again', async () => {
+    const d = await removedDoubt();
+    await request(app).post(`/doubts/${d.id}/appeal`).set(as(student));
+    expect((await request(app).post(`/doubts/${d.id}/off-topic`).set(as(teacher)).send({})).status).toBe(200);
+    const res = await request(app).get(`/doubts/${d.id}/removed`).set(as(student));
+    expect(res.body.doubt).toMatchObject({ canAppeal: false, appealUsed: true, removedBy: 'teacher' });
   });
   it('appears in the teachers\' manual-answer queue exactly once, marked appealed, and never in the AI draft queue', async () => {
     const d = await removedDoubt();

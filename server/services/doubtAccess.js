@@ -1,5 +1,5 @@
 import { viewerKind } from '../utils/roles.js';
-import Doubt, { REJECTED, PENDING_TRIAGE } from '../models/Doubt.js';
+import Doubt, { REJECTED, PENDING_TRIAGE, APPEALED } from '../models/Doubt.js';
 import Answer from '../models/Answer.js';
 import Problem from '../models/Problem.js';
 import { encodeCursor, cursorFilter } from '../utils/pagination.js';
@@ -13,13 +13,16 @@ export const MAX_PAGE_LIMIT = 100;
 /**
  * Doubts a viewer may see, as a deny-list so doubts without a status stay visible:
  *  - never auto_rejected (also enforced by the model's default scope);
- *  - pending_triage only to the student who wrote it.
+ *  - pending_triage only to the student who wrote it;
+ *  - appealed only to the author and to teachers (it sits in the teacher review queue, not on the board).
  */
 export function visibleFor(viewer) {
+  const teacher = viewerKind(viewer) === 'teacher';
   return {
     $or: [
-      { status: { $nin: [REJECTED, PENDING_TRIAGE] } },
+      { status: { $nin: [REJECTED, PENDING_TRIAGE, APPEALED] } },
       { status: PENDING_TRIAGE, studentId: viewer._id },
+      teacher ? { status: APPEALED } : { status: APPEALED, studentId: viewer._id },
     ],
   };
 }
@@ -67,7 +70,8 @@ const LIST_FIELDS = 'title body studentId problemId status aiDraftStatus created
  */
 export async function listDoubts({ viewer, mine = false, status, limit = 10, cursor }) {
   const size = Math.min(Math.max(Number(limit) || 10, 1), MAX_PAGE_LIMIT);
-  const clauses = [mine ? { studentId: viewer._id } : {}, visibleFor(viewer)];
+  // An appealed doubt is in the teachers' review queue, not on the shared board (its author still sees it under `mine`).
+  const clauses = [mine ? { studentId: viewer._id } : { status: { $ne: APPEALED } }, visibleFor(viewer)];
   if (status) clauses.push(...(await statusClauses(status)));
   if (cursor) clauses.push(cursorFilter(cursor));
 
