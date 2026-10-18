@@ -25,8 +25,6 @@ const userSchema = new mongoose.Schema(
     suspendedAt: { type: Date },
     suspendedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     lastLoginAt: { type: Date },
-    // Last accepted authenticator step of the admin (TOTP replay protection).
-    totpLastStep: { type: Number },
     // No schema default on purpose: a user document written before email verification existed has no
     // field, and a default of false would lock them out. Use isVerified(), which reads a missing field as verified.
     emailVerified: { type: Boolean },
@@ -43,7 +41,6 @@ userSchema.set('toJSON', {
     delete ret.passwordHash;
     delete ret.tokenVersion;
     delete ret.envAdmin;
-    delete ret.totpLastStep;
     delete ret.suspendedBy;
     delete ret.__v;
     return ret;

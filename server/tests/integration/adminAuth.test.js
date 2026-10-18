@@ -8,7 +8,6 @@ import RefreshToken from '../../models/RefreshToken.js';
 import WorkItem from '../../models/WorkItem.js';
 import { bootstrapAdmin } from '../../services/adminBootstrap.js';
 import { validateAdminConfig } from '../../services/adminConfig.js';
-import { codeFor, generateSecret, stepAt } from '../../utils/totp.js';
 import { createUser } from '../helpers/users.js';
 import { setMailTransport } from '../../services/mail/mailService.js';
 import { resetAdminLoginLimits } from '../../middleware/adminLoginLimit.js';
@@ -120,18 +119,17 @@ describe('admin configuration', () => {
   ])('refuses a weak password in production (%s)', (_name, password) => {
     expect(() => validateAdminConfig(prod({ ADMIN_PASSWORD: password }))).toThrow();
   });
-  it('refuses a missing password, a bad email and a bad authenticator secret', () => {
+  it('refuses a missing password and a bad email', () => {
     expect(() => validateAdminConfig(prod({ ADMIN_PASSWORD: '' }))).toThrow(/ADMIN_PASSWORD is required/);
     expect(() => validateAdminConfig(prod({ ADMIN_EMAIL: 'nope' }))).toThrow(/ADMIN_EMAIL/);
-    expect(() => validateAdminConfig(prod({ ADMIN_TOTP_SECRET: '!!!' }))).toThrow(/ADMIN_TOTP_SECRET/);
   });
   it('allows a short password outside production but never one over 72 bytes', () => {
     expect(() => validateAdminConfig({ ADMIN_EMAIL: 'a@b.co', ADMIN_PASSWORD: 'devpass1' })).not.toThrow();
     expect(() => validateAdminConfig({ ADMIN_EMAIL: 'a@b.co', ADMIN_PASSWORD: 'x'.repeat(73) })).toThrow(/72 bytes/);
   });
-  it('starts without an admin, with a warning, when ADMIN_EMAIL is not set; warns about a missing second factor in production', () => {
+  it('starts without an admin, with a warning, when ADMIN_EMAIL is not set', () => {
     expect(validateAdminConfig({}).warnings[0]).toMatch(/ADMIN_EMAIL is not set/);
-    expect(validateAdminConfig(prod({})).warnings.join(' ')).toMatch(/second factor/);
+    expect(validateAdminConfig(prod({})).warnings).toEqual([]);
   });
   it('never puts the password in an error, a warning or any output', async () => {
     const secret = 'Sh0rt-Pass1';
@@ -184,6 +182,23 @@ describe('reserved admin address', () => {
   });
 });
 
+describe('the admin does not depend on the mail setup', () => {
+  it('bootstraps and logs in with no mail configuration at all', async () => {
+    for (const name of ['BREVO_API_KEY', 'MAIL_FROM', 'EMAIL_TOKEN_SECRET', 'APP_BASE_URL', 'FEATURE_EMAIL_VERIFICATION', 'FEATURE_PASSWORD_RESET']) delete process.env[name];
+    await bootstrapAdmin();
+    expect((await loginAdmin()).status).toBe(200);
+  });
+  it('logs in while the mail provider is down, because logging in sends nothing', async () => {
+    Object.assign(process.env, { FEATURE_EMAIL_VERIFICATION: 'true', FEATURE_PASSWORD_RESET: 'true', EMAIL_TOKEN_SECRET: 'a-test-secret-that-is-at-least-32-characters', APP_BASE_URL: 'https://app.example.com', MAIL_FROM: 'a@b.co' });
+    const down = jest.fn().mockRejectedValue(new Error('provider down'));
+    setMailTransport(down);
+    await bootstrapAdmin();
+    expect((await loginAdmin()).status).toBe(200);
+    expect(down).not.toHaveBeenCalled();
+    expect(await WorkItem.countDocuments({ type: 'send-email' })).toBe(0);
+  });
+});
+
 describe('admin login', () => {
   beforeEach(async () => { await bootstrapAdmin(); });
   it('logs the admin in with scope admin or without it, through the normal login API', async () => {
@@ -231,11 +246,42 @@ describe('admin login', () => {
     // refused attempts are audited too, sharing the row of this IP and minute
     expect((await AuditLog.findOne({ action: 'admin.login_failed', ip: address }).lean()).count).toBe(8);
   });
-  it('limits attempts at the account across many IPs', async () => {
-    const statuses = [];
-    for (let i = 0; i < 22; i += 1) statuses.push((await loginAdmin({ password: 'nope-nope' })).status);
-    expect(statuses.slice(0, 20).every((s) => s === 401)).toBe(true);
-    expect(statuses.slice(20)).toEqual([429, 429]);
+  it('locks the admin account after 5 failed attempts: the same generic 401 even with the right password, no 429, no cookie', async () => {
+    for (let i = 0; i < 5; i += 1) expect((await loginAdmin({ password: 'nope-nope' })).status).toBe(401); // five different IPs
+    const wrong = await loginAdmin({ password: 'nope-nope' });
+    const right = await loginAdmin();
+    for (const res of [wrong, right]) {
+      expect([res.status, res.body]).toEqual([401, { error: 'Invalid credentials' }]);
+      expect(res.headers['set-cookie']).toBeUndefined();
+      expect(res.headers['retry-after']).toBeUndefined();
+    }
+    const plain = await post('/auth/login', { email: 'boss@example.com', password: PASSWORD });
+    expect(plain.status).toBe(401); // also without scope
+    expect(await AuditLog.countDocuments({ action: 'admin.login_failed', detail: 'locked out' })).toBeGreaterThan(0);
+  });
+  it('does not extend the lockout with more attempts, so it ends by itself within 15 minutes', async () => {
+    const { adminLockedOut } = await import('../../middleware/adminLoginLimit.js');
+    for (let i = 0; i < 5; i += 1) await loginAdmin({ password: 'nope-nope' });
+    expect(await adminLockedOut()).toBe(true);
+    for (let i = 0; i < 5; i += 1) await loginAdmin({ password: 'nope-nope' });
+    const status = (await import('../../middleware/adminLoginLimit.js')).adminFailureStatus;
+    const { used, ttlMs } = await status();
+    expect(used).toBe(5);
+    expect(ttlMs).toBeLessThanOrEqual(15 * 60 * 1000);
+    expect(ttlMs).toBeGreaterThan(0);
+    await resetAdminLoginLimits(); // what the 15 minutes do on their own
+    expect((await loginAdmin()).status).toBe(200);
+  });
+  it('counts only failures against the admin address, so a student cannot lock the admin out', async () => {
+    const student = await createUser({ role: 'student' });
+    for (let i = 0; i < 7; i += 1) await post('/auth/login', { email: student.email, password: 'wrong-password', scope: 'admin' });
+    expect((await loginAdmin()).status).toBe(200);
+  });
+  it('forgets earlier failures after a successful login', async () => {
+    for (let i = 0; i < 4; i += 1) await loginAdmin({ password: 'nope-nope' });
+    expect((await loginAdmin()).status).toBe(200);
+    for (let i = 0; i < 4; i += 1) await loginAdmin({ password: 'nope-nope' });
+    expect((await loginAdmin()).status).toBe(200);
   });
   it('does not apply the admin limit to ordinary logins', async () => {
     const student = await createUser({ role: 'student' });
@@ -275,51 +321,5 @@ describe('admin login', () => {
   it('treats a suspended admin like a wrong password', async () => {
     await User.updateOne({ role: 'admin' }, { $set: { suspendedAt: new Date() } });
     expect((await loginAdmin()).status).toBe(401);
-  });
-});
-
-describe('admin second factor', () => {
-  const secret = generateSecret();
-  const current = (offset = 0) => codeFor(secret, stepAt(Date.now()) + offset);
-  beforeEach(async () => { adminEnv({ ADMIN_TOTP_SECRET: secret }); await bootstrapAdmin(); });
-  it('requires a valid code, and a wrong or missing code is the same generic 401', async () => {
-    const wrongPassword = await loginAdmin({ password: 'nope-nope', totp: current() });
-    const missing = await loginAdmin();
-    const wrong = await loginAdmin({ totp: '000000' });
-    for (const res of [missing, wrong]) {
-      expect([res.status, res.body]).toEqual([wrongPassword.status, wrongPassword.body]);
-      expect(res.headers['set-cookie']).toBeUndefined();
-    }
-    expect((await loginAdmin({ totp: current() })).status).toBe(200);
-  });
-  it('is required without scope too', async () => {
-    expect((await post('/auth/login', { email: 'boss@example.com', password: PASSWORD })).status).toBe(401);
-    expect((await post('/auth/login', { email: 'boss@example.com', password: PASSWORD, totp: current() })).status).toBe(200);
-  });
-  it('accepts the previous and next step but a code can only be used once', async () => {
-    const code = current(1);
-    expect((await loginAdmin({ totp: code })).status).toBe(200);
-    expect((await loginAdmin({ totp: code })).status).toBe(401);
-    expect((await loginAdmin({ totp: current(0) })).status).toBe(401); // an earlier step than the one already used
-    expect((await loginAdmin({ totp: codeFor(secret, stepAt(Date.now()) + 5) })).status).toBe(401);
-  });
-  it('lets only one of several parallel logins with the same code succeed', async () => {
-    const code = current();
-    const results = await Promise.all(Array.from({ length: 6 }, () => loginAdmin({ totp: code })));
-    expect(results.filter((r) => r.status === 200)).toHaveLength(1);
-  });
-  it('counts wrong codes towards the limit and audits them', async () => {
-    const address = ip();
-    for (let i = 0; i < 3; i += 1) await loginAdmin({ totp: '111111' }, { address });
-    const row = await AuditLog.findOne({ action: 'admin.login_failed' }).lean();
-    expect([row.detail, row.count]).toEqual(['wrong authenticator code', 3]);
-  });
-  it('does not ask a student for a code and does not reveal that 2FA is on', async () => {
-    const student = await createUser({ role: 'student' });
-    expect((await post('/auth/login', { email: student.email, password: student.password })).status).toBe(200);
-  });
-  it('is switched off by removing the variable (recovery path)', async () => {
-    adminEnv();
-    expect((await loginAdmin()).status).toBe(200);
   });
 });

@@ -61,7 +61,7 @@ describe('teacher signup', () => {
     expect([application.status, application.organization, application.note, application.visibleAt]).toEqual(['pending', 'Open University', 'I teach algorithms.', undefined]);
     expect(await TeacherApplication.countDocuments({ visibleAt: { $exists: true } })).toBe(0);
     const mails = await deliver();
-    expect(mails.map((m) => m.subject)).toEqual(['Verify your email for CodeGrade']); // nothing for the admin yet
+    expect(mails.map((m) => m.subject)).toEqual(['Verify your email for CodeGrade']); // nothing for the admin
     expect(await AuditLog.countDocuments({ action: 'teacher_application.submitted' })).toBe(1);
   });
   it('blocks login until verified, with the usual EMAIL_NOT_VERIFIED', async () => {
@@ -70,19 +70,13 @@ describe('teacher signup', () => {
     const res = await login(body.email);
     expect([res.status, res.body.code]).toEqual([403, 'EMAIL_NOT_VERIFIED']);
   });
-  it('makes the application visible, and tells the admin, only once the email is verified', async () => {
+  it('makes the application visible once the email is verified, and sends the admin nothing', async () => {
     const { user } = await verifiedApplicant({ name: 'Tess <script>x()</script>', organization: 'Evil <b>Corp</b> https://phish.example', note: 'Hi <img src=x onerror=alert(1)>\nSecond line' });
     const application = await TeacherApplication.findOne({ userId: user._id });
     expect(application.visibleAt).toBeInstanceOf(Date);
     expect(await AuditLog.countDocuments({ action: 'teacher_application.verified' })).toBe(1);
-    const [notice] = await deliver();
-    expect(notice.to).toBe('boss@example.com');
-    expect(notice.subject).toBe('New teacher application');
-    expect(notice.html).not.toMatch(/<script>|<img |<b>Corp/);
-    expect(notice.html).toContain('&lt;script&gt;');
-    expect(notice.html.match(/<a href=/g)).toHaveLength(1); // only our own review link; the applicant's URL is plain text
-    expect(notice.html).toContain('https://app.example.com/admin/applications');
-    expect(notice.text).toContain('https://phish.example'); // shown as text only
+    expect(await deliver()).toEqual([]); // no "new application" email, to anyone
+    expect(application.organization).toBe('Evil <b>Corp</b> https://phish.example'); // stored as plain text, shown by the UI as text
   });
   it('lets the applicant log in but only see /auth/me and their own application', async () => {
     const { body } = await verifiedApplicant();
@@ -141,13 +135,6 @@ describe('limits', () => {
     process.env.TEACHER_APPLICATION_CAP = '1';
     for (let i = 0; i < 3; i += 1) expect((await post('/auth/register', teacherBody())).status).toBe(202);
   });
-  it('emails the admin about at most TEACHER_NOTIFY_PER_HOUR applications an hour', async () => {
-    process.env.TEACHER_NOTIFY_PER_HOUR = '2';
-    for (let i = 0; i < 4; i += 1) await verifiedApplicant();
-    const toAdmin = transport.mock.calls.map((c) => c[0]).filter((m) => m.subject === 'New teacher application');
-    expect(toAdmin).toHaveLength(2);
-    expect(await TeacherApplication.countDocuments({ visibleAt: { $exists: true } })).toBe(4);
-  });
   it('limits teacher signups per IP and leaves student signups alone', async () => {
     const address = ip();
     const statuses = [];
@@ -187,6 +174,35 @@ describe('signup again with the same address', () => {
     await post('/auth/register', teacherBody({ email: student.email }));
     expect((await User.findById(student.user._id)).role).toBe('student');
     expect(await TeacherApplication.countDocuments()).toBe(0);
+  });
+});
+
+describe('the admin is never mailed', () => {
+  it('receives nothing through a whole application, from signup to approval', async () => {
+    const { user } = await verifiedApplicant();
+    const adminRow = await User.findOne({ role: 'admin' });
+    await deliver();
+    const { issueTokenPair } = await import('../../services/tokenService.js');
+    const tokens = await issueTokenPair(adminRow);
+    const application = await TeacherApplication.findOne({ userId: user._id });
+    expect((await request(app).post(`/admin/teacher-applications/${application._id}/approve`).set('Authorization', `Bearer ${tokens.accessToken}`).send({})).status).toBe(200);
+    await deliver();
+    const recipients = transport.mock.calls.map((c) => c[0].to);
+    expect(recipients).not.toContain('boss@example.com');
+    expect(recipients.length).toBeGreaterThan(0);
+  });
+  it('refuses to send to the admin even if an email job for it is queued', async () => {
+    const { queueEmail, EMAIL_KINDS } = await import('../../services/emailJob.js');
+    const adminRow = await User.findOne({ role: 'admin' });
+    await queueEmail({ kind: 'password-changed', userId: adminRow._id });
+    expect(await deliver()).toEqual([]);
+    const work = await WorkItem.findOne({ type: 'send-email' });
+    expect([work.status, work.result.skipped]).toEqual(['completed', 'admin_is_never_mailed']);
+    expect(EMAIL_KINDS).toEqual(['verify-email', 'password-reset', 'password-changed', 'account-exists', 'teacher-approved', 'teacher-rejected']);
+  });
+  it('has no email template for the admin', async () => {
+    const { TEMPLATES } = await import('../../services/mail/templates/index.js');
+    expect(Object.keys(TEMPLATES).sort()).toEqual(['account-exists', 'password-changed', 'password-reset', 'teacher-approved', 'teacher-rejected', 'verify-email']);
   });
 });
 

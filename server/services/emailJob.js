@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import User, { isVerified } from '../models/User.js';
 import TeacherApplication from '../models/TeacherApplication.js';
 import { mailConfig } from '../config/mail.js';
+import { isReservedEmail } from './adminConfig.js';
 import { logger } from '../utils/logger.js';
 import { ensureWork } from './workService.js';
 import { isTokenActive, tokenLink, ttlFor } from './emailTokens.js';
@@ -14,7 +15,6 @@ const KINDS = {
   'password-reset': { token: 'reset', tag: 'password_reset' },
   'password-changed': { token: null, tag: 'password_changed' },
   'account-exists': { token: null, tag: 'account_exists' },
-  'teacher-application': { token: null, tag: 'teacher_application' },
   'teacher-approved': { token: null, tag: 'teacher_approved' },
   'teacher-rejected': { token: null, tag: 'teacher_rejected' },
 };
@@ -45,18 +45,12 @@ async function staleReason(kind, user, tokenType, ref) {
   return null;
 }
 
-// The three teacher emails depend on an application. Each is skipped if the application has moved on since
+// The two teacher emails (approved, rejected) depend on an application. Each is skipped if the application has moved on since
 // it was queued (a later decision supersedes an earlier one).
 async function teacherContext(data, user) {
   const application = await TeacherApplication.findById(data.applicationId);
   if (!application) return { stale: 'application_missing' };
   const base = mailConfig().baseUrl;
-  if (data.kind === 'teacher-application') {
-    if (application.status !== 'pending') return { stale: 'application_decided' };
-    const applicant = await User.findById(application.userId);
-    if (!applicant) return { stale: 'user_missing' };
-    return { args: { applicant: { name: applicant.name, email: applicant.email, organization: application.organization, note: application.note } }, link: `${base}/admin/applications` };
-  }
   const wanted = data.kind === 'teacher-approved' ? 'approved' : 'rejected';
   if (application.status !== wanted || application.decisionSeq !== data.decisionSeq) return { stale: 'decision_superseded' };
   return data.kind === 'teacher-approved'
@@ -69,6 +63,11 @@ export async function processEmail({ data }) {
   const spec = KINDS[data.kind];
   if (!spec) return { skipped: 'unknown_kind' };
   const user = await User.findById(data.userId);
+  // The admin account never receives mail from the app: ADMIN_EMAIL is only a login name.
+  if (user && (user.role === 'admin' || isReservedEmail(user.email))) {
+    logger.info('email.skipped', { kind: data.kind, reason: 'admin_is_never_mailed' });
+    return { skipped: 'admin_is_never_mailed' };
+  }
   let reason = await staleReason(data.kind, user, spec.token, data.ref);
   let extra = { args: {}, link: spec.token ? tokenLink(spec.token, data.ref) : null };
   if (!reason && data.applicationId) {

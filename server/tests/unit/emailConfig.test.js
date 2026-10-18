@@ -56,7 +56,7 @@ describe('validateMailConfig', () => {
 });
 
 describe('password length', () => {
-  const base = { name: 'A', email: 'a@b.co', role: 'student' };
+  const base = { name: 'A', email: 'a@b.co', accountType: 'student' };
   it('counts bytes, not characters, against the 72 byte maximum', () => {
     expect(passwordSchema.safeParse('a'.repeat(72)).success).toBe(true);
     expect(passwordSchema.safeParse('a'.repeat(73)).success).toBe(false);

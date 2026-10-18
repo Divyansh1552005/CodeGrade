@@ -34,7 +34,7 @@ export function makeLimiter({ keyPrefix, points, duration }) {
         });
     return real;
   }
-  return { consume: (key) => ensure().consume(key), reset: (key) => ensure().delete(key) };
+  return { consume: (key) => ensure().consume(key), reset: (key) => ensure().delete(key), used: async (key) => (await ensure().get(key))?.consumedPoints ?? 0, ttlMs: async (key) => (await ensure().get(key))?.msBeforeNext ?? 0 };
 }
 
 // Basic abuse guard applied to every authenticated request (wired into

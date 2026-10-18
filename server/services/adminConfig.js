@@ -1,4 +1,3 @@
-import { base32Decode } from '../utils/totp.js';
 import { PASSWORD_MAX_BYTES } from '../validation/schemas.js';
 
 // Everything the env-managed admin account reads from the environment. Read lazily, like the other config.
@@ -11,7 +10,6 @@ export function adminConfig(env = process.env) {
     email: String(env.ADMIN_EMAIL || '').trim().toLowerCase(),
     password: env.ADMIN_PASSWORD || '',
     sessionHours: Number.isFinite(hours) && hours > 0 ? hours : 8,
-    totpSecret: String(env.ADMIN_TOTP_SECRET || '').replace(/\s/g, ''),
     production: env.NODE_ENV === 'production',
   };
 }
@@ -53,12 +51,6 @@ export function validateAdminConfig(env = process.env) {
     if (config.password.length < MIN_PRODUCTION_LENGTH) throw new Error(`ADMIN_PASSWORD must be at least ${MIN_PRODUCTION_LENGTH} characters in production.`);
     const reason = weakness(config.password, config.email);
     if (reason) throw new Error(`ADMIN_PASSWORD is too easy to guess in production: ${reason}. Choose a long random password.`);
-  }
-  if (config.totpSecret) {
-    const key = base32Decode(config.totpSecret);
-    if (!key || key.length < 10) throw new Error('ADMIN_TOTP_SECRET must be a base32 secret of at least 16 characters. Generate one with scripts/adminTotp.js.');
-  } else if (config.production) {
-    warnings.push('ADMIN_TOTP_SECRET is not set: the admin account has no second factor.');
   }
   return { config, warnings };
 }

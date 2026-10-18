@@ -20,14 +20,13 @@ import { consumeToken, issueToken, mayIssue, supersedeTokens } from '../services
 import { queueEmail } from '../services/emailJob.js';
 import { revokeAllSessions } from '../services/tokenService.js';
 import { maskEmail } from '../utils/maskEmail.js';
-import { adminLoginLimit, isAdminAttempt } from '../middleware/adminLoginLimit.js';
+import { adminLockedOut, adminLoginLimit, clearAdminFailures, isAdminAttempt, recordAdminFailure } from '../middleware/adminLoginLimit.js';
 import { makeLimiter, rateLimitBy } from '../middleware/rateLimit.js';
 import { teacherAccess } from '../config/teacherAccess.js';
 import TeacherApplication from '../models/TeacherApplication.js';
 import { createApplication, hasRoomForApplication, markApplicationVisible } from '../services/teacherApplications.js';
-import { adminConfig, isReservedEmail } from '../services/adminConfig.js';
+import { isReservedEmail } from '../services/adminConfig.js';
 import { audit, auditCoalesced } from '../services/audit.js';
-import { verifyCode } from '../utils/totp.js';
 
 const router = Router();
 
@@ -156,35 +155,28 @@ const DUMMY_HASH = bcrypt.hashSync('not-a-real-password', 10);
 
 /**
  * Login for the admin account, or any attempt that asks for scope "admin". Every failure is the same 401 as
- * a wrong password, whatever the reason (wrong password, not an admin, wrong or reused authenticator code,
- * suspended), and does the same work, so neither the answer nor the timing says which one it was. Failures
- * are audited (coalesced per IP and minute) without the attempted password; a failure creates no session,
- * no refresh token and no lastLoginAt.
+ * a wrong password, whatever the reason (wrong password, not an admin, suspended, locked out), and does the
+ * same work, so neither the answer nor the timing says which one it was. Failures are audited (coalesced per
+ * IP and minute) without the attempted password; a failure creates no session, no refresh token and no
+ * lastLoginAt. Five failures against the admin address lock the account for 15 minutes (see adminLoginLimit).
  */
 async function adminLogin(req, res) {
-  const { email, password, totp } = req.body;
+  const { email, password } = req.body;
   const user = await User.findOne({ email: String(email).toLowerCase() });
   const passwordOk = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
-  const secret = adminConfig().totpSecret;
-  const step = secret ? verifyCode(secret, totp) : null; // computed even when the password is wrong
-  const isAdmin = Boolean(user) && user.role === 'admin' && !user.suspendedAt;
+  const targetsAdmin = isReservedEmail(email) || user?.role === 'admin';
+  const locked = targetsAdmin && (await adminLockedOut());
   let reason = null;
-  if (!user) reason = 'unknown account';
+  if (locked) reason = 'locked out';
+  else if (!user) reason = 'unknown account';
   else if (!passwordOk) reason = 'wrong password';
-  else if (!isAdmin) reason = 'not an admin';
-  else if (secret && step === null) reason = 'wrong authenticator code';
-  if (!reason && secret) {
-    // The code can be used once: the step is stored atomically, so a replay (also from another process) fails.
-    const fresh = await User.findOneAndUpdate(
-      { _id: user._id, $or: [{ totpLastStep: { $exists: false } }, { totpLastStep: { $lt: step } }] },
-      { $set: { totpLastStep: step } },
-    );
-    if (!fresh) reason = 'authenticator code reused';
-  }
+  else if (user.role !== 'admin' || user.suspendedAt) reason = user.suspendedAt ? 'suspended' : 'not an admin';
   if (reason) {
+    if (targetsAdmin && !locked) await recordAdminFailure();
     await auditCoalesced({ action: 'admin.login_failed', target: user ?? undefined, req, detail: reason });
     return res.status(401).json({ error: 'Invalid credentials' });
   }
+  await clearAdminFailures();
   await touchLastLogin(user._id);
   const { accessToken, refreshToken } = await issueTokenPair(user);
   setRefreshCookie(res, refreshToken);
@@ -192,7 +184,7 @@ async function adminLogin(req, res) {
   return res.json({ user: user.toJSON(), accessToken });
 }
 
-// POST /auth/login  { email, password, scope?, totp? }
+// POST /auth/login  { email, password, scope? }
 router.post('/login', ...authLimits('login'), validate(loginSchema), adminLoginLimit, async (req, res, next) => {
   try {
     const { email, password } = req.body;
