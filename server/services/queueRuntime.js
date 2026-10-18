@@ -2,7 +2,7 @@ import { Queue } from 'bullmq';
 import Redis from 'ioredis';
 
 export const QUEUE_NAMES = {
-  grading: 'submission-grading', 'doubt-draft': 'doubt-drafts', feedback: 'ai-feedback',
+  grading: 'submission-grading', 'doubt-triage': 'doubt-triage', 'doubt-draft': 'doubt-drafts', feedback: 'ai-feedback',
   completion: 'submission-completion', notification: 'notifications',
   'problem-import': 'bulk-jobs', 'problem-export': 'bulk-jobs', 'report-export': 'bulk-jobs',
 };

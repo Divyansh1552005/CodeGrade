@@ -9,6 +9,9 @@ import { ensureWork } from '../services/workService.js';
 import { createDoubtSchema } from '../validation/schemas.js';
 import { listDoubts, findVisibleDoubt, listManualAnswerQueue, presentDoubt } from '../services/doubtAccess.js';
 import Problem from '../models/Problem.js';
+import { features } from '../config/features.js';
+import { aiLimits } from '../config/aiLimits.js';
+import { consumeDaily } from '../services/usageCounter.js';
 
 const router = Router();
 
@@ -28,19 +31,44 @@ router.post(
         throw httpError(404, 'Problem not found');
       }
 
+      const triage = features.aiTriage();
+      if (triage) {
+        // Daily cap, counted atomically before anything is created. Every doubt counts,
+        // including ones triage later removes. A blocked request creates nothing.
+        const { maxDoubtsPerDay } = aiLimits().triage;
+        const slot = await consumeDaily({ userId: req.user._id, kind: 'doubt', max: maxDoubtsPerDay });
+        if (!slot.allowed) {
+          const retryAfterSeconds = Math.max(1, Math.ceil((slot.resetAt.getTime() - Date.now()) / 1000));
+          res.set('Retry-After', String(retryAfterSeconds));
+          return res.status(429).json({
+            error: `You can post at most ${maxDoubtsPerDay} doubts a day. You can post again after the daily reset.`,
+            retryAfterSeconds, resetAt: slot.resetAt,
+          });
+        }
+      }
+
       const doubt = await Doubt.create({
         studentId: req.user._id,
         title,
         body,
         ...(problemId ? { problemId } : {}),
         ...(code ? { code } : {}),
+        // With triage off the doubt is created exactly as before, with no status.
+        ...(triage ? { status: 'pending_triage' } : {}),
         aiDraftStatus: 'pending',
       });
 
-      await ensureWork({ key: `draft-${doubt.id}`, type: 'doubt-draft',
-        ownerId: req.user._id, payload: { doubtId: doubt.id } });
+      // Durable outbox rows; the worker does the AI calls. With triage on, the draft is
+      // queued only after triage lets the doubt through.
+      if (triage) {
+        await ensureWork({ key: `triage-${doubt.id}`, type: 'doubt-triage', ownerId: req.user._id,
+          payload: { doubtId: doubt.id, requestId: req.id } });
+      } else {
+        await ensureWork({ key: `draft-${doubt.id}`, type: 'doubt-draft',
+          ownerId: req.user._id, payload: { doubtId: doubt.id } });
+      }
 
-      res.status(201).json({ doubt });
+      res.status(201).json({ doubt: presentDoubt(doubt, req.user) });
     } catch (err) {
       next(err);
     }

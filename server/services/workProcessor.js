@@ -3,6 +3,7 @@ import Submission from '../models/Submission.js';
 import Doubt from '../models/Doubt.js';
 import { processSubmission, processFeedback } from './submissionProcessor.js';
 import { processDoubtDraft } from './doubtProcessor.js';
+import { processDoubtTriage, failOpen } from './doubtTriage.js';
 import { processCompletion } from './progressService.js';
 import { processNotification } from './notificationProcessor.js';
 import { processBulk } from './bulkProcessor.js';
@@ -17,6 +18,9 @@ export async function failWork(work, error) {
   } else if (work.type === 'feedback') {
     await Submission.updateOne({ _id: work.payload.submissionId, feedbackStatus: { $ne: 'completed' } },
       { $set: { feedbackStatus: 'failed', feedbackError: message } });
+  } else if (work.type === 'doubt-triage') {
+    // Triage could not finish: the doubt goes to the teachers rather than waiting forever.
+    await failOpen(work.payload.doubtId, 'triage_failed');
   } else if (work.type === 'doubt-draft') {
     await Doubt.updateOne({ _id: work.payload.doubtId, aiDraftStatus: { $nin: ['success', 'irrelevant'] } },
       { $set: { aiDraftStatus: 'failed', aiDraftError: message } });
@@ -41,6 +45,7 @@ export async function processWork(job) {
     switch (work.type) {
       case 'grading': result = await processSubmission(input); break;
       case 'feedback': result = await processFeedback(input); break;
+      case 'doubt-triage': result = await processDoubtTriage(input); break;
       case 'doubt-draft': result = await processDoubtDraft(input); break;
       case 'completion': result = await processCompletion(input); break;
       case 'notification': result = await processNotification(input); break;

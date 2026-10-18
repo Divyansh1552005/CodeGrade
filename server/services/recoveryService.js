@@ -5,6 +5,8 @@ import Answer from '../models/Answer.js';
 import Problem from '../models/Problem.js';
 import { ensureWork, recordSubmissionTasks, recordAnswerNotification } from './workService.js';
 import { failWork } from './workProcessor.js';
+import { failOpen, notifyRemoval } from './doubtTriage.js';
+import { aiLimits } from '../config/aiLimits.js';
 
 // Restore domain-to-outbox crash gaps. Existing work keys preserve failed and
 // completed state, so a scan never replenishes an exhausted retry budget.
@@ -21,7 +23,18 @@ export async function recoverDomainWork() {
     await ensureWork({ key: `grading-${submission.id}`, type: 'grading', ownerId: submission.studentId,
       payload: { submissionId: submission.id, testCases } });
   }
-  for await (const doubt of Doubt.find({ aiDraftStatus: 'pending' }).cursor()) {
+  // Doubts waiting for triage: a recent one gets its triage job back if the process died
+  // before queuing it. One stuck past TRIAGE_STUCK_MINUTES fails open to the teachers.
+  const stuckBefore = new Date(Date.now() - aiLimits().triage.stuckMinutes * 60 * 1000);
+  for await (const doubt of Doubt.find({ status: 'pending_triage' }).cursor()) {
+    if (doubt.createdAt < stuckBefore) await failOpen(doubt.id, 'triage_stuck');
+    else await ensureWork({ key: `triage-${doubt.id}`, type: 'doubt-triage', ownerId: doubt.studentId, payload: { doubtId: doubt.id } });
+  }
+  // A removal whose notification was lost in a crash.
+  for await (const doubt of Doubt.find({ status: 'auto_rejected', removalNotifiedAt: { $exists: false } }).setOptions({ includeRemoved: true }).cursor()) {
+    await notifyRemoval(doubt);
+  }
+  for await (const doubt of Doubt.find({ aiDraftStatus: 'pending', status: { $ne: 'pending_triage' } }).cursor()) {
     await ensureWork({ key: `draft-${doubt.id}`, type: 'doubt-draft', ownerId: doubt.studentId, payload: { doubtId: doubt.id } });
   }
   for await (const submission of Submission.find({ status: 'graded', completionRecordedAt: { $exists: false } }).cursor()) {

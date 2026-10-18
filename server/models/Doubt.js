@@ -34,6 +34,8 @@ const doubtSchema = new mongoose.Schema(
     status: { type: String, enum: DOUBT_STATUS },
     triage: { type: triageSchema, default: undefined },
     appeal: { type: new mongoose.Schema({ requestedAt: Date }, { _id: false }), default: undefined },
+    // Set once the student has been told their doubt was removed (recovery re-sends it if missing).
+    removalNotifiedAt: Date,
     aiDraftError: String,
     // Tracks the outcome of the AI draft generation for this doubt.
     aiDraftStatus: {

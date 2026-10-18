@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-export const WORK_TYPES = ['grading', 'doubt-draft', 'feedback', 'completion', 'notification', 'problem-import', 'problem-export', 'report-export'];
+export const WORK_TYPES = ['grading', 'doubt-triage', 'doubt-draft', 'feedback', 'completion', 'notification', 'problem-import', 'problem-export', 'report-export'];
 const schema = new mongoose.Schema({
   key: { type: String, required: true, unique: true },
   type: { type: String, enum: WORK_TYPES, required: true },

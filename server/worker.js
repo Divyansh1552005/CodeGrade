@@ -82,7 +82,7 @@ async function main() {
   await dispatch();
   timer = setInterval(dispatch, 2000);
   await Promise.all(workers.map((worker) => worker.waitUntilReady()));
-  console.log('Workers ready: grading, drafts, feedback, completion, notifications, bulk jobs, recovery');
+  console.log('Workers ready: grading, doubt triage, drafts, feedback, completion, notifications, bulk jobs, recovery');
 }
 main().catch((err) => {
   console.error('Failed to start workers:', err);
