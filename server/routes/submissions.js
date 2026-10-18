@@ -3,6 +3,7 @@ import Submission from '../models/Submission.js';
 import Problem from '../models/Problem.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roleGuard.js';
+import { viewerKind } from '../utils/roles.js';
 import { validate } from '../middleware/validate.js';
 import { httpError } from '../middleware/errorHandler.js';
 import {
@@ -106,7 +107,7 @@ router.get('/:id', requireAuth, async (req, res, next) => {
     if (!submission) throw httpError(404, 'Submission not found');
     // Students can only see their own.
     if (
-      req.user.role !== 'teacher' &&
+      viewerKind(req.user) !== 'teacher' &&
       submission.studentId.toString() !== req.user._id.toString()
     ) {
       throw httpError(403, 'Forbidden');

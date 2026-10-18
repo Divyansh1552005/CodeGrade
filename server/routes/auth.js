@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import User from '../models/User.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAnyAuth } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { httpError } from '../middleware/errorHandler.js';
 import {
@@ -40,6 +40,12 @@ router.get('/config', (_req, res) => {
   res.set('Cache-Control', 'public, max-age=60');
   res.json(authConfig());
 });
+
+// Records the login time, at most once an hour, so a login costs a write only now and then.
+const touchLastLogin = (userId) => User.updateOne(
+  { _id: userId, $or: [{ lastLoginAt: { $exists: false } }, { lastLoginAt: { $lt: new Date(Date.now() - 3600 * 1000) } }] },
+  { $set: { lastLoginAt: new Date() } },
+);
 
 // Issue a fresh verification token (older ones stop working) and queue the email.
 async function sendVerification(user, { resubmitted = false, ignoreCooldown = false } = {}) {
@@ -116,10 +122,13 @@ router.post('/login', ...authLimits('login'), validate(loginSchema), async (req,
     if (!user || !(await user.comparePassword(password))) {
       throw httpError(401, 'Invalid credentials');
     }
+    // A suspended account looks exactly like a wrong password.
+    if (user.suspendedAt) throw httpError(401, 'Invalid credentials');
     // Only after the password is right, so the code cannot be used to probe which emails are registered.
     if (features.emailVerification() && !isVerified(user)) {
       return res.status(403).json({ error: 'Verify your email address before logging in.', code: 'EMAIL_NOT_VERIFIED' });
     }
+    await touchLastLogin(user._id);
     const { accessToken, refreshToken } = await issueTokenPair(user);
     setRefreshCookie(res, refreshToken);
     return res.json({ user: user.toJSON(), accessToken });
@@ -210,7 +219,7 @@ router.post('/logout', async (req, res, next) => {
 });
 
 // GET /auth/me
-router.get('/me', requireAuth, (req, res) => {
+router.get('/me', requireAnyAuth, (req, res) => {
   res.json({ user: req.user.toJSON() });
 });
 

@@ -1,3 +1,4 @@
+import { viewerKind } from '../utils/roles.js';
 import Submission from '../models/Submission.js';
 import Problem from '../models/Problem.js';
 import { encodeCursor, cursorFilter } from '../utils/pagination.js';
@@ -14,7 +15,7 @@ const LIST_FIELDS = '_id studentId problemId language status passCount totalCoun
  * student's attempts on that one problem), because the workspace tab shows how many attempts exist.
  */
 export async function listSubmissions({ viewer, problemId, limit, cursor }) {
-  const teacher = viewer.role === 'teacher';
+  const teacher = viewerKind(viewer) === 'teacher';
   const scope = teacher ? {} : { studentId: viewer._id };
   if (problemId) scope.problemId = problemId;
 

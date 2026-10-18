@@ -20,7 +20,7 @@ function unauthorized(message) {
 
 /** Short-lived access JWT used on every authenticated request (Bearer). */
 export function signAccessToken(user) {
-  return jwt.sign({ sub: user._id.toString(), role: user.role, tv: user.tokenVersion ?? 0 }, ACCESS_SECRET(), {
+  return jwt.sign({ sub: user._id.toString(), tv: user.tokenVersion ?? 0 }, ACCESS_SECRET(), {
     expiresIn: ACCESS_EXPIRY(),
   });
 }
@@ -90,6 +90,7 @@ export async function rotateRefreshToken(rawToken, userLookup) {
 
   const user = await userLookup(record.userId);
   if (!user) throw unauthorized('User no longer exists');
+  if (user.suspendedAt) throw unauthorized('Account suspended');
   // A password reset raised the user's version after this token was issued.
   if ((payload.tv ?? 0) !== (user.tokenVersion ?? 0)) throw unauthorized('Session ended; log in again');
 

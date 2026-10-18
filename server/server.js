@@ -13,6 +13,7 @@ import Answer from './models/Answer.js';
 import Problem from './models/Problem.js';
 import Submission from './models/Submission.js';
 import Doubt from './models/Doubt.js';
+import User from './models/User.js';
 import { connectDB } from './config/db.js';
 import { validateMailConfig } from './config/mail.js';
 
@@ -27,7 +28,7 @@ const PORT = process.env.PORT || 5000;
 async function main() {
   validateMailConfig(); // fail fast, before connecting, when an email flag is on and the config is wrong
   await connectDB();
-  await Promise.all([WorkItem.init(), Answer.init(), Problem.init(), Submission.init(), Doubt.init(), StudentStats.init(), Notification.init(), UserStats.init(), Badge.init(), UserBadge.init(), GamificationEvent.init()]);
+  await Promise.all([User.init(), WorkItem.init(), Answer.init(), Problem.init(), Submission.init(), Doubt.init(), StudentStats.init(), Notification.init(), UserStats.init(), Badge.init(), UserBadge.init(), GamificationEvent.init()]);
   const app = createApp();
   app.listen(PORT, () => {
     console.log(`API listening on http://localhost:${PORT}`);

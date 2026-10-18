@@ -1,3 +1,4 @@
+import { viewerKind } from '../utils/roles.js';
 import Doubt, { REJECTED, PENDING_TRIAGE } from '../models/Doubt.js';
 import Answer from '../models/Answer.js';
 import Problem from '../models/Problem.js';
@@ -26,7 +27,7 @@ export function visibleFor(viewer) {
 /** What a viewer may see of a doubt. Triage internals and appeal data are teacher-only. */
 export function presentDoubt(doubt, viewer) {
   const out = typeof doubt.toObject === 'function' ? doubt.toObject() : { ...doubt };
-  if (viewer.role === 'teacher') {
+  if (viewerKind(viewer) === 'teacher') {
     out.appealed = out.status === 'appealed';
     if (out.triage) out.triage = { lowConfidence: Boolean(out.triage.lowConfidence) };
     delete out.appeal;

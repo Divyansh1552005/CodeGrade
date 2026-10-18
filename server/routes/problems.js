@@ -3,6 +3,7 @@ import Problem from '../models/Problem.js';
 import Submission from '../models/Submission.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roleGuard.js';
+import { viewerKind } from '../utils/roles.js';
 import { validate } from '../middleware/validate.js';
 import { httpError } from '../middleware/errorHandler.js';
 import { TOPICS } from '../constants/topics.js';
@@ -91,7 +92,7 @@ router.get('/', requireAuth, async (req, res, next) => {
 
     for (const p of problems) p.number = numberOf.get(String(p._id));
 
-    if (req.user.role === 'student') {
+    if (viewerKind(req.user) === 'student') {
       const graded = await Submission.find({
         studentId: req.user._id,
         status: 'graded',
