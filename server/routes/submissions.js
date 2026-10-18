@@ -12,7 +12,9 @@ import {
 } from '../middleware/rateLimit.js';
 import { enqueueSubmission } from '../services/submissionQueue.js';
 import { assertRunnable } from '../services/judge0Client.js';
-import { createSubmissionSchema } from '../validation/schemas.js';
+import { createSubmissionSchema, pageQuerySchema, objectId } from '../validation/schemas.js';
+import { parseCursor } from '../utils/pagination.js';
+import { listSubmissions } from '../services/submissionList.js';
 
 const router = Router();
 
@@ -81,16 +83,14 @@ router.post(
   }
 );
 
-// GET /submissions[?problemId=]  — own submissions (students) or all (teachers),
-// optionally filtered to a single problem.
-router.get('/', requireAuth, async (req, res, next) => {
+// GET /submissions[?problemId=][&limit=10&cursor=...]  — own submissions (students) or all (teachers),
+// optionally for one problem. Always paged (default 10, at most 50) with light rows: no code, test
+// results or AI feedback. A bad cursor or limit is a 400. Open GET /submissions/:id for the full record.
+const listQuery = pageQuerySchema.extend({ problemId: objectId.optional() });
+router.get('/', requireAuth, validate(listQuery, 'query'), async (req, res, next) => {
   try {
-    const filter = req.user.role === 'teacher' ? {} : { studentId: req.user._id };
-    if (req.query.problemId) filter.problemId = req.query.problemId;
-    const submissions = await Submission.find(filter)
-      .sort({ createdAt: -1 })
-      .populate('problemId', 'title');
-    res.json({ submissions });
+    const { problemId, limit } = req.query;
+    res.json(await listSubmissions({ viewer: req.user, problemId, limit, cursor: parseCursor(req.query.cursor) }));
   } catch (err) {
     next(err);
   }

@@ -9,6 +9,8 @@ import Badge from './models/Badge.js';
 import UserBadge from './models/UserBadge.js';
 import GamificationEvent from './models/GamificationEvent.js';
 import Notification from './models/Notification.js';
+import Submission from './models/Submission.js';
+import Doubt from './models/Doubt.js';
 import { connectDB } from './config/db.js';
 import { QUEUE_NAMES, createWorkerConnection, createQueues, queueOptions, reportQueueError } from './services/queueRuntime.js';
 import { processWork, failWork } from './services/workProcessor.js';
@@ -22,7 +24,7 @@ async function main() {
   // Build new unique indexes before workers accept replayable imports/drafts.
   const { default: Answer } = await import('./models/Answer.js');
   const { default: Problem } = await import('./models/Problem.js');
-  await Promise.all([WorkItem.init(), Answer.init(), Problem.init(), StudentStats.init(), Notification.init(), UserStats.init(), Badge.init(), UserBadge.init(), GamificationEvent.init()]);
+  await Promise.all([WorkItem.init(), Answer.init(), Problem.init(), Submission.init(), Doubt.init(), StudentStats.init(), Notification.init(), UserStats.init(), Badge.init(), UserBadge.init(), GamificationEvent.init()]);
   const connection = createWorkerConnection();
   const queues = createQueues(connection);
   const workers = [...new Set(Object.values(QUEUE_NAMES))].map((name) => {

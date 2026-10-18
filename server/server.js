@@ -11,6 +11,8 @@ import GamificationEvent from './models/GamificationEvent.js';
 import Notification from './models/Notification.js';
 import Answer from './models/Answer.js';
 import Problem from './models/Problem.js';
+import Submission from './models/Submission.js';
+import Doubt from './models/Doubt.js';
 import { connectDB } from './config/db.js';
 
 // Load server/.env regardless of where `node` is invoked from (also covers
@@ -23,7 +25,7 @@ const PORT = process.env.PORT || 5000;
 
 async function main() {
   await connectDB();
-  await Promise.all([WorkItem.init(), Answer.init(), Problem.init(), StudentStats.init(), Notification.init(), UserStats.init(), Badge.init(), UserBadge.init(), GamificationEvent.init()]);
+  await Promise.all([WorkItem.init(), Answer.init(), Problem.init(), Submission.init(), Doubt.init(), StudentStats.init(), Notification.init(), UserStats.init(), Badge.init(), UserBadge.init(), GamificationEvent.init()]);
   const app = createApp();
   app.listen(PORT, () => {
     console.log(`API listening on http://localhost:${PORT}`);

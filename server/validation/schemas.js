@@ -101,3 +101,12 @@ export const loginSchema = z.object({
   email: z.string().trim().email('must be a valid email'),
   password: nonEmpty('password'),
 });
+
+// Shared paging query: `limit` defaults to 10 and is clamped to 50 on the server; anything that is
+// not a whole number of at least 1 is a 400. `cursor` is opaque and is checked by parseCursor.
+export const DEFAULT_PAGE_LIMIT = 10;
+export const MAX_PAGE_LIMIT = 50;
+export const pageQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).optional().transform((n) => Math.min(n ?? DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT)),
+  cursor: z.string().max(300).optional(),
+});

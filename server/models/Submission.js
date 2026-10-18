@@ -59,6 +59,12 @@ const submissionSchema = new mongoose.Schema(
 // Speeds up "this student's submissions for this problem" lookups (solved
 // badges, submission history) — the dominant query shape on this collection.
 submissionSchema.index({ studentId: 1, problemId: 1 });
+// Paged lists, newest first (keyset on createdAt, _id): a student's own submissions, one student's
+// submissions for one problem, and the teacher views (all submissions, or one problem's).
+submissionSchema.index({ studentId: 1, createdAt: -1, _id: -1 });
+submissionSchema.index({ studentId: 1, problemId: 1, createdAt: -1, _id: -1 });
+submissionSchema.index({ createdAt: -1, _id: -1 });
+submissionSchema.index({ problemId: 1, createdAt: -1, _id: -1 });
 submissionSchema.index({ status: 1, completionRecordedAt: 1 });
 
 export default mongoose.model('Submission', submissionSchema);
