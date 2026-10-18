@@ -12,7 +12,7 @@ const isTest = process.env.NODE_ENV === 'test';
 // reads process.env.REDIS_URL at module-load time would see it unset. Every
 // other env-dependent module in this codebase (e.g. config/db.js) reads env
 // lazily inside a function for the same reason — this matches that.
-function makeLimiter({ keyPrefix, points, duration }) {
+export function makeLimiter({ keyPrefix, points, duration }) {
   let real;
   function ensure() {
     if (real) return real;
@@ -81,6 +81,26 @@ export function rateLimit(limiter, message) {
       if (rejection instanceof Error) {
         return next(rejection);
       }
+      const retryAfterSec = Math.max(1, Math.ceil((rejection.msBeforeNext || 1000) / 1000));
+      res.set('Retry-After', String(retryAfterSec));
+      return res.status(429).json({ error: message(formatRetry(retryAfterSec)) });
+    }
+  };
+}
+
+/**
+ * Like rateLimit(), but for requests with no signed-in user (the auth routes): `keyOf(req)` picks the
+ * key, for example the client IP or a hash of the email in the body. A null key skips the check.
+ */
+export function rateLimitBy(limiter, keyOf, message) {
+  return async function rateLimitByMiddleware(req, res, next) {
+    const key = keyOf(req);
+    if (!key) return next();
+    try {
+      await limiter.consume(key);
+      return next();
+    } catch (rejection) {
+      if (rejection instanceof Error) return next(rejection);
       const retryAfterSec = Math.max(1, Math.ceil((rejection.msBeforeNext || 1000) / 1000));
       res.set('Retry-After', String(retryAfterSec));
       return res.status(429).json({ error: message(formatRetry(retryAfterSec)) });

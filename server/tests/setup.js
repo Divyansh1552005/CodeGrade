@@ -12,6 +12,9 @@ process.env.GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 process.env.JUDGE0_API_URL = process.env.JUDGE0_API_URL || 'https://judge0-ce.p.rapidapi.com';
 process.env.JUDGE0_API_KEY = process.env.JUDGE0_API_KEY || 'test-judge0-key';
 
+// Auth responses are padded to a fixed minimum time outside the tests; a test that checks it sets its own value.
+process.env.AUTH_RESPONSE_FLOOR_MS = process.env.AUTH_RESPONSE_FLOOR_MS || '0';
+
 jest.setTimeout(30000);
 
 let mongo;

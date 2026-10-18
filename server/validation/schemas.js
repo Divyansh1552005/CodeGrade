@@ -104,6 +104,11 @@ export const registerSchema = z.object({
   role: z.enum(['student', 'teacher']),
 });
 
+const emailField = z.string().trim().email('must be a valid email');
+export const emailOnlySchema = z.object({ email: emailField });
+export const tokenSchema = z.object({ token: z.string({ required_error: 'token is required' }).min(1, 'token is required').max(200, 'token is not valid') });
+export const resetPasswordSchema = tokenSchema.extend({ password: passwordSchema });
+
 export const loginSchema = z.object({
   email: z.string().trim().email('must be a valid email'),
   password: nonEmpty('password'),

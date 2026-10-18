@@ -63,11 +63,13 @@ export async function isTokenActive(userId, type, tokenId) {
  * Per-account send limits, read from the token rows (so they hold even when Redis is down): a new token
  * is allowed once the cooldown has passed and fewer than the hourly cap were issued in the last hour.
  */
-export async function mayIssue(userId, type) {
+export async function mayIssue(userId, type, { ignoreCooldown = false } = {}) {
   const { resendCooldownMs, resendHourlyCap } = mailConfig();
   const now = Date.now();
-  const latest = await EmailToken.findOne({ userId, type }).sort({ createdAt: -1 });
-  if (latest && now - latest.createdAt.getTime() < resendCooldownMs) return false;
+  if (!ignoreCooldown) {
+    const latest = await EmailToken.findOne({ userId, type }).sort({ createdAt: -1 });
+    if (latest && now - latest.createdAt.getTime() < resendCooldownMs) return false;
+  }
   const lastHour = await EmailToken.countDocuments({ userId, type, createdAt: { $gt: new Date(now - 3600 * 1000) } });
   return lastHour < resendHourlyCap;
 }
