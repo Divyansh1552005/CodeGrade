@@ -27,6 +27,10 @@ export async function requireAuth(req, res, next) {
     if (!user) {
       return res.status(401).json({ error: 'User no longer exists' });
     }
+    // Tokens issued before a password reset carry an older version. Missing counts as 0.
+    if ((payload.tv ?? 0) !== (user.tokenVersion ?? 0)) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
   } catch (err) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }

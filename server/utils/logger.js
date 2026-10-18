@@ -1,12 +1,14 @@
 import { randomUUID } from 'node:crypto';
+import { maskEmail } from './maskEmail.js';
 
 // Minimal structured logger: one JSON object per line. Free text written by users
 // (code, doubts, chat messages, model replies) must never reach the logs, so those
 // keys are replaced with their length and any long string is cut down.
 const SENSITIVE_KEYS = new Set([
   'code', 'body', 'message', 'content', 'text', 'prompt', 'reply', 'messages', 'history',
-  'doubt', 'snippet', 'password', 'token', 'authorization', 'cookie', 'apikey',
+  'doubt', 'snippet', 'password', 'token', 'authorization', 'cookie', 'apikey', 'link', 'url', 'html',
 ]);
+const EMAIL_KEYS = new Set(['email', 'to', 'recipient']);
 const MAX_STRING = 160;
 const MAX_DEPTH = 3;
 
@@ -21,6 +23,7 @@ export function redact(value, depth = 0, key = '') {
     const size = sizeOf(value);
     return size === undefined ? '[redacted]' : `[redacted length=${size}]`;
   }
+  if (EMAIL_KEYS.has(String(key).toLowerCase()) && typeof value === 'string') return maskEmail(value);
   if (typeof value === 'string') {
     return value.length > MAX_STRING ? `[truncated length=${value.length}]` : value;
   }

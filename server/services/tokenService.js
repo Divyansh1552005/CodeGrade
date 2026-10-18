@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import RefreshToken from '../models/RefreshToken.js';
+import User from '../models/User.js';
 
 const ACCESS_SECRET = () => process.env.JWT_ACCESS_SECRET;
 const REFRESH_SECRET = () => process.env.JWT_REFRESH_SECRET;
@@ -19,7 +20,7 @@ function unauthorized(message) {
 
 /** Short-lived access JWT used on every authenticated request (Bearer). */
 export function signAccessToken(user) {
-  return jwt.sign({ sub: user._id.toString(), role: user.role }, ACCESS_SECRET(), {
+  return jwt.sign({ sub: user._id.toString(), role: user.role, tv: user.tokenVersion ?? 0 }, ACCESS_SECRET(), {
     expiresIn: ACCESS_EXPIRY(),
   });
 }
@@ -29,9 +30,9 @@ export function signAccessToken(user) {
  * unique jti. We persist only the jti's hash so the token is revocable (for
  * rotation, logout, and reuse detection). Returns the signed JWT string.
  */
-export async function issueRefreshToken(userId) {
+export async function issueRefreshToken(userId, tokenVersion = 0) {
   const jti = crypto.randomBytes(24).toString('hex');
-  const token = jwt.sign({ sub: userId.toString(), jti }, REFRESH_SECRET(), {
+  const token = jwt.sign({ sub: userId.toString(), jti, tv: tokenVersion }, REFRESH_SECRET(), {
     expiresIn: REFRESH_EXPIRY(),
   });
   const { exp } = jwt.decode(token);
@@ -46,7 +47,7 @@ export async function issueRefreshToken(userId) {
 /** Convenience: mint both tokens for a user (login / register). */
 export async function issueTokenPair(user) {
   const accessToken = signAccessToken(user);
-  const refreshToken = await issueRefreshToken(user._id);
+  const refreshToken = await issueRefreshToken(user._id, user.tokenVersion ?? 0);
   return { accessToken, refreshToken };
 }
 
@@ -89,6 +90,8 @@ export async function rotateRefreshToken(rawToken, userLookup) {
 
   const user = await userLookup(record.userId);
   if (!user) throw unauthorized('User no longer exists');
+  // A password reset raised the user's version after this token was issued.
+  if ((payload.tv ?? 0) !== (user.tokenVersion ?? 0)) throw unauthorized('Session ended; log in again');
 
   return issueTokenPair(user);
 }
@@ -106,4 +109,10 @@ export async function revokeRefreshToken(rawToken) {
     { tokenHash: hash(payload.jti) },
     { $set: { revokedAt: new Date() } }
   );
+}
+
+/** Revoke every refresh token of a user and make their access tokens invalid (password reset). */
+export async function revokeAllSessions(userId) {
+  await User.updateOne({ _id: userId }, { $inc: { tokenVersion: 1 } });
+  await RefreshToken.updateMany({ userId, revokedAt: { $exists: false } }, { $set: { revokedAt: new Date() } });
 }

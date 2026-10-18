@@ -6,8 +6,15 @@ const enabled = (name) => TRUTHY.has(String(process.env[name] || '').trim().toLo
 export const features = {
   aiTriage: () => enabled('FEATURE_AI_TRIAGE'),
   hintChat: () => enabled('FEATURE_HINT_CHAT'),
+  emailVerification: () => enabled('FEATURE_EMAIL_VERIFICATION'),
+  passwordReset: () => enabled('FEATURE_PASSWORD_RESET'),
 };
 
 export function featureSnapshot() {
   return { aiTriage: features.aiTriage(), hintChat: features.hintChat() };
+}
+
+/** The only flags the public, unauthenticated GET /auth/config exposes. */
+export function authConfig() {
+  return { emailVerification: features.emailVerification(), passwordReset: features.passwordReset() };
 }

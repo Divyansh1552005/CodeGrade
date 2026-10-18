@@ -1,7 +1,7 @@
 {
   "name": "code-grading-portal-server",
   "version": "1.0.0",
-  "description": "AI-Powered Code Grading & Doubt Resolution Portal \u2014 backend",
+  "description": "AI-Powered Code Grading & Doubt Resolution Portal — backend",
   "main": "server.js",
   "type": "module",
   "engines": {
@@ -38,6 +38,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.9.5",
     "rate-limiter-flexible": "^11.2.0",
+    "resend": "^6.34.1",
     "zod": "^3.24.1"
   },
   "devDependencies": {

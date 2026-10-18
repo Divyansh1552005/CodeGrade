@@ -90,10 +90,17 @@ export const reviewAnswerSchema = z.object({
   reviewNotes: z.string().optional(),
 });
 
+// bcrypt only reads the first 72 bytes, so the limit is in bytes: a multi-byte character counts as several.
+export const PASSWORD_MAX_BYTES = 72;
+export const passwordSchema = z
+  .string({ required_error: 'password is required' })
+  .min(6, 'password must be at least 6 characters')
+  .refine((value) => Buffer.byteLength(value, 'utf8') <= PASSWORD_MAX_BYTES, `password must be at most ${PASSWORD_MAX_BYTES} bytes (characters such as accents and emoji count as more than one)`);
+
 export const registerSchema = z.object({
   name: nonEmpty('name'),
   email: z.string().trim().email('must be a valid email'),
-  password: z.string().min(6, 'password must be at least 6 characters'),
+  password: passwordSchema,
   role: z.enum(['student', 'teacher']),
 });
 

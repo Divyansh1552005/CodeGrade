@@ -12,6 +12,7 @@ import Notification from './models/Notification.js';
 import Submission from './models/Submission.js';
 import Doubt from './models/Doubt.js';
 import { connectDB } from './config/db.js';
+import { validateMailConfig } from './config/mail.js';
 import { QUEUE_NAMES, createWorkerConnection, createQueues, queueOptions, reportQueueError } from './services/queueRuntime.js';
 import { processWork, failWork } from './services/workProcessor.js';
 import { recalculateDifficulties } from './services/difficultyService.js';
@@ -20,6 +21,7 @@ import { dispatchPendingWork, reconcileWork } from './services/recoveryService.j
 dotenv.config({ path: fileURLToPath(new URL('.env', import.meta.url)) });
 
 async function main() {
+  validateMailConfig(); // fail fast, before connecting, when an email flag is on and the config is wrong
   await connectDB();
   // Build new unique indexes before workers accept replayable imports/drafts.
   const { default: Answer } = await import('./models/Answer.js');
