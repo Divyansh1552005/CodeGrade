@@ -12,6 +12,7 @@ import activityRoutes from './routes/activity.js';
 import jobRoutes from './routes/jobs.js';
 import featureRoutes from './routes/features.js';
 import notificationRoutes from './routes/notifications.js';
+import hintRoutes from './routes/hints.js';
 import { requestId } from './middleware/requestId.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
@@ -70,6 +71,7 @@ export function createApp() {
   app.get('/health', (_req, res) => res.json({ ok: true }));
 
   app.use('/auth', authRoutes);
+  app.use('/problems/:problemId/hints', hintRoutes);
   app.use('/problems', problemRoutes);
   app.use('/submissions', submissionRoutes);
   app.use('/doubts', doubtRoutes);
