@@ -1,7 +1,7 @@
 export { Icon } from './Icon.jsx';
 export { Spinner } from './Spinner.jsx';
 export { Button } from './Button.jsx';
-export { Field, Input, Textarea, Select, Checkbox } from './Field.jsx';
+export { Field, Input, PasswordInput, Textarea, Select, Checkbox } from './Field.jsx';
 export { Badge, DifficultyBadge, StatusBadge } from './Badge.jsx';
 export { Panel, PanelHeader, PanelBody } from './Panel.jsx';
 export { Table, THead, TBody, Tr, Th, Td } from './Table.jsx';

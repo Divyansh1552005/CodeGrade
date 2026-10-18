@@ -36,8 +36,18 @@ describe('Login page', () => {
   it('renders the email and password fields and submit button', () => {
     renderLogin();
     expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^password$/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /log in/i })).toBeInTheDocument();
+  });
+
+  it('shows and hides the password with the eye button', () => {
+    renderLogin();
+    const field = screen.getByLabelText(/^password$/i);
+    expect(field).toHaveAttribute('type', 'password');
+    fireEvent.click(screen.getByRole('button', { name: 'Show password' }));
+    expect(field).toHaveAttribute('type', 'text');
+    fireEvent.click(screen.getByRole('button', { name: 'Hide password' }));
+    expect(field).toHaveAttribute('type', 'password');
   });
 
   it('submits credentials and navigates home on success (happy path)', async () => {
@@ -45,7 +55,7 @@ describe('Login page', () => {
     fireEvent.change(screen.getByLabelText(/email/i), {
       target: { value: 'a@b.com' },
     });
-    fireEvent.change(screen.getByLabelText(/password/i), {
+    fireEvent.change(screen.getByLabelText(/^password$/i), {
       target: { value: 'password123' },
     });
     fireEvent.click(screen.getByRole('button', { name: /log in/i }));

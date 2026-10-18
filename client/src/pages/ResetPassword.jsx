@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import AuthCard from '../components/AuthCard.jsx';
-import { Button, ErrorState, Field, Input } from '../components/ui/index.js';
+import { Button, ErrorState, Field, PasswordInput } from '../components/ui/index.js';
 import { useTokenFromUrl } from '../lib/useTokenFromUrl.js';
 import { PASSWORD_HINT, passwordProblem } from '../lib/password.js';
 
@@ -56,10 +56,10 @@ export default function ResetPassword() {
     <AuthCard title="Choose a new password" footer={<Link className="rounded-sm font-medium text-accent-text hover:underline" to="/login">Back to log in</Link>}>
       <form className="space-y-4" onSubmit={onSubmit} noValidate>
         <Field label="New password" hint={PASSWORD_HINT} error={fieldError.password}>
-          <Input value={password} onChange={(e) => setPassword(e.target.value)} type="password" autoComplete="new-password" required />
+          <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" required />
         </Field>
         <Field label="Confirm new password" error={fieldError.confirm}>
-          <Input value={confirm} onChange={(e) => setConfirm(e.target.value)} type="password" autoComplete="new-password" required />
+          <PasswordInput value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" required />
         </Field>
         <Button type="submit" variant="primary" size="lg" className="w-full" loading={busy}>Change password</Button>
         {error && <ErrorState message={error} />}

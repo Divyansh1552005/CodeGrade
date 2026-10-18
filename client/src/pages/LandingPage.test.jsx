@@ -23,3 +23,11 @@ it('sends signed-in visitors to the dashboard', () => {
   renderHome();
   expect(screen.getByText('Dashboard page')).toBeInTheDocument();
 });
+it('lets a visitor run the sample and switch language', async () => {
+  const { fireEvent, waitFor } = await import('@testing-library/react');
+  renderHome();
+  fireEvent.mouseDown(screen.getByRole('tab', { name: 'Java' }), { button: 0 });
+  await waitFor(() => expect(screen.getByRole('tab', { name: 'Java' })).toHaveAttribute('aria-selected', 'true'));
+  fireEvent.click(screen.getByRole('button', { name: 'Run code' }));
+  expect(await screen.findByText('Accepted', {}, { timeout: 3000 })).toBeInTheDocument();
+});

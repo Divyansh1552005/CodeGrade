@@ -1,5 +1,5 @@
-import { Children, cloneElement, useId } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { Children, cloneElement, useId, useState } from 'react';
+import { ChevronDown, Eye, EyeOff } from 'lucide-react';
 import { cn } from '../../lib/cn.js';
 import { Icon } from './Icon.jsx';
 
@@ -8,6 +8,25 @@ const control =
 
 export function Input({ className, ...props }) {
   return <input className={cn(control, 'h-9', className)} {...props} />;
+}
+
+/** Password input with a show/hide toggle. Drop-in for <Input type="password">; Field wires id and aria props onto it. */
+export function PasswordInput({ className, ...props }) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="relative">
+      <input type={visible ? 'text' : 'password'} className={cn(control, 'h-9 pr-10', className)} {...props} />
+      <button
+        type="button"
+        onClick={() => setVisible((v) => !v)}
+        aria-label={visible ? 'Hide password' : 'Show password'}
+        aria-pressed={visible}
+        className="absolute right-1 top-1/2 inline-flex size-7 -translate-y-1/2 items-center justify-center rounded-sm text-fg-muted transition-colors hover:text-fg"
+      >
+        <Icon as={visible ? EyeOff : Eye} />
+      </button>
+    </div>
+  );
 }
 
 export function Textarea({ className, ...props }) {

@@ -1,10 +1,118 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { Check, Code2, FlaskConical, MessagesSquare, TrendingUp } from 'lucide-react';
+import { Check, Code2, FlaskConical, MessagesSquare, Play, TrendingUp } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext.jsx';
-import { Badge, Button, Icon, PageSkeleton } from '../components/ui/index.js';
+import { Button, Icon, PageSkeleton, StatusBadge, Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/index.js';
 
-const LANGUAGES = ['Python', 'JavaScript', 'Java', 'C++'];
+// A canned example, not a real run: it shows what a submission looks like before the visitor signs up.
+const SAMPLES = [
+  {
+    id: 'python', label: 'Python',
+    code: `def two_sum(nums, target):
+    seen = {}
+    for i, n in enumerate(nums):
+        if target - n in seen:
+            return [seen[target - n], i]
+        seen[n] = i`,
+  },
+  {
+    id: 'javascript', label: 'JavaScript',
+    code: `function twoSum(nums, target) {
+  const seen = new Map();
+  for (let i = 0; i < nums.length; i++) {
+    if (seen.has(target - nums[i])) return [seen.get(target - nums[i]), i];
+    seen.set(nums[i], i);
+  }
+}`,
+  },
+  {
+    id: 'java', label: 'Java',
+    code: `int[] twoSum(int[] nums, int target) {
+    Map<Integer, Integer> seen = new HashMap<>();
+    for (int i = 0; i < nums.length; i++) {
+        if (seen.containsKey(target - nums[i])) return new int[]{seen.get(target - nums[i]), i};
+        seen.put(nums[i], i);
+    }
+    return new int[0];
+}`,
+  },
+  {
+    id: 'cpp', label: 'C++',
+    code: `vector<int> twoSum(vector<int>& nums, int target) {
+    unordered_map<int, int> seen;
+    for (int i = 0; i < nums.size(); i++) {
+        if (seen.count(target - nums[i])) return {seen[target - nums[i]], i};
+        seen[nums[i]] = i;
+    }
+    return {};
+}`,
+  },
+];
+
+const CASES = [
+  { input: 'nums = [2, 7, 11, 15], target = 9', expected: '[0, 1]' },
+  { input: 'nums = [3, 2, 4], target = 6', expected: '[1, 2]' },
+  { input: 'nums = [3, 3], target = 6', expected: '[0, 1]' },
+];
+
+// Tries the sample: Run code shows the queued, running and accepted states a real submission goes through.
+function Preview() {
+  const [language, setLanguage] = useState(SAMPLES[0].id);
+  const [phase, setPhase] = useState('idle'); // idle | running | done
+  const timer = useRef();
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  function run() {
+    clearTimeout(timer.current);
+    setPhase('running');
+    timer.current = setTimeout(() => setPhase('done'), 900);
+  }
+  function pick(next) {
+    clearTimeout(timer.current);
+    setLanguage(next);
+    setPhase('idle');
+  }
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-surface">
+      <Tabs value={language} onValueChange={pick}>
+        <div className="flex items-center justify-between gap-2 border-b border-border pr-2">
+          <TabsList className="border-b-0" aria-label="Language">
+            {SAMPLES.map(({ id, label }) => <TabsTrigger key={id} value={id}>{label}</TabsTrigger>)}
+          </TabsList>
+          <Button size="sm" variant="primary" onClick={run} loading={phase === 'running'}>
+            <Icon as={Play} />Run code
+          </Button>
+        </div>
+        {SAMPLES.map(({ id, code }) => (
+          <TabsContent key={id} value={id}>
+            <pre className="overflow-x-auto bg-subtle p-4 text-sm leading-5 text-fg"><code>{code}</code></pre>
+          </TabsContent>
+        ))}
+      </Tabs>
+      <div className="border-t border-border p-4" aria-live="polite">
+        {phase === 'idle' && <p className="text-sm text-fg-muted">Two Sum, sample problem. Press Run code to see how a result looks.</p>}
+        {phase === 'running' && <StatusBadge status="running" />}
+        {phase === 'done' && (
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <StatusBadge status="accepted" />
+              <span className="text-sm text-fg-muted">3 of 3 test cases passed. Example result.</span>
+            </div>
+            <ul className="divide-y divide-border rounded-sm border border-border text-sm">
+              {CASES.map(({ input, expected }) => (
+                <li key={input} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-3 py-2">
+                  <code className="text-fg">{input}</code>
+                  <span className="flex items-center gap-1.5 text-fg-muted"><Icon as={Check} className="text-success" />Output <code className="text-fg">{expected}</code></span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 const FEATURES = [
   {
@@ -63,26 +171,26 @@ export default function LandingPage() {
   if (isAuthed) return <Navigate to="/dashboard" replace />;
   return (
     <div className="space-y-12 pb-8 sm:space-y-16">
-      <section className="max-w-2xl pt-2 sm:pt-10">
-        <h1 className="text-xl font-semibold sm:text-2xl">Practice coding and get help when you are stuck</h1>
-        <p className="mt-3 text-md text-fg-muted">
-          CodeGrade grades your solutions automatically, explains what went wrong, and connects you with teachers who review every answer before you see it.
-        </p>
-        <div className="mt-6 flex flex-wrap items-center gap-2">
-          <Button variant="primary" size="lg" to="/register">Sign up</Button>
-          <Button size="lg" to="/login">Log in</Button>
+      <section className="grid items-center gap-8 pt-2 sm:pt-10 lg:grid-cols-2 lg:gap-12">
+        <div>
+          <h1 className="text-xl font-semibold sm:text-2xl">Practice coding and get help when you are stuck</h1>
+          <p className="mt-3 text-md text-fg-muted">
+            CodeGrade grades your solutions automatically, explains what went wrong, and connects you with teachers who review every answer before you see it.
+          </p>
+          <div className="mt-6 flex flex-wrap items-center gap-2">
+            <Button variant="primary" size="lg" to="/register">Sign up</Button>
+            <Button size="lg" to="/login">Log in</Button>
+          </div>
+          <p className="mt-6 text-sm text-fg-muted">Python, JavaScript, Java and C++. Try the example on this page.</p>
         </div>
-        <div className="mt-6 flex flex-wrap items-center gap-2 text-sm text-fg-muted">
-          <span>Languages</span>
-          {LANGUAGES.map((name) => <Badge key={name}>{name}</Badge>)}
-        </div>
+        <Preview />
       </section>
 
       <section aria-labelledby="features-heading" className="border-t border-border pt-10">
         <h2 id="features-heading" className="text-lg font-semibold">What you can do</h2>
         <div className="mt-6 grid gap-x-10 gap-y-8 sm:grid-cols-2">
           {FEATURES.map(({ icon, title, body }) => (
-            <div key={title}>
+            <div key={title} className="-mx-3 rounded-lg border border-transparent p-3 transition-colors hover:border-border hover:bg-surface">
               <h3 className="flex items-center gap-2 text-md font-semibold"><Icon as={icon} className="text-accent-text" />{title}</h3>
               <p className="mt-2 text-base text-fg-muted">{body}</p>
             </div>

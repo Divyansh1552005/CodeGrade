@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext.jsx';
 import AuthCard from '../components/AuthCard.jsx';
-import { Button, ErrorState, Field, Input } from '../components/ui/index.js';
+import { Button, ErrorState, Field, Input, PasswordInput } from '../components/ui/index.js';
 import { useCooldown } from '../lib/useCooldown.js';
 
 /**
@@ -59,7 +59,7 @@ export default function AdminLogin() {
           <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="username" required />
         </Field>
         <Field label="Password">
-          <Input value={password} onChange={(e) => setPassword(e.target.value)} type="password" autoComplete="current-password" required />
+          <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
         </Field>
         <Button type="submit" variant="primary" size="lg" className="w-full" loading={busy} disabled={wait.remaining > 0}>
           {wait.remaining > 0 ? `Try again in ${wait.remaining}s` : 'Log in'}

@@ -5,7 +5,7 @@ import { useAuth } from '../auth/AuthContext.jsx';
 import AuthCard from '../components/AuthCard.jsx';
 import ResendVerification from '../components/ResendVerification.jsx';
 import { homeFor } from '../components/ProtectedRoute.jsx';
-import { Button, ErrorState, Field, Input } from '../components/ui/index.js';
+import { Button, ErrorState, Field, Input, PasswordInput } from '../components/ui/index.js';
 
 export default function Login() {
   const { login, notice } = useAuth();
@@ -48,7 +48,7 @@ export default function Login() {
           <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" placeholder="you@example.com" required />
         </Field>
         <Field label="Password">
-          <Input value={password} onChange={(e) => setPassword(e.target.value)} type="password" autoComplete="current-password" required />
+          <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
         </Field>
         <p className="-mt-2 text-sm"><Link className="rounded-sm font-medium text-accent-text hover:underline" to="/forgot-password">Forgot password?</Link></p>
         <Button type="submit" variant="primary" size="lg" className="w-full" loading={busy}>Log in</Button>

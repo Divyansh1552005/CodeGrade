@@ -5,7 +5,7 @@ import { useAuth } from '../auth/AuthContext.jsx';
 import AuthCard from '../components/AuthCard.jsx';
 import CheckInbox from '../components/CheckInbox.jsx';
 import { PASSWORD_HINT } from '../lib/password.js';
-import { Button, ErrorState, Field, Input, Select, Textarea } from '../components/ui/index.js';
+import { Button, ErrorState, Field, Input, PasswordInput, Select, Textarea } from '../components/ui/index.js';
 import { homeFor } from '../components/ProtectedRoute.jsx';
 
 const ORGANIZATION_MAX = 120;
@@ -62,7 +62,7 @@ export default function Register() {
           <Input value={form.email} onChange={set('email')} type="email" autoComplete="email" placeholder="you@example.com" required />
         </Field>
         <Field label="Password" hint={PASSWORD_HINT}>
-          <Input value={form.password} onChange={set('password')} type="password" autoComplete="new-password" minLength={6} required />
+          <PasswordInput value={form.password} onChange={set('password')} autoComplete="new-password" minLength={6} required />
         </Field>
         <Field label="Account type" hint={teacher ? 'Teacher accounts need approval from an administrator before they can be used.' : undefined}>
           <Select value={form.accountType} onChange={set('accountType')}>
