@@ -35,6 +35,12 @@ export function usePaginatedQuery(baseUrl, itemsKey) {
         setError('');
       } catch (err) {
         if (id !== requestId.current) return;
+        if (err.response?.status === 400 && after) {
+          // The cursor was rejected (invalid or expired): start again from the first page.
+          setCursor(null);
+          load();
+          return;
+        }
         setError(err.response?.data?.error || 'Request failed');
       } finally {
         if (id !== requestId.current) return;

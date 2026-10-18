@@ -6,15 +6,6 @@ import { useAuth } from '../auth/AuthContext.jsx';
 import { doubtStatus } from '../lib/doubtStatus.js';
 import { Badge, Button, Checkbox, EmptyState, ErrorState, Icon, PageHeader, Select, TBody, Table, TableSkeleton, Td, Th, THead, Tr } from '../components/ui/index.js';
 
-// Plain-text excerpt of a markdown body, truncated for the list view.
-function excerpt(body, max = 100) {
-  const text = String(body || '')
-    .replace(/[#>*_`~\-]/g, ' ') // strip common markdown punctuation
-    .replace(/\s+/g, ' ')
-    .trim();
-  return text.length > max ? `${text.slice(0, max).trimEnd()}…` : text;
-}
-
 // The same names as the status badges. The server applies the filter, so it covers every page.
 const STATUS_OPTIONS = [
   ['', 'All statuses'],
@@ -95,7 +86,7 @@ const DoubtRow = memo(function DoubtRow({ doubt, role }) {
       <Td className="h-auto py-2">
         <Link to={`/doubts/${doubt._id}`} className="block max-w-36 rounded-sm sm:max-w-md lg:max-w-xl">
           <span className="block truncate font-medium hover:text-accent-text hover:underline">{doubt.title}</span>
-          <span className="block truncate text-sm text-fg-muted">{excerpt(doubt.body)}</span>
+          <span className="block truncate text-sm text-fg-muted">{doubt.preview}</span>
         </Link>
       </Td>
       <Td><Badge tone={status.tone}>{status.label}</Badge></Td>
