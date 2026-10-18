@@ -30,18 +30,18 @@ describe('validateMailConfig', () => {
     expect(() => validateMailConfig({})).not.toThrow();
   });
   it('lists every problem when a flag is on', () => {
-    withEnv({ EMAIL_TOKEN_SECRET: 'short', APP_BASE_URL: '', NODE_ENV: 'production', RESEND_API_KEY: '', MAIL_FROM: '' });
-    expect(() => validateMailConfig()).toThrow(/EMAIL_TOKEN_SECRET[\s\S]*APP_BASE_URL[\s\S]*RESEND_API_KEY[\s\S]*MAIL_FROM/);
+    withEnv({ EMAIL_TOKEN_SECRET: 'short', APP_BASE_URL: '', NODE_ENV: 'production', BREVO_API_KEY: '', MAIL_FROM: '' });
+    expect(() => validateMailConfig()).toThrow(/EMAIL_TOKEN_SECRET[\s\S]*APP_BASE_URL[\s\S]*BREVO_API_KEY[\s\S]*MAIL_FROM/);
   });
   it('accepts dev log-only mode without a key or sender', () => {
-    withEnv({ EMAIL_TOKEN_SECRET: SECRET, APP_BASE_URL: 'http://localhost:5173', NODE_ENV: 'development', RESEND_API_KEY: '', MAIL_FROM: '' });
+    withEnv({ EMAIL_TOKEN_SECRET: SECRET, APP_BASE_URL: 'http://localhost:5173', NODE_ENV: 'development', BREVO_API_KEY: '', MAIL_FROM: '' });
     expect(() => validateMailConfig()).not.toThrow();
     expect(devLogOnly()).toBe(true);
   });
   it('requires https in production and the sender once a key is set', () => {
-    withEnv({ EMAIL_TOKEN_SECRET: SECRET, APP_BASE_URL: 'http://app.example.com', NODE_ENV: 'production', RESEND_API_KEY: 're_x', MAIL_FROM: 'CodeGrade <a@b.com>' });
+    withEnv({ EMAIL_TOKEN_SECRET: SECRET, APP_BASE_URL: 'http://app.example.com', NODE_ENV: 'production', BREVO_API_KEY: 're_x', MAIL_FROM: 'CodeGrade <a@b.com>' });
     expect(() => validateMailConfig()).toThrow(/https/);
-    withEnv({ EMAIL_TOKEN_SECRET: SECRET, APP_BASE_URL: 'http://localhost:5173', NODE_ENV: 'development', RESEND_API_KEY: 're_x', MAIL_FROM: '' });
+    withEnv({ EMAIL_TOKEN_SECRET: SECRET, APP_BASE_URL: 'http://localhost:5173', NODE_ENV: 'development', BREVO_API_KEY: 're_x', MAIL_FROM: '' });
     expect(() => validateMailConfig()).toThrow(/MAIL_FROM/);
   });
   it('reads token lifetimes from the environment with the agreed defaults', () => {

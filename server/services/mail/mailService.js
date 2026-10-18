@@ -1,11 +1,11 @@
-import { Resend } from 'resend';
+import axios from 'axios';
 import { devLogOnly, mailConfig } from '../../config/mail.js';
 import { logger } from '../../utils/logger.js';
 import { maskEmail } from '../../utils/maskEmail.js';
 
 /**
- * The one place that talks to Resend. A failure carries `permanent`: true when retrying cannot help
- * (the provider rejected the request), false when it might (network, timeout, 429, 5xx).
+ * The one place that talks to the email provider (Brevo). A failure carries `permanent`: true when retrying
+ * cannot help (the provider rejected the request), false when it might (network, timeout, 429, 5xx).
  */
 export class MailError extends Error {
   constructor(message, { permanent, status = null, code = '' }) {
@@ -17,57 +17,59 @@ export class MailError extends Error {
   }
 }
 
-// 409 concurrent_idempotent_requests means the same key is in flight right now: try again shortly.
-const TRANSIENT_CODES = new Set(['concurrent_idempotent_requests', 'rate_limit_exceeded', 'daily_quota_exceeded', 'monthly_quota_exceeded', 'internal_server_error', 'application_error']);
-
-export function classifyProviderError(error) {
-  const status = error?.statusCode ?? null;
-  const code = error?.name || '';
-  const transient = status === null || status === 429 || status >= 500 || TRANSIENT_CODES.has(code);
-  // Only the provider's code and status are kept: its message can echo the request.
+/** `status` is the HTTP status, or null when there was no response at all (network failure, timeout). */
+export function classifyProviderError({ status = null, code = '' } = {}) {
+  const transient = status === null || status === 408 || status === 429 || status >= 500;
+  // Only the provider's status and code are kept: its message can echo the request, including the recipient.
   return new MailError(`Email provider error${status ? ` ${status}` : ''}${code ? ` ${code}` : ''}`, { permanent: !transient, status, code });
 }
 
+/** "CodeGrade <no-reply@example.com>" -> { name, email }. A bare address has no name. */
+export function parseSender(from) {
+  const match = /^\s*(.*?)\s*<([^<>]+)>\s*$/.exec(from);
+  if (!match) return { email: from.trim() };
+  return match[1] ? { name: match[1].replace(/^"|"$/g, ''), email: match[2].trim() } : { email: match[2].trim() };
+}
+
+const BREVO_URL = 'https://api.brevo.com/v3/smtp/email';
+
 /**
- * Wraps a Resend client. The idempotency key goes in the SDK's second argument:
- * `resend.emails.send(payload, { idempotencyKey })`, which sends the `Idempotency-Key` header.
+ * Sends through Brevo's transactional API (POST /v3/smtp/email, `api-key` header). It uses axios, which the
+ * project already depends on, so no extra package is needed. Brevo has no idempotency-key header: a retried
+ * job cannot double-send once it has completed (the outbox marks it done), but a request that Brevo accepted
+ * and whose response was lost would be sent again on the retry.
  */
-export function createResendTransport(client, { timeoutMs }) {
+export function createBrevoTransport({ apiKey, timeoutMs, http = axios }) {
   return async function send(message) {
-    let timer;
-    const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new MailError('Email provider timed out', { permanent: false })), timeoutMs); });
     try {
-      const response = await Promise.race([
-        client.emails.send(
-          { from: message.from, to: [message.to], subject: message.subject, html: message.html, text: message.text, tags: message.tags },
-          message.idempotencyKey ? { idempotencyKey: message.idempotencyKey } : undefined,
-        ),
-        timeout,
-      ]);
-      if (response?.error) throw classifyProviderError(response.error);
-      return { id: response?.data?.id ?? null };
+      const { data } = await http.post(BREVO_URL, {
+        sender: parseSender(message.from),
+        to: [{ email: message.to }],
+        subject: message.subject,
+        htmlContent: message.html,
+        textContent: message.text,
+        ...(message.tags?.length ? { tags: message.tags.map((tag) => tag.value) } : {}),
+      }, { headers: { 'api-key': apiKey, accept: 'application/json', 'content-type': 'application/json' }, timeout: timeoutMs });
+      return { id: data?.messageId ?? null };
     } catch (err) {
-      if (err instanceof MailError) throw err;
-      throw new MailError('Email provider unreachable', { permanent: false }); // a thrown error is a network failure
-    } finally {
-      clearTimeout(timer);
+      throw classifyProviderError({ status: err.response?.status ?? null, code: typeof err.response?.data?.code === 'string' ? err.response.data.code : '' });
     }
   };
 }
 
 let transport; // tests replace it with setMailTransport
-let resendTransport;
+let brevoTransport;
 export function setMailTransport(fn) { transport = fn; }
 
 function activeTransport(config) {
   if (transport) return transport;
-  resendTransport ??= createResendTransport(new Resend(config.apiKey), { timeoutMs: config.sendTimeoutMs });
-  return resendTransport;
+  brevoTransport ??= createBrevoTransport({ apiKey: config.apiKey, timeoutMs: config.sendTimeoutMs });
+  return brevoTransport;
 }
 
 /**
  * sendEmail({ to, subject, html, text, tags, idempotencyKey, devLink })
- * Without RESEND_API_KEY outside production nothing is sent: the recipient (masked), subject and `devLink`
+ * Without BREVO_API_KEY outside production nothing is sent: the recipient (masked), subject and `devLink`
  * go to the console. That is the only place a link is ever written to a log.
  */
 export async function sendEmail({ to, subject, html, text, tags = [], idempotencyKey, devLink }) {

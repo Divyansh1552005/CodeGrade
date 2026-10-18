@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
-import { classifyProviderError, createResendTransport, MailError, sendEmail, setMailTransport } from '../../services/mail/mailService.js';
+import { classifyProviderError, createBrevoTransport, MailError, parseSender, sendEmail, setMailTransport } from '../../services/mail/mailService.js';
 import { TEMPLATES } from '../../services/mail/templates/index.js';
 import { escapeHtml, formatDuration } from '../../services/mail/templates/layout.js';
 
@@ -63,41 +63,61 @@ describe('templates', () => {
 });
 
 describe('provider errors', () => {
-  const cases = [[500, 'internal_server_error', false], [503, undefined, false], [429, 'rate_limit_exceeded', false], [null, undefined, false], [409, 'concurrent_idempotent_requests', false],
-    [400, 'validation_error', true], [422, 'invalid_from_address', true], [401, 'invalid_api_key', true], [403, 'restricted_api_key', true], [409, 'invalid_idempotent_request', true]];
-  it.each(cases)('status %s %s -> permanent %s', (statusCode, name, permanent) => {
-    expect(classifyProviderError({ statusCode, name, message: 'secret detail' }).permanent).toBe(permanent);
+  const cases = [[500, false], [502, false], [503, false], [429, false], [408, false], [null, false],
+    [400, true], [401, true], [402, true], [403, true], [404, true], [422, true]];
+  it.each(cases)('status %s -> permanent %s', (status, permanent) => {
+    expect(classifyProviderError({ status, code: 'x' }).permanent).toBe(permanent);
   });
-  it('keeps the provider message out of the error', () => {
-    expect(classifyProviderError({ statusCode: 400, name: 'validation_error', message: 'to: a@b.com is invalid' }).message).not.toContain('a@b.com');
+  it('keeps only the status and code in the error', () => {
+    const err = classifyProviderError({ status: 400, code: 'invalid_parameter' });
+    expect(err.message).toBe('Email provider error 400 invalid_parameter');
+    expect(err.message).not.toContain('@');
   });
 });
 
-describe('Resend transport', () => {
-  const message = { from: 'CodeGrade <a@b.com>', to: 'x@y.com', subject: 's', html: '<p>h</p>', text: 't', tags: [{ name: 'type', value: 'verify_email' }], idempotencyKey: 'email-verify-email-1' };
-  it('passes the idempotency key as the SDK request option', async () => {
-    const send = jest.fn().mockResolvedValue({ data: { id: 'msg_1' }, error: null });
-    const result = await createResendTransport({ emails: { send } }, { timeoutMs: 1000 })(message);
-    expect(result).toEqual({ id: 'msg_1' });
-    expect(send).toHaveBeenCalledWith(expect.objectContaining({ to: ['x@y.com'], from: message.from, tags: message.tags }), { idempotencyKey: 'email-verify-email-1' });
+describe('sender', () => {
+  it('splits a display name from the address', () => {
+    expect(parseSender('CodeGrade <no-reply@example.com>')).toEqual({ name: 'CodeGrade', email: 'no-reply@example.com' });
+    expect(parseSender('"Code Grade" <a@b.co>')).toEqual({ name: 'Code Grade', email: 'a@b.co' });
+    expect(parseSender('<a@b.co>')).toEqual({ email: 'a@b.co' });
+    expect(parseSender('a@b.co')).toEqual({ email: 'a@b.co' });
+  });
+});
+
+describe('Brevo transport', () => {
+  const message = { from: 'CodeGrade <no-reply@example.com>', to: 'x@y.com', subject: 's', html: '<p>h</p>', text: 't', tags: [{ name: 'type', value: 'verify_email' }], idempotencyKey: 'k' };
+  const httpError = (status, data) => Object.assign(new Error('http'), { response: status ? { status, data } : undefined });
+  it('posts the transactional email with the api-key header and a timeout', async () => {
+    const post = jest.fn().mockResolvedValue({ data: { messageId: '<abc@smtp-relay.mailin.fr>' } });
+    const result = await createBrevoTransport({ apiKey: 'xkeysib-secret', timeoutMs: 1234, http: { post } })(message);
+    expect(result).toEqual({ id: '<abc@smtp-relay.mailin.fr>' });
+    const [url, body, options] = post.mock.calls[0];
+    expect(url).toBe('https://api.brevo.com/v3/smtp/email');
+    expect(body).toEqual({ sender: { name: 'CodeGrade', email: 'no-reply@example.com' }, to: [{ email: 'x@y.com' }], subject: 's', htmlContent: '<p>h</p>', textContent: 't', tags: ['verify_email'] });
+    expect(options.headers['api-key']).toBe('xkeysib-secret');
+    expect(options.timeout).toBe(1234);
   });
   it('turns an error response into a MailError with the right retry flag', async () => {
-    const down = createResendTransport({ emails: { send: async () => ({ data: null, error: { statusCode: 500, name: 'internal_server_error', message: 'x' } }) } }, { timeoutMs: 1000 });
-    await expect(down(message)).rejects.toMatchObject({ name: 'MailError', permanent: false, status: 500 });
-    const bad = createResendTransport({ emails: { send: async () => ({ data: null, error: { statusCode: 422, name: 'validation_error', message: 'x' } }) } }, { timeoutMs: 1000 });
-    await expect(bad(message)).rejects.toMatchObject({ permanent: true });
+    const transport = (error) => createBrevoTransport({ apiKey: 'k', timeoutMs: 1000, http: { post: async () => { throw error; } } });
+    await expect(transport(httpError(503, { code: 'service_unavailable' }))(message)).rejects.toMatchObject({ name: 'MailError', permanent: false, status: 503 });
+    await expect(transport(httpError(429, { code: 'too_many_requests' }))(message)).rejects.toMatchObject({ permanent: false });
+    await expect(transport(httpError(400, { code: 'invalid_parameter', message: 'x@y.com is bad' }))(message)).rejects.toMatchObject({ permanent: true, status: 400, code: 'invalid_parameter' });
+    await expect(transport(httpError(401, { code: 'unauthorized' }))(message)).rejects.toMatchObject({ permanent: true });
   });
-  it('treats a thrown error and a timeout as transient', async () => {
-    const thrown = createResendTransport({ emails: { send: async () => { throw new Error('ECONNRESET'); } } }, { timeoutMs: 1000 });
-    await expect(thrown(message)).rejects.toMatchObject({ permanent: false });
-    const slow = createResendTransport({ emails: { send: () => new Promise(() => {}) } }, { timeoutMs: 20 });
-    await expect(slow(message)).rejects.toMatchObject({ permanent: false, message: expect.stringMatching(/timed out/) });
+  it('treats a network failure or timeout, with no response, as transient', async () => {
+    const down = createBrevoTransport({ apiKey: 'k', timeoutMs: 1000, http: { post: async () => { throw Object.assign(new Error('timeout of 1000ms exceeded'), { code: 'ECONNABORTED' }); } } });
+    await expect(down(message)).rejects.toMatchObject({ permanent: false, status: null });
+  });
+  it('never puts the api key or the recipient in an error', async () => {
+    const down = createBrevoTransport({ apiKey: 'xkeysib-secret', timeoutMs: 1000, http: { post: async () => { throw httpError(400, { code: 'invalid_parameter', message: 'x@y.com xkeysib-secret' }); } } });
+    const err = await down(message).catch((e) => e);
+    expect(`${err.message}${err.stack}`).not.toMatch(/xkeysib-secret|x@y\.com/);
   });
 });
 
 describe('sendEmail', () => {
   it('logs only the masked recipient, subject and link, and sends nothing, without a key outside production', async () => {
-    delete process.env.RESEND_API_KEY; process.env.NODE_ENV = 'development';
+    delete process.env.BREVO_API_KEY; process.env.NODE_ENV = 'development';
     const log = jest.spyOn(console, 'log').mockImplementation(() => {});
     const result = await sendEmail({ to: 'ada@example.com', subject: 'Verify', html: 'h', text: 't', devLink: LINK });
     expect(result.devLogged).toBe(true);

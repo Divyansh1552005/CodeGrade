@@ -11,7 +11,7 @@ function num(env, name, fallback) {
 
 export function mailConfig(env = process.env) {
   return {
-    apiKey: env.RESEND_API_KEY || '',
+    apiKey: env.BREVO_API_KEY || '',
     from: env.MAIL_FROM || '',
     baseUrl: String(env.APP_BASE_URL || '').replace(/\/+$/, ''),
     tokenSecret: env.EMAIL_TOKEN_SECRET || '',
@@ -27,7 +27,7 @@ export function mailConfig(env = process.env) {
 
 /** No API key outside production: emails are written to the worker log instead of being sent. */
 export function devLogOnly(env = process.env) {
-  return !env.RESEND_API_KEY && env.NODE_ENV !== 'production';
+  return !env.BREVO_API_KEY && env.NODE_ENV !== 'production';
 }
 
 export const emailFeaturesOn = () => features.emailVerification() || features.passwordReset();
@@ -49,7 +49,7 @@ export function validateMailConfig(env = process.env) {
     if (url && !['http:', 'https:'].includes(url.protocol)) problems.push('APP_BASE_URL must start with http:// or https://');
     else if (url && production && url.protocol !== 'https:') problems.push('APP_BASE_URL must use https in production');
   }
-  if (production && !config.apiKey) problems.push('RESEND_API_KEY is required in production');
+  if (production && !config.apiKey) problems.push('BREVO_API_KEY is required in production');
   if ((production || config.apiKey) && !config.from) problems.push('MAIL_FROM is required, for example "CodeGrade <no-reply@your-domain>"');
   if (problems.length) throw new Error(`Email configuration is invalid:\n - ${problems.join('\n - ')}`);
 }

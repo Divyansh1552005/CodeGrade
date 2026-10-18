@@ -7,7 +7,7 @@ import { isTokenActive, tokenLink, ttlFor } from './emailTokens.js';
 import { sendEmail } from './mail/mailService.js';
 import { TEMPLATES } from './mail/templates/index.js';
 
-// kind -> the token type it carries (none for the notices) and the Resend tag value.
+// kind -> the token type it carries (none for the notices) and the provider tag value.
 const KINDS = {
   'verify-email': { token: 'verify', tag: 'verify_email' },
   'password-reset': { token: 'reset', tag: 'password_reset' },
