@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import request from 'supertest';
 import mongoose from 'mongoose';
+import { registerAs } from '../helpers/users.js';
 
 const svc = (name) => new URL(`../../services/${name}`, import.meta.url).pathname;
 const draft = jest.fn();
@@ -32,7 +33,7 @@ const { streaks, rebuildStudentStats } = await import('../../services/progressSe
 const app = createApp();
 let student, teacher, otherTeacher;
 async function register(role) {
-  const res = await request(app).post('/auth/register').send({ name: role, email: `${Math.random()}@x.com`, password: 'password123', role });
+  const res = await registerAs(app, { name: role, email: `${Math.random()}@x.com`, password: 'password123', role });
   return { user: res.body.user, token: res.body.accessToken };
 }
 const auth = (actor) => `Bearer ${actor.token}`;

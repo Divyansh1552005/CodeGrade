@@ -25,6 +25,9 @@ const router = Router();
 // Tokens travel in the request body, but a page that links away must never carry one in a Referer header.
 router.use((_req, res, next) => { res.set('Referrer-Policy', 'no-referrer'); next(); });
 
+// Self-service signup can only ever create a student. Teachers are made by other means.
+const SIGNUP_ROLE = 'student';
+
 const GENERIC = {
   signup: { message: 'Check your inbox. If the address can be used, we sent a verification link.' },
   resend: { message: 'If an account exists for that email and is not verified yet, we sent a new verification link.' },
@@ -50,17 +53,17 @@ async function sendVerification(user, { resubmitted = false, ignoreCooldown = fa
  * Signup with email verification on. The answer is the same for a new address, an unverified one and a
  * verified one, so it cannot be used to find out who has an account:
  *  - new address: create the unverified user and send the verification link;
- *  - unverified account: the new request replaces its name, password and role (the account has no data and
+ *  - unverified account: the new request replaces its name and password, never its role (the account has no data and
  *    no session), retires the older links and sends a new one that says a new request was submitted;
  *  - verified account: nothing changes, and the owner gets an "you already have an account" email.
  */
-async function registerPending({ name, email, password, role }) {
+async function registerPending({ name, email, password }) {
   const address = String(email).toLowerCase();
   const passwordHash = await User.hashPassword(password); // always hashed, so the work done does not depend on the branch
   let user = await User.findOne({ email: address });
   if (!user) {
     try {
-      user = await User.create({ name, email: address, passwordHash, role, emailVerified: false });
+      user = await User.create({ name, email: address, passwordHash, role: SIGNUP_ROLE, emailVerified: false });
       await sendVerification(user, { ignoreCooldown: true });
       return;
     } catch (err) {
@@ -70,7 +73,7 @@ async function registerPending({ name, email, password, role }) {
   }
   if (user && user.emailVerified === false) {
     // The filter is what keeps a verified account untouched, even if it became verified a moment ago.
-    const replaced = await User.findOneAndUpdate({ _id: user._id, emailVerified: false }, { $set: { name, passwordHash, role } }, { new: true });
+    const replaced = await User.findOneAndUpdate({ _id: user._id, emailVerified: false }, { $set: { name, passwordHash } }, { new: true });
     if (replaced) {
       await sendVerification(replaced, { resubmitted: true, ignoreCooldown: true });
       return;
@@ -81,20 +84,20 @@ async function registerPending({ name, email, password, role }) {
 
 const findUserById = (id) => User.findById(id);
 
-// POST /auth/register  { name, email, password, role }
+// POST /auth/register  { name, email, password }  — public signup always creates a student. A `role` in the body is ignored.
 router.post('/register', ...authLimits('register'), validate(registerSchema), async (req, res, next) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password } = req.body;
 
     if (features.emailVerification()) {
       return await paced(async () => {
-        await registerPending({ name, email, password, role });
+        await registerPending({ name, email, password });
         return { status: 202, body: { ...GENERIC.signup, email: String(email).toLowerCase() } };
       })(req, res, next);
     }
 
     const passwordHash = await User.hashPassword(password);
-    const user = await User.create({ name, email, passwordHash, role });
+    const user = await User.create({ name, email, passwordHash, role: SIGNUP_ROLE });
     const { accessToken, refreshToken } = await issueTokenPair(user);
     setRefreshCookie(res, refreshToken);
     return res.status(201).json({ user: user.toJSON(), accessToken });

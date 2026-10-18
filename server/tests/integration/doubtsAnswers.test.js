@@ -1,5 +1,6 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import request from 'supertest';
+import { registerAs } from '../helpers/users.js';
 
 const svc = (p) => new URL(`../../services/${p}`, import.meta.url).pathname;
 
@@ -19,7 +20,7 @@ const { processWork } = await import('../../services/workProcessor.js');
 const app = createApp();
 
 async function register(role) {
-  const res = await request(app).post('/auth/register').send({
+  const res = await registerAs(app, {
     name: role,
     email: `${role}${Math.random()}@x.com`,
     password: 'password123',

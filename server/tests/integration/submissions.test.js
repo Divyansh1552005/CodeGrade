@@ -1,5 +1,6 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import request from 'supertest';
+import { registerAs } from '../helpers/users.js';
 
 const svc = (p) => new URL(`../../services/${p}`, import.meta.url).pathname;
 
@@ -38,7 +39,7 @@ const app = createApp();
 const b64 = (s) => Buffer.from(s, 'utf8').toString('base64');
 
 async function registerStudent() {
-  const res = await request(app).post('/auth/register').send({
+  const res = await registerAs(app, {
     name: 'Stu',
     email: `stu${Math.random()}@x.com`,
     password: 'password123',

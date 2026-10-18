@@ -115,7 +115,7 @@ describe('signup with an address that already exists', () => {
     await signup(signupBody(email, { name: 'Second', password: 'second-password', role: 'teacher' }));
     const [second] = await deliver();
     const user = await User.findOne({ email });
-    expect([user.name, user.role]).toEqual(['Second', 'teacher']);
+    expect([user.name, user.role]).toEqual(['Second', 'student']); // the role in the body is ignored
     expect(await user.comparePassword('second-password')).toBe(true);
     expect(second.text).toContain('A new signup request was submitted for this email address');
     expect(second.text).toContain('If you did not request this, you can ignore this email');
@@ -412,5 +412,29 @@ describe('password reset alone', () => {
     const [mail] = await deliver();
     expect(mail.subject).toBe('Reset your CodeGrade password');
     expect((await post('/auth/reset-password', { token: tokenIn(mail), password: 'new-password-1' })).status).toBe(200);
+  });
+});
+
+describe('signup role with email verification on', () => {
+  it('creates a student whatever the body says', async () => {
+    const body = signupBody(newEmail(), { role: 'teacher' });
+    await signup(body);
+    expect((await User.findOne({ email: body.email })).role).toBe('student');
+  });
+  it('never changes the role of an unverified account that signs up again', async () => {
+    const email = newEmail();
+    await signup(signupBody(email, { role: 'teacher' }));
+    await User.updateOne({ email }, { $set: { role: 'teacher' } }); // as if an admin had set it
+    await signup(signupBody(email, { name: 'Again', role: 'student' }));
+    const after = await User.findOne({ email });
+    expect([after.name, after.role]).toEqual(['Again', 'teacher']);
+    await signup(signupBody(email, { role: 'admin' }));
+    expect((await User.findOne({ email })).role).toBe('teacher');
+  });
+  it('keeps student for an unverified account that had no role change', async () => {
+    const email = newEmail();
+    await signup(signupBody(email));
+    await signup(signupBody(email, { role: 'teacher' }));
+    expect((await User.findOne({ email })).role).toBe('student');
   });
 });

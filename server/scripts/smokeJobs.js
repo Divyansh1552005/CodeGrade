@@ -18,6 +18,7 @@ import WorkItem from '../models/WorkItem.js';
 import Submission from '../models/Submission.js';
 import Answer from '../models/Answer.js';
 import Problem from '../models/Problem.js';
+import User from '../models/User.js';
 
 const serverDir = fileURLToPath(new URL('..', import.meta.url));
 dotenv.config({ path: fileURLToPath(new URL('../.env', import.meta.url)), quiet: true });
@@ -87,7 +88,9 @@ async function request(path, { actor, method = 'GET', body, expected = 200 } = {
 }
 async function register(role) {
   const actor = await request('/auth/register', { method: 'POST', expected: 201,
-    body: { name: `Smoke ${role}`, email: `${role}-${randomUUID()}@example.test`, password: randomUUID(), role } });
+    body: { name: `Smoke ${role}`, email: `${role}-${randomUUID()}@example.test`, password: randomUUID() } });
+  // Public signup always makes a student; the smoke teacher is promoted directly in the temporary database.
+  if (role !== 'student') await User.updateOne({ _id: actor.user._id }, { $set: { role } });
   actorIds.push(actor.user._id);
   return actor;
 }

@@ -4,6 +4,7 @@ import mongoose from 'mongoose';
 import { createApp } from '../../app.js';
 import Doubt from '../../models/Doubt.js';
 import Problem from '../../models/Problem.js';
+import { registerAs } from '../helpers/users.js';
 
 const app = createApp();
 let student, other, teacher;
@@ -11,7 +12,7 @@ const oid = (v) => new mongoose.Types.ObjectId(String(v));
 const BASE = Date.parse('2026-10-01T00:00:00Z');
 
 async function register(role, name = role) {
-  const res = await request(app).post('/auth/register').send({ name, email: `${name}${Math.random()}@x.com`, password: 'password123', role });
+  const res = await registerAs(app, { name, email: `${name}${Math.random()}@x.com`, password: 'password123', role });
   return { token: res.body.accessToken, id: res.body.user._id };
 }
 const as = (u) => ({ Authorization: `Bearer ${u.token}` });

@@ -101,7 +101,7 @@ export const registerSchema = z.object({
   name: nonEmpty('name'),
   email: z.string().trim().email('must be a valid email'),
   password: passwordSchema,
-  role: z.enum(['student', 'teacher']),
+  // No role here: zod drops unknown keys, so a `role` sent by a client never reaches the handler.
 });
 
 const emailField = z.string().trim().email('must be a valid email');

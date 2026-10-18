@@ -1,16 +1,17 @@
 import { describe, it, expect } from '@jest/globals';
 import request from 'supertest';
 import { createApp } from '../../app.js';
+import { registerAs } from '../helpers/users.js';
 
 const app = createApp();
 
 function register(agent, role = 'student') {
-  return agent.post('/auth/register').send({
+  return registerAs(app, {
     name: role,
     email: `${role}${Math.random()}@x.com`,
     password: 'password123',
     role,
-  });
+  }, agent);
 }
 
 // Pull the refresh cookie value out of a Set-Cookie header array.
@@ -86,5 +87,26 @@ describe('Auth: access token (Bearer) + refresh cookie', () => {
     // The cookie is cleared, so a subsequent refresh has nothing to present.
     const after = await agent.post('/auth/refresh');
     expect(after.status).toBe(401);
+  });
+});
+
+describe('Signup role', () => {
+  const body = (extra = {}) => ({ name: 'Mallory', email: `m${Math.random()}@x.com`, password: 'password123', ...extra });
+  it.each(['teacher', 'admin', 'nonsense', undefined])('creates a student whatever role the body asks for (%s)', async (role) => {
+    const res = await request(app).post('/auth/register').send(body({ role }));
+    expect(res.status).toBe(201);
+    expect(res.body.user.role).toBe('student');
+    const User = (await import('../../models/User.js')).default;
+    expect((await User.findOne({ email: res.body.user.email })).role).toBe('student');
+  });
+  it('does not let other privileged fields through either', async () => {
+    const res = await request(app).post('/auth/register').send(body({ role: 'teacher', isAdmin: true, emailVerified: false, tokenVersion: 9 }));
+    expect(res.status).toBe(201);
+    expect(res.body.user.role).toBe('student');
+  });
+  it('can only reach the teacher routes after the role is set outside the API', async () => {
+    const res = await request(app).post('/auth/register').send(body({ role: 'teacher' }));
+    const list = await request(app).get('/answers?state=pending').set('Authorization', `Bearer ${res.body.accessToken}`);
+    expect(list.status).toBe(403);
   });
 });

@@ -1,5 +1,6 @@
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
 import request from 'supertest';
+import { registerAs } from '../helpers/users.js';
 
 const svc = (p) => new URL(`../../services/${p}`, import.meta.url).pathname;
 const classify = jest.fn();
@@ -20,7 +21,7 @@ const app = createApp();
 let student, other, teacher;
 
 async function register(role, name = role) {
-  const res = await request(app).post('/auth/register').send({ name, email: `${name}${Math.random()}@x.com`, password: 'password123', role });
+  const res = await registerAs(app, { name, email: `${name}${Math.random()}@x.com`, password: 'password123', role });
   return { token: res.body.accessToken, id: res.body.user._id };
 }
 const as = (u) => ({ Authorization: `Bearer ${u.token}` });

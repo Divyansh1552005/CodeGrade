@@ -16,12 +16,13 @@ import { checkBadges } from '../../services/badgeService.js';
 import { recalculateDifficulties, difficultyFromPassRate } from '../../services/difficultyService.js';
 import { clearLeaderboardCache } from '../../services/leaderboardService.js';
 import { recoverDomainWork } from '../../services/recoveryService.js';
+import { registerAs } from '../helpers/users.js';
 
 const app = createApp();
 let student, other;
 const auth = (actor) => `Bearer ${actor.accessToken}`;
 async function register(name = 'Student', role = 'student') {
-  const response = await request(app).post('/auth/register').send({ name, email: `${Math.random()}@test.com`, password: 'password123', role });
+  const response = await registerAs(app, { name, email: `${Math.random()}@test.com`, password: 'password123', role });
   return response.body;
 }
 async function solve({ actor = student, difficulty = 'easy', topics = ['Arrays'], problem, date = new Date(), passCount = 1, totalCount = 1, status = 'graded' } = {}) {

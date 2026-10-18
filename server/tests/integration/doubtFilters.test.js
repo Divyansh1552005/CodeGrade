@@ -3,12 +3,13 @@ import request from 'supertest';
 import { createApp } from '../../app.js';
 import Doubt from '../../models/Doubt.js';
 import Answer from '../../models/Answer.js';
+import { registerAs } from '../helpers/users.js';
 
 const app = createApp();
 let author, other, teacher, d;
 
 async function register(role, name = role) {
-  const res = await request(app).post('/auth/register').send({ name, email: `${name}${Math.random()}@x.com`, password: 'password123', role });
+  const res = await registerAs(app, { name, email: `${name}${Math.random()}@x.com`, password: 'password123', role });
   return { token: res.body.accessToken, id: res.body.user._id };
 }
 const as = (u) => ({ Authorization: `Bearer ${u.token}` });

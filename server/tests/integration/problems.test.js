@@ -3,11 +3,12 @@ import request from 'supertest';
 import { createApp } from '../../app.js';
 import Submission from '../../models/Submission.js';
 import Problem from '../../models/Problem.js';
+import { registerAs } from '../helpers/users.js';
 
 const app = createApp();
 
 async function register(role) {
-  const res = await request(app).post('/auth/register').send({
+  const res = await registerAs(app, {
     name: role,
     email: `${role}${Math.random()}@x.com`,
     password: 'password123',

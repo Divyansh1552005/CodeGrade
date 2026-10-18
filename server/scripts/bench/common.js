@@ -166,8 +166,10 @@ export async function context({ realRedis = false, delay = 30, judgeReal = false
   };
   ctx.register = async (role = 'student') => {
     const password = 'bench-password-123'; const email = `${randomUUID()}@example.test`;
-    const out = await ctx.request('/auth/register',{ method: 'POST', body: { name: `Bench ${role}`, email, password, role } });
+    const out = await ctx.request('/auth/register',{ method: 'POST', body: { name: `Bench ${role}`, email, password } });
     if (out.status !== 201) throw new Error(`Register failed: ${out.status}`);
+    // Public signup always makes a student; promote directly, as an admin tool would.
+    if (role !== 'student') await (models.User || (models.User = (await import('../../models/User.js')).default)).updateOne({ _id: out.data.user._id }, { $set: { role } });
     return { ...out.data, password, email, cookie: out.headers.get('set-cookie')?.split(';')[0] };
   };
   ctx.problem = async teacher => {

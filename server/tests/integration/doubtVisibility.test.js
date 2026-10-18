@@ -11,12 +11,13 @@ import WorkItem from '../../models/WorkItem.js';
 import { processNotification } from '../../services/notificationProcessor.js';
 import { recoverDomainWork } from '../../services/recoveryService.js';
 import { listDoubts } from '../../services/doubtAccess.js';
+import { registerAs } from '../helpers/users.js';
 
 const app = createApp();
 let author, other, teacher, ids;
 
 async function register(role, name = role) {
-  const res = await request(app).post('/auth/register').send({ name, email: `${name}${Math.random()}@x.com`, password: 'password123', role });
+  const res = await registerAs(app, { name, email: `${name}${Math.random()}@x.com`, password: 'password123', role });
   return { token: res.body.accessToken, id: res.body.user._id, user: { _id: res.body.user._id, role } };
 }
 const as = (u) => ({ Authorization: `Bearer ${u.token}` });

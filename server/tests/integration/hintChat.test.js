@@ -7,6 +7,7 @@ import Problem from '../../models/Problem.js';
 import Submission from '../../models/Submission.js';
 import HintThread from '../../models/HintThread.js';
 import HintQuota from '../../models/HintQuota.js';
+import { registerAs } from '../helpers/users.js';
 
 const app = createApp();
 const longCode = (n) => `\`\`\`python\n${Array.from({ length: n }, (_, i) => `line_${i} = ${i}`).join('\n')}\n\`\`\``;
@@ -14,7 +15,7 @@ let student, other, teacher, problem, problem2, problem3;
 let model, calls;
 
 async function register(role, name = role) {
-  const res = await request(app).post('/auth/register').send({ name, email: `${name}${Math.random()}@x.com`, password: 'password123', role });
+  const res = await registerAs(app, { name, email: `${name}${Math.random()}@x.com`, password: 'password123', role });
   return { token: res.body.accessToken, id: res.body.user._id };
 }
 const as = (u) => ({ Authorization: `Bearer ${u.token}` });
