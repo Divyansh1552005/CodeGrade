@@ -10,3 +10,14 @@ export function cleanText(value, { multiline = false } = {}) {
   text = multiline ? text.replace(/\n{3,}/g, '\n\n') : text.replace(/\s+/g, ' ');
   return text.trim();
 }
+
+// A link an applicant gives as proof is kept as plain text and never fetched by the server. Only https, no
+// embedded credentials, a real host name, no spaces or control characters. Returns the normalised URL or null.
+export function cleanLink(value, max = 500) {
+  const text = cleanText(value);
+  if (!text || text.length > max || /\s/.test(text)) return null;
+  let url;
+  try { url = new URL(text); } catch { return null; }
+  if (url.protocol !== 'https:' || url.username || url.password || !url.hostname.includes('.')) return null;
+  return url.href.length <= max ? url.href : null;
+}

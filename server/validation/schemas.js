@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { TOPICS } from '../constants/topics.js';
 import { SUPPORTED_LANGUAGES } from '../services/languageMap.js';
 import { LIMITS } from '../utils/sanitize.js';
-import { cleanText } from '../utils/plainText.js';
+import { cleanText, cleanLink } from '../utils/plainText.js';
 
 // Shape-level validation only — domain rules that need DB state (ownership,
 // state-machine transitions, "does this problem exist") stay in the routes.
@@ -104,6 +104,14 @@ const plain = (label, max, { multiline = false } = {}) => z
   .transform((value) => cleanText(value, { multiline }))
   .refine((value) => value.length <= max, `${label} must be at most ${max} characters`);
 
+// An https link (a shared Drive file, a certificate page). Checked for shape only; the server never opens it.
+export const PROOF_LINKS_MAX = 3;
+const link = (label) => z.string({ required_error: `${label} is required` }).transform((value, ctx) => {
+  const clean = cleanLink(value);
+  if (!clean) ctx.addIssue({ code: 'custom', message: `${label} must be a full https link` });
+  return clean ?? z.NEVER;
+});
+
 // Strict on purpose: an unknown key, above all a `role`, is a 400, never ignored. Public signup chooses
 // only `student` or `teacher` (which creates a teacher_applicant that an admin must approve).
 export const registerSchema = z.object({
@@ -113,11 +121,17 @@ export const registerSchema = z.object({
   accountType: z.enum(['student', 'teacher'], { errorMap: () => ({ message: 'accountType must be student or teacher' }) }),
   organization: plain('organization', 120).optional(),
   note: plain('note', 500, { multiline: true }).optional(),
+  degree: plain('degree', 120).optional(),
+  degreeLink: link('degreeLink').optional(),
+  proofLinks: z.array(link('proofLinks'), { invalid_type_error: 'proofLinks must be a list' }).max(PROOF_LINKS_MAX, `at most ${PROOF_LINKS_MAX} proof links`).optional(),
 }).strict().superRefine((value, ctx) => {
   if (value.accountType === 'teacher') {
     if (!value.organization || value.organization.length < 2) ctx.addIssue({ code: 'custom', path: ['organization'], message: 'organization is required for a teacher account' });
+    if (!value.degree || value.degree.length < 2) ctx.addIssue({ code: 'custom', path: ['degree'], message: 'degree is required for a teacher account' });
+    if (!value.degreeLink) ctx.addIssue({ code: 'custom', path: ['degreeLink'], message: 'a link to your degree is required for a teacher account' });
+    if (value.proofLinks && new Set(value.proofLinks).size !== value.proofLinks.length) ctx.addIssue({ code: 'custom', path: ['proofLinks'], message: 'proofLinks has a duplicate' });
   } else {
-    for (const field of ['organization', 'note']) {
+    for (const field of ['organization', 'note', 'degree', 'degreeLink', 'proofLinks']) {
       if (value[field] !== undefined) ctx.addIssue({ code: 'custom', path: [field], message: `${field} is only for teacher accounts` });
     }
   }

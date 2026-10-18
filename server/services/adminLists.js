@@ -48,17 +48,35 @@ export async function listUsers({ limit, cursor, q, role, status }) {
   return { users: items, nextCursor, hasMore };
 }
 
+/** One account with what they gave when they applied to teach (any status), for the admin's profile view. */
+export async function userProfile(id) {
+  const u = await User.findById(id).select('name email role emailVerified suspendedAt teacherApprovedAt createdAt lastLoginAt').lean();
+  if (!u) return null;
+  const a = await TeacherApplication.findOne({ userId: u._id }).select('status organization note degree degreeLink proofLinks visibleAt decidedAt decisionReason createdAt').lean();
+  return {
+    user: {
+      _id: u._id, name: u.name, email: u.email, role: u.role, emailVerified: u.emailVerified !== false, status: u.suspendedAt ? 'suspended' : 'active',
+      legacy: u.role === 'teacher' && !u.teacherApprovedAt, createdAt: u.createdAt, lastLoginAt: u.lastLoginAt ?? null,
+    },
+    application: a ? {
+      status: a.status, organization: a.organization, note: a.note, degree: a.degree ?? '', degreeLink: a.degreeLink ?? '', proofLinks: a.proofLinks ?? [],
+      submittedAt: a.visibleAt ?? a.createdAt, decidedAt: a.decidedAt ?? null, decisionReason: a.decisionReason ?? '',
+    } : null,
+  };
+}
+
 /** Applications the admin can see (the applicant verified their email), with counts for the queue badge. */
 export async function listApplications({ limit, cursor, status }) {
   const visible = { visibleAt: { $exists: true } };
   const { items, nextCursor, hasMore } = await page(
-    TeacherApplication, { ...visible, status }, { limit, cursor }, 'userId status organization note visibleAt decidedAt decisionReason createdAt',
+    TeacherApplication, { ...visible, status }, { limit, cursor }, 'userId status organization note degree degreeLink proofLinks visibleAt decidedAt decisionReason createdAt',
     async (rows) => {
       const users = await User.find({ _id: { $in: rows.map((r) => r.userId) } }).select('name email').lean();
       const byId = new Map(users.map((u) => [String(u._id), u]));
       return rows.map((r) => ({
         _id: r._id, userId: r.userId, name: byId.get(String(r.userId))?.name ?? '', email: byId.get(String(r.userId))?.email ?? '',
-        status: r.status, organization: r.organization, note: r.note, submittedAt: r.visibleAt, decidedAt: r.decidedAt ?? null,
+        status: r.status, organization: r.organization, note: r.note,
+        degree: r.degree ?? '', degreeLink: r.degreeLink ?? '', proofLinks: r.proofLinks ?? [], submittedAt: r.visibleAt, decidedAt: r.decidedAt ?? null,
         decisionReason: r.decisionReason ?? '', createdAt: r.createdAt,
       }));
     },

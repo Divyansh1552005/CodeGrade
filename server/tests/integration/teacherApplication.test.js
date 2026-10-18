@@ -18,7 +18,7 @@ let n = 0;
 let seq = 0;
 const ip = () => { n += 1; return `10.8.${(n >> 8) & 255}.${n & 255}`; };
 const post = (path, body, address = ip()) => request(app).post(path).set('X-Forwarded-For', address).send(body);
-const teacherBody = (extra = {}) => { seq += 1; return { name: 'Tess Teacher', email: `tess${seq}@school.example`, password: 'password123', accountType: 'teacher', organization: 'Open University', note: 'I teach algorithms.', ...extra }; };
+const teacherBody = (extra = {}) => { seq += 1; return { name: 'Tess Teacher', email: `tess${seq}@school.example`, password: 'password123', accountType: 'teacher', organization: 'Open University', note: 'I teach algorithms.', degree: 'MSc Computer Science', degreeLink: 'https://drive.google.com/file/d/abc123/view?usp=sharing', proofLinks: ['https://example.org/certificate/42'], ...extra }; };
 const tokenIn = (mail) => mail.text.match(/token=([A-Za-z0-9_-]{43})/)?.[1];
 let sentBefore = 0;
 async function deliver() {
@@ -101,6 +101,12 @@ describe('teacher signup', () => {
 describe('what a teacher may submit', () => {
   it.each([
     ['organization missing', { organization: undefined }], ['organization too short', { organization: 'x' }], ['organization too long', { organization: 'o'.repeat(121) }],
+    ['degree missing', { degree: undefined }], ['degree link missing', { degreeLink: undefined }],
+    ['an http link', { degreeLink: 'http://drive.google.com/file/d/x' }], ['a javascript link', { degreeLink: 'javascript:alert(1)' }],
+    ['a link with a password', { degreeLink: 'https://user:pw@example.com/x' }], ['a link with spaces', { degreeLink: 'https://example.com/a b' }],
+    ['a bare word as link', { degreeLink: 'drive' }], ['a link over 500 characters', { degreeLink: `https://example.com/${'a'.repeat(490)}` }],
+    ['four proof links', { proofLinks: [1, 2, 3, 4].map((n) => `https://example.org/${n}`) }], ['a bad proof link', { proofLinks: ['ftp://example.org/x'] }],
+    ['a duplicate proof link', { proofLinks: ['https://example.org/a', 'https://example.org/a'] }],
     ['note too long', { note: 'n'.repeat(501) }], ['name too long', { name: 'n'.repeat(101) }],
   ])('refuses a teacher signup with %s', async (_label, extra) => {
     const body = { ...teacherBody(), ...extra };
@@ -109,8 +115,18 @@ describe('what a teacher may submit', () => {
     expect(res.status).toBe(400);
     expect(await User.countDocuments({ email: body.email })).toBe(0);
   });
+  it('stores the degree and links, and shows them to the applicant and the admin queue', async () => {
+    const { user } = await verifiedApplicant({ proofLinks: ['https://example.org/certificate/42', 'https://example.org/cv.pdf'] });
+    const application = await TeacherApplication.findOne({ userId: user._id });
+    expect([application.degree, application.degreeLink, application.proofLinks]).toEqual(['MSc Computer Science', 'https://drive.google.com/file/d/abc123/view?usp=sharing', ['https://example.org/certificate/42', 'https://example.org/cv.pdf']]);
+  });
+  it('works with no extra proof links', async () => {
+    const body = teacherBody(); delete body.proofLinks;
+    expect((await post('/auth/register', body)).status).toBeLessThan(300);
+  });
   it('refuses organization and note on a student signup', async () => {
     expect((await post('/auth/register', { name: 'S', email: 's1@x.com', password: 'password123', accountType: 'student', organization: 'Org' })).status).toBe(400);
+    expect((await post('/auth/register', { name: 'S', email: 's2@x.com', password: 'password123', accountType: 'student', degreeLink: 'https://example.com/x' })).status).toBe(400);
     expect((await post('/auth/register', { name: 'S', email: 's2@x.com', password: 'password123', accountType: 'student', note: 'hi' })).status).toBe(400);
   });
   it('strips control and bidirectional characters, keeps line breaks in the note, and stores plain text', async () => {

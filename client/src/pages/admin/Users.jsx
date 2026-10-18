@@ -6,7 +6,8 @@ import { api } from '../../api/client.js';
 import { usePagedList } from '../../api/usePagedList.js';
 import PagedSection from '../../components/PagedSection.jsx';
 import ConfirmDialog from '../../components/ConfirmDialog.jsx';
-import { Badge, Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, EmptyState, Field, Icon, Input, PageHeader, Select, Table, TBody, Td, Th, THead, Tr } from '../../components/ui/index.js';
+import Qualifications from '../../components/admin/Qualifications.jsx';
+import { Badge, Button, DropdownMenu, Modal, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, EmptyState, Field, Icon, Input, PageHeader, Select, Table, TBody, Td, Th, THead, Tr } from '../../components/ui/index.js';
 
 const ROLE_LABEL = { student: 'Student', teacher: 'Teacher', teacher_applicant: 'Applicant', admin: 'Admin' };
 const ROLE_TONE = { student: 'neutral', teacher: 'info', teacher_applicant: 'warning', admin: 'accent' };
@@ -23,6 +24,36 @@ const REQUEST = {
   unsuspend: (u) => api.post(`/admin/users/${u._id}/unsuspend`, {}),
 };
 
+/** One account's details and, when they applied to teach, what they gave: degree, links and note. */
+function UserProfile({ user, onClose }) {
+  const [state, setState] = useState({ loading: true });
+  useEffect(() => {
+    let live = true;
+    api.get(`/admin/users/${user._id}`).then(({ data }) => live && setState({ data })).catch(() => live && setState({ error: true }));
+    return () => { live = false; };
+  }, [user._id]);
+  const { data } = state;
+  return (
+    <Modal open onOpenChange={(open) => !open && onClose()} title={user.name} description={user.email}>
+      {state.loading && <p className="text-base text-fg-muted">Loading...</p>}
+      {state.error && <p role="alert" className="text-base">Could not load this profile.</p>}
+      {data && (
+        <div className="space-y-5">
+          <dl className="grid grid-cols-2 gap-4 text-base">
+            <div><dt className="text-sm font-medium">Role</dt><dd className="mt-1">{ROLE_LABEL[data.user.role] ?? data.user.role}{data.user.legacy ? ' (Legacy)' : ''}</dd></div>
+            <div><dt className="text-sm font-medium">Status</dt><dd className="mt-1">{data.user.status === 'suspended' ? 'Suspended' : 'Active'}</dd></div>
+            <div><dt className="text-sm font-medium">Joined</dt><dd className="mt-1 text-fg-muted">{when(data.user.createdAt)}</dd></div>
+            <div><dt className="text-sm font-medium">Last login</dt><dd className="mt-1 text-fg-muted">{when(data.user.lastLoginAt)}</dd></div>
+          </dl>
+          {data.application
+            ? (<div><h3 className="mb-3 text-md font-semibold">Teacher application ({data.application.status})</h3><Qualifications application={data.application} />{data.application.decisionReason && <p className="mt-3 text-base text-fg-muted">Reason given: {data.application.decisionReason}</p>}</div>)
+            : <p className="text-base text-fg-muted">No teacher application on record.</p>}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 function RowActions({ user, onAction }) {
   // The admin account is never changed from here, so its menu is disabled.
   const protectedRow = user.isAdmin;
@@ -32,6 +63,7 @@ function RowActions({ user, onAction }) {
         <Button variant="ghost" size="sm" iconOnly aria-label={`Actions for ${user.name}`} disabled={protectedRow}><Icon as={MoreHorizontal} /></Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent>
+        <DropdownMenuItem onSelect={() => onAction('profile', user)}>View profile</DropdownMenuItem>
         {user.role === 'teacher' && <DropdownMenuItem onSelect={() => onAction('demote', user)}>Demote to student</DropdownMenuItem>}
         {user.status === 'active' ? <DropdownMenuItem onSelect={() => onAction('suspend', user)}>Suspend</DropdownMenuItem> : <DropdownMenuItem onSelect={() => onAction('unsuspend', user)}>Unsuspend</DropdownMenuItem>}
       </DropdownMenuContent>
@@ -65,7 +97,7 @@ export default function Users() {
   const list = usePagedList({ url: `/admin/users${query ? `?${query}` : ''}`, itemsKey: 'users', param: 'page' });
 
   async function confirm() {
-    if (busy || !pending) return;
+    if (busy || !pending || pending.action === 'profile') return;
     setBusy(true);
     try {
       await REQUEST[pending.action](pending.user);
@@ -78,10 +110,10 @@ export default function Users() {
       setPending(null);
     }
   }
-  const copy = pending && COPY[pending.action](pending.user);
+  const copy = pending && pending.action !== 'profile' && COPY[pending.action](pending.user);
   return (
     <>
-      <PageHeader title="Users" description="Search accounts, demote teachers and suspend accounts." />
+      <PageHeader title="Users" description="Search accounts, view what teachers applied with, demote teachers and suspend accounts." />
       <div className="mb-4 grid gap-3 sm:grid-cols-3">
         <Field label="Search"><Input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name or email" maxLength={100} /></Field>
         <Field label="Role">
@@ -124,8 +156,9 @@ export default function Users() {
           </Table>
         )}
       </PagedSection>
+      {pending?.action === 'profile' && <UserProfile key={pending.user._id} user={pending.user} onClose={() => setPending(null)} />}
       <ConfirmDialog
-        open={Boolean(pending)} onClose={() => !busy && setPending(null)} onConfirm={confirm} busy={busy}
+        open={Boolean(copy)} onClose={() => !busy && setPending(null)} onConfirm={confirm} busy={busy}
         title={copy?.title} message={copy?.message} confirmLabel={copy?.label} danger={copy?.danger ?? true}
       />
     </>

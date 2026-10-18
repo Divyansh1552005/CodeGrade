@@ -110,7 +110,7 @@ describe('Signup role', () => {
   });
   it('creates a teacher_applicant, never a teacher, for accountType teacher', async () => {
     const User = (await import('../../models/User.js')).default;
-    const res = await request(app).post('/auth/register').send(body({ accountType: 'teacher', organization: 'Open University' }));
+    const res = await request(app).post('/auth/register').send(body({ accountType: 'teacher', organization: 'Open University', degree: 'BSc Maths', degreeLink: 'https://example.com/degree.pdf' }));
     expect(res.status).toBe(201);
     expect(res.body.user.role).toBe('teacher_applicant');
     expect((await User.findOne({ email: res.body.user.email })).role).toBe('teacher_applicant');

@@ -71,7 +71,7 @@ async function sendVerification(user, { resubmitted = false, ignoreCooldown = fa
  *  - any other account (verified, or holding another role): nothing changes, and the owner gets an
  *    "you already have an account" email.
  */
-async function registerPending({ name, email, password, accountType, organization, note }, req) {
+async function registerPending({ name, email, password, accountType, ...details }, req) {
   const address = String(email).toLowerCase();
   const passwordHash = await User.hashPassword(password); // always hashed, so the work done does not depend on the branch
   const teacher = accountType === 'teacher';
@@ -80,7 +80,7 @@ async function registerPending({ name, email, password, accountType, organizatio
   if (!user) {
     try {
       user = await User.create({ name, email: address, passwordHash, role, emailVerified: false });
-      if (teacher) await createApplication(user, { organization, note }, { verified: false, req });
+      if (teacher) await createApplication(user, details, { verified: false, req });
       await sendVerification(user, { ignoreCooldown: true });
       return;
     } catch (err) {
@@ -96,7 +96,7 @@ async function registerPending({ name, email, password, accountType, organizatio
     );
     if (replaced) {
       await TeacherApplication.deleteOne({ userId: replaced._id, status: 'pending' }); // a new request replaces the old one
-      if (teacher) await createApplication(replaced, { organization, note }, { verified: false, req });
+      if (teacher) await createApplication(replaced, details, { verified: false, req });
       await sendVerification(replaced, { resubmitted: true, ignoreCooldown: true });
       return;
     }
@@ -115,12 +115,12 @@ const teacherSignupLimit = (req, res, next) => {
   return rateLimitBy(teacherSignupLimiter, (r) => (r.body?.accountType === 'teacher' ? r.ip || 'unknown' : null), (wait) => `Too many teacher signups from this network. Try again in ${wait}.`)(req, res, next);
 };
 
-// POST /auth/register  { name, email, password, accountType, organization?, note? }
+// POST /auth/register  { name, email, password, accountType, organization?, note?, degree?, degreeLink?, proofLinks? }
 // accountType "student" creates a student. "teacher" creates a teacher_applicant: no access to anything
 // until an admin approves. The schema is strict, so a `role` or any other unknown key is a 400.
 router.post('/register', ...authLimits('register'), validate(registerSchema), teacherSignupLimit, async (req, res, next) => {
   try {
-    const { name, email, password, accountType, organization, note } = req.body;
+    const { name, email, password, accountType, ...details } = req.body;
     const teacher = accountType === 'teacher';
 
     // The admin address is reserved. It answers like any account that already exists and never changes.
@@ -133,7 +133,7 @@ router.post('/register', ...authLimits('register'), validate(registerSchema), te
 
     if (features.emailVerification()) {
       return await paced(async () => {
-        await registerPending({ name, email, password, accountType, organization, note }, req);
+        await registerPending({ name, email, password, accountType, ...details }, req);
         return { status: 202, body: { ...GENERIC.signup, email: String(email).toLowerCase() } };
       })(req, res, next);
     }
@@ -141,7 +141,7 @@ router.post('/register', ...authLimits('register'), validate(registerSchema), te
     const passwordHash = await User.hashPassword(password);
     const user = await User.create({ name, email, passwordHash, role: teacher ? 'teacher_applicant' : 'student' });
     // Without email verification there is nothing to wait for: the application is visible straight away.
-    if (teacher) await createApplication(user, { organization, note }, { verified: true, req });
+    if (teacher) await createApplication(user, details, { verified: true, req });
     const { accessToken, refreshToken } = await issueTokenPair(user);
     setRefreshCookie(res, refreshToken);
     return res.status(201).json({ user: user.toJSON(), accessToken });

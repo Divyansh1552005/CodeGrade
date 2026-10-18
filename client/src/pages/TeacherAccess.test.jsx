@@ -31,20 +31,22 @@ afterEach(() => { vi.useRealTimers(); document.head.querySelectorAll('meta[name=
 
 describe('signup account type', () => {
   const open = () => render(<MemoryRouter><Register /></MemoryRouter>);
-  it('shows organization and note, with counters and the approval notice, only for a teacher', () => {
+  it('shows organization, degree, links and note, with counters and the approval notice, only for a teacher', () => {
     open();
     expect(screen.queryByLabelText('Organization')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Account type')).toHaveValue('student');
     type('Account type', 'teacher');
     expect(screen.getByText('Teacher accounts need approval from an administrator before they can be used.')).toBeInTheDocument();
-    expect(screen.getByText('0/120')).toBeInTheDocument();
+    expect(screen.getAllByText('0/120')).toHaveLength(2); // organization and degree
     expect(screen.getByText('0/500')).toBeInTheDocument();
     type('Organization', 'Open University');
-    type('Note for the administrator (optional)', 'I teach algorithms');
+    type('About you and your experience (optional)', 'I teach algorithms');
     expect(screen.getByText('15/120')).toBeInTheDocument();
+    expect(screen.getByLabelText('Highest degree or qualification')).toBeRequired();
+    expect(screen.getByLabelText('Link to your degree certificate')).toHaveAttribute('type', 'url');
     expect(screen.getByText('18/500')).toBeInTheDocument();
     expect(screen.getByLabelText('Organization')).toHaveAttribute('maxlength', '120');
-    expect(screen.getByLabelText('Note for the administrator (optional)')).toHaveAttribute('maxlength', '500');
+    expect(screen.getByLabelText('About you and your experience (optional)')).toHaveAttribute('maxlength', '500');
     expect(screen.getByRole('button', { name: 'Apply for a teacher account' })).toBeInTheDocument();
     type('Account type', 'student');
     expect(screen.queryByLabelText('Organization')).not.toBeInTheDocument();
@@ -53,9 +55,13 @@ describe('signup account type', () => {
     auth.register.mockResolvedValue({ pending: true, email: 't@school.example' });
     open();
     type('Name', 'Tess'); type('Email', 't@school.example'); type('Password', 'secret1'); type('Account type', 'teacher');
-    type('Organization', 'Open University'); type('Note for the administrator (optional)', 'Hello');
+    type('Organization', 'Open University'); type('About you and your experience (optional)', 'Hello');
+    type('Highest degree or qualification', 'MSc Maths'); type('Link to your degree certificate', ' https://drive.google.com/file/d/1/view ');
+    type('Proof link 1', 'https://example.org/cv.pdf');
+    fireEvent.click(screen.getByRole('button', { name: 'Add another link' }));
+    type('Proof link 2', '   ');
     fireEvent.click(screen.getByRole('button', { name: 'Apply for a teacher account' }));
-    await waitFor(() => expect(auth.register).toHaveBeenCalledWith({ name: 'Tess', email: 't@school.example', password: 'secret1', accountType: 'teacher', organization: 'Open University', note: 'Hello' }));
+    await waitFor(() => expect(auth.register).toHaveBeenCalledWith({ name: 'Tess', email: 't@school.example', password: 'secret1', accountType: 'teacher', organization: 'Open University', note: 'Hello', degree: 'MSc Maths', degreeLink: 'https://drive.google.com/file/d/1/view', proofLinks: ['https://example.org/cv.pdf'] }));
     expect(auth.register.mock.calls[0][0]).not.toHaveProperty('role');
     expect(await screen.findByRole('heading', { name: 'Check your inbox' })).toBeInTheDocument();
   });
@@ -66,6 +72,19 @@ describe('signup account type', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
     await waitFor(() => expect(auth.register).toHaveBeenCalledWith({ name: 'Sam', email: 's@x.com', password: 'secret1', accountType: 'student' }));
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/pending-approval'));
+  });
+});
+
+describe('proof links on signup', () => {
+  it('allows three links at most and lets one be removed', () => {
+    render(<MemoryRouter><Register /></MemoryRouter>);
+    type('Account type', 'teacher');
+    fireEvent.click(screen.getByRole('button', { name: 'Add another link' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add another link' }));
+    expect(screen.getByLabelText('Proof link 3')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add another link' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove proof link 3' }));
+    expect(screen.queryByLabelText('Proof link 3')).not.toBeInTheDocument();
   });
 });
 

@@ -6,7 +6,7 @@ import { objectId, pageQuerySchema } from '../validation/schemas.js';
 import { parseCursor } from '../utils/pagination.js';
 import { ALL_ROLES } from '../utils/roles.js';
 import { AUDIT_ACTIONS } from '../models/AuditLog.js';
-import { listApplications, listAudit, listUsers } from '../services/adminLists.js';
+import { listApplications, listAudit, listUsers, userProfile } from '../services/adminLists.js';
 import { approveApplication, changeRole, rejectApplication, setSuspended } from '../services/adminActions.js';
 
 const router = Router();
@@ -32,6 +32,13 @@ const handler = (fn) => async (req, res, next) => {
 
 // GET /admin/users?q=&role=&status=&limit=&cursor=
 router.get('/users', validate(usersQuery, 'query'), handler((req) => listUsers({ ...req.query, cursor: parseCursor(req.query.cursor) })));
+
+// GET /admin/users/:id  — the account plus what they gave when applying (degree, links), 404 when unknown
+router.get('/users/:id', validate(idParams, 'params'), handler(async (req) => {
+  const profile = await userProfile(req.params.id);
+  if (!profile) throw Object.assign(new Error('User not found'), { status: 404 });
+  return profile;
+}));
 
 // POST /admin/users/:id/role  { role: "student" | "teacher" }
 router.post('/users/:id/role', validate(idParams, 'params'), validate(roleBody), handler(async (req) => ({

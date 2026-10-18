@@ -59,3 +59,22 @@ it('keeps student sections off a teacher profile', () => {
   expect(screen.queryByText('Doubts')).not.toBeInTheDocument();
   expect(api.get).not.toHaveBeenCalled();
 });
+
+it('shows a teacher their qualifications, and a student nothing of the kind', () => {
+  session.role = 'teacher';
+  data['/teacher-application'] = { application: { status: 'approved', organization: 'Open University', degree: 'MSc Maths', degreeLink: 'https://example.com/d.pdf', proofLinks: [], note: '' } };
+  const { unmount } = renderProfile();
+  const panel = screen.getByRole('region', { name: 'Qualifications' });
+  expect(within(panel).getByText('MSc Maths')).toBeInTheDocument();
+  expect(within(panel).getByRole('link', { name: 'https://example.com/d.pdf' })).toBeInTheDocument();
+  unmount();
+  session.role = 'student';
+  renderProfile();
+  expect(screen.queryByRole('region', { name: 'Qualifications' })).not.toBeInTheDocument();
+  delete data['/teacher-application'];
+});
+it('shows no qualifications panel for a teacher without an application', () => {
+  session.role = 'teacher';
+  renderProfile();
+  expect(screen.queryByRole('region', { name: 'Qualifications' })).not.toBeInTheDocument();
+});

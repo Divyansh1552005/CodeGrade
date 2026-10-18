@@ -4,6 +4,7 @@ import Badges from '../components/dashboard/Badges.jsx';
 import ProgressBreakdown from '../components/dashboard/ProgressBreakdown.jsx';
 import ProfileSubmissions from '../components/profile/ProfileSubmissions.jsx';
 import ProfileDoubts from '../components/profile/ProfileDoubts.jsx';
+import Qualifications from '../components/admin/Qualifications.jsx';
 import { Avatar, Badge, ErrorState, PageHeader, Panel, PanelBody } from '../components/ui/index.js';
 
 function Stat({ label, value }) {
@@ -22,6 +23,10 @@ export default function Profile() {
   const stats = useCachedQuery('/problems/stats/counts');
   const problems = useCachedQuery('/problems', { enabled: isStudent });
   const progress = useCachedQuery('/activity/progress', { key: `progress:${user._id}`, enabled: isStudent });
+
+  // A teacher sees what they were approved with. Teachers from before applications existed have none: nothing shows.
+  const qualifications = useCachedQuery('/teacher-application', { key: `qualifications:${user._id}`, enabled: user.role === 'teacher' });
+  const application = qualifications.data?.application;
 
   const p = progress.data?.progress;
 
@@ -54,6 +59,15 @@ export default function Profile() {
           </dl>
         </PanelBody>
       </Panel>
+
+      {application && (
+        <Panel aria-label="Qualifications">
+          <PanelBody>
+            <h2 className="mb-3 text-md font-semibold">Your qualifications</h2>
+            <Qualifications application={application} />
+          </PanelBody>
+        </Panel>
+      )}
 
       {isStudent && (
         <>

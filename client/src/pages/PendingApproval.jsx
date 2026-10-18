@@ -1,3 +1,4 @@
+import ProofLinks from '../components/admin/ProofLinks.jsx';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import AuthCard from '../components/AuthCard.jsx';
@@ -60,6 +61,13 @@ export default function PendingApproval() {
             <h2 className="text-sm font-medium">Organization</h2>
             <p className="mt-1 whitespace-pre-wrap break-words text-base text-fg-muted">{application.organization}</p>
           </div>
+          {application.degree && (
+            <div>
+              <h2 className="text-sm font-medium">Degree</h2>
+              <p className="mt-1 whitespace-pre-wrap break-words text-base text-fg-muted">{application.degree}</p>
+              <div className="mt-1 text-base"><ProofLinks links={[application.degreeLink, ...(application.proofLinks || [])].filter(Boolean)} linkable={false} /></div>
+            </div>
+          )}
           {application.note && (
             <div>
               <h2 className="text-sm font-medium">Your note</h2>

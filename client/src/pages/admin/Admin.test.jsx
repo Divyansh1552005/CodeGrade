@@ -88,6 +88,18 @@ describe('applications queue', () => {
     expect(await screen.findByText('Applicant r1')).toBeInTheDocument();
     expect(screen.getByTestId('where')).toHaveTextContent('status=rejected');
   });
+  it('shows the degree and proof links as text, linking only https ones safely', async () => {
+    api.get.mockResolvedValue(appPage([application('a1', { degree: 'MSc <b>Maths</b>', degreeLink: 'https://drive.google.com/file/d/1/view', proofLinks: ['https://example.org/cv.pdf', 'javascript:alert(1)'] })]));
+    open();
+    fireEvent.click(await screen.findByRole('button', { name: 'Open application from Applicant a1' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('MSc <b>Maths</b>')).toBeInTheDocument();
+    const good = within(dialog).getByRole('link', { name: 'https://drive.google.com/file/d/1/view' });
+    expect(good).toHaveAttribute('target', '_blank');
+    expect(good.getAttribute('rel')).toContain('noopener');
+    expect(within(dialog).getByRole('link', { name: 'https://example.org/cv.pdf' })).toBeInTheDocument();
+    expect(within(dialog).getByText('javascript:alert(1)').closest('a')).toBeNull();
+  });
   it('has Approve and Reject buttons on each pending row that go straight to the confirmation', async () => {
     api.get.mockResolvedValue(appPage([application('a1')]));
     open();
@@ -236,6 +248,22 @@ describe('users table', () => {
     fireEvent.change(screen.getByLabelText('Search'), { target: { value: 'ali' } });
     await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent('q=ali'), { timeout: 2000 });
     await waitFor(() => expect(urls().some((u) => u.includes('q=ali') && u.includes('role=student'))).toBe(true));
+  });
+  it('opens a profile with the degree and links from the menu, and says so when there is no application', async () => {
+    api.get.mockImplementation(async (url) => {
+      if (url === '/admin/users/t1') return { data: { user: { _id: 't1', role: 'teacher', status: 'active', legacy: false, createdAt: '2026-01-01T00:00:00Z', lastLoginAt: null }, application: { status: 'approved', organization: 'Open University', degree: 'MSc Maths', degreeLink: 'https://example.com/d.pdf', proofLinks: ['https://example.org/cv'], note: 'Ten years.', decisionReason: '' } } };
+      if (url === '/admin/users/s1') return { data: { user: { _id: 's1', role: 'student', status: 'active', legacy: false, createdAt: '2026-01-01T00:00:00Z', lastLoginAt: null }, application: null } };
+      return usersPage([user('t1', { role: 'teacher' }), user('s1')]);
+    });
+    open();
+    await screen.findByText('User t1');
+    fireEvent.keyDown(await screen.findByRole('button', { name: 'Actions for User t1' }), { key: 'Enter' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'View profile' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(await within(dialog).findByText('MSc Maths')).toBeInTheDocument();
+    expect(within(dialog).getByRole('link', { name: 'https://example.com/d.pdf' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('link', { name: 'https://example.org/cv' })).toBeInTheDocument();
+    expect(within(dialog).getByText('Ten years.')).toBeInTheDocument();
   });
   it('pages with Older and Newer', async () => {
     api.get.mockImplementation(async (url) => (url.includes('cursor=c1') ? usersPage([user('s2')]) : usersPage([user('s1')], { nextCursor: 'c1', hasMore: true })));

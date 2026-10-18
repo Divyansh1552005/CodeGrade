@@ -75,6 +75,24 @@ describe('who can reach /admin', () => {
   });
 });
 
+describe('GET /admin/users/:id', () => {
+  it('returns the account with the degree and links they applied with, and nothing secret', async () => {
+    const person = await applicant({}, { degree: 'MSc Maths', degreeLink: 'https://example.com/d.pdf', proofLinks: ['https://example.org/cv'] });
+    const res = await get(`/admin/users/${person.user._id}`);
+    expect(res.status).toBe(200);
+    expect(res.body.application).toMatchObject({ status: 'pending', organization: 'Open University', degree: 'MSc Maths', degreeLink: 'https://example.com/d.pdf', proofLinks: ['https://example.org/cv'] });
+    expect(res.body.user).toMatchObject({ email: person.user.email, role: 'teacher_applicant' });
+    expect(JSON.stringify(res.body)).not.toMatch(/passwordHash|tokenVersion/);
+  });
+  it('has no application for a student, 404 for an unknown id, 400 for a bad id, 404 for a non-admin', async () => {
+    const student = await createUser({ role: 'student' });
+    expect((await get(`/admin/users/${student.user._id}`)).body.application).toBeNull();
+    expect((await get('/admin/users/64b000000000000000000000')).status).toBe(404);
+    expect((await get('/admin/users/nope')).status).toBe(400);
+    expect((await get(`/admin/users/${student.user._id}`, bearer(student))).status).toBe(404);
+  });
+});
+
 describe('GET /admin/users', () => {
   it('lists light rows, newest first, with cursor paging and a limit that is clamped', async () => {
     for (let i = 0; i < 5; i += 1) await createUser({ role: 'student', name: `Student ${i}` });

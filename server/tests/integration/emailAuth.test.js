@@ -127,7 +127,7 @@ describe('signup with an address that already exists', () => {
   it('never touches a verified account and sends its owner a notice with no link', async () => {
     const email = await verifiedUser('real-password');
     const before = await User.findOne({ email });
-    await signup(signupBody(email, { name: 'Attacker', password: 'attacker-password', accountType: 'teacher', organization: 'Evil Corp' }));
+    await signup(signupBody(email, { name: 'Attacker', password: 'attacker-password', accountType: 'teacher', organization: 'Evil Corp', degree: 'None', degreeLink: 'https://example.com/x' }));
     const after = await User.findOne({ email });
     expect([after.name, after.passwordHash, after.role, after.emailVerified]).toEqual([before.name, before.passwordHash, before.role, true]);
     const [mail] = await deliver();

@@ -37,7 +37,7 @@ const POLICY = {
   'GET /doubts/failed': 'teacher', 'POST /doubts/:id/off-topic': 'teacher',
   'GET /answers': 'teacher', 'POST /answers': 'teacher', 'PATCH /answers/:id/approve': 'teacher', 'PATCH /answers/:id/reject': 'teacher',
   'GET /jobs': 'teacher', 'POST /jobs': 'teacher', 'GET /jobs/:id': 'teacher',
-  'GET /admin/users': 'admin', 'POST /admin/users/:id/role': 'admin', 'POST /admin/users/:id/suspend': 'admin', 'POST /admin/users/:id/unsuspend': 'admin',
+  'GET /admin/users': 'admin', 'GET /admin/users/:id': 'admin', 'POST /admin/users/:id/role': 'admin', 'POST /admin/users/:id/suspend': 'admin', 'POST /admin/users/:id/unsuspend': 'admin',
   'GET /admin/teacher-applications': 'admin', 'POST /admin/teacher-applications/:id/approve': 'admin', 'POST /admin/teacher-applications/:id/reject': 'admin',
   'GET /admin/audit-log': 'admin',
 };

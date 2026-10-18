@@ -10,8 +10,8 @@ export async function hasRoomForApplication() {
 }
 
 /** Record the application of a freshly created teacher_applicant. */
-export async function createApplication(user, { organization, note }, { verified, req } = {}) {
-  const application = await TeacherApplication.create({ userId: user._id, organization, note: note ?? '', ...(verified ? { visibleAt: new Date() } : {}) });
+export async function createApplication(user, { organization, note, degree, degreeLink, proofLinks }, { verified, req } = {}) {
+  const application = await TeacherApplication.create({ userId: user._id, organization, note: note ?? '', degree: degree ?? '', degreeLink: degreeLink ?? '', proofLinks: proofLinks ?? [], ...(verified ? { visibleAt: new Date() } : {}) });
   await audit({ action: 'teacher_application.submitted', target: user, after: { status: 'pending' }, req });
   return application;
 }
@@ -33,6 +33,7 @@ export async function applicationView(userId) {
   if (!application) return null;
   return {
     status: application.status, organization: application.organization, note: application.note,
+    degree: application.degree ?? '', degreeLink: application.degreeLink ?? '', proofLinks: application.proofLinks ?? [],
     decisionReason: application.status === 'rejected' ? application.decisionReason ?? '' : undefined,
     submittedAt: application.createdAt, decidedAt: application.decidedAt,
   };

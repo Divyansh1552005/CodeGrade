@@ -13,6 +13,10 @@ const schema = new mongoose.Schema({
   status: { type: String, enum: APPLICATION_STATUSES, default: 'pending' },
   organization: { type: String, required: true, maxlength: 120 },
   note: { type: String, maxlength: 500, default: '' },
+  // Proof of qualification, as links only (no uploads). Optional in the schema because older applications have none.
+  degree: { type: String, maxlength: 120, default: '' },
+  degreeLink: { type: String, maxlength: 500, default: '' },
+  proofLinks: { type: [{ type: String, maxlength: 500 }], default: [], validate: (v) => v.length <= 3 },
   visibleAt: { type: Date },
   decidedAt: { type: Date },
   decidedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

@@ -10,26 +10,32 @@ import { homeFor } from '../components/ProtectedRoute.jsx';
 
 const ORGANIZATION_MAX = 120;
 const NOTE_MAX = 500;
+const DEGREE_MAX = 120;
+const LINK_MAX = 500;
+const PROOF_LINKS_MAX = 3;
 
 export default function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: '', email: '', password: '', accountType: 'student', organization: '', note: '' });
+  const [form, setForm] = useState({ name: '', email: '', password: '', accountType: 'student', organization: '', note: '', degree: '', degreeLink: '', proofLinks: [''] });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [pendingEmail, setPendingEmail] = useState(''); // set once the server asks the user to verify their email
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
   const teacher = form.accountType === 'teacher';
+  const setProof = (i) => (e) => setForm({ ...form, proofLinks: form.proofLinks.map((v, j) => (j === i ? e.target.value : v)) });
+  const addProof = () => setForm({ ...form, proofLinks: [...form.proofLinks, ''] });
+  const removeProof = (i) => setForm({ ...form, proofLinks: form.proofLinks.filter((_, j) => j !== i) });
 
   async function onSubmit(e) {
     e.preventDefault();
     setError('');
     setBusy(true);
     try {
-      const { name, email, password, accountType, organization, note } = form;
+      const { name, email, password, accountType, organization, note, degree, degreeLink, proofLinks } = form;
       const teacher = accountType === 'teacher';
-      const result = await register({ name, email, password, accountType, ...(teacher ? { organization, note } : {}) });
+      const result = await register({ name, email, password, accountType, ...(teacher ? { organization, note, degree, degreeLink: degreeLink.trim(), proofLinks: proofLinks.map((l) => l.trim()).filter(Boolean) } : {}) });
       if (result?.pending) { setPendingEmail(result.email); return; }
       toast.success(teacher ? 'Application submitted.' : 'Account created.');
       navigate(homeFor(result?.role));
@@ -69,7 +75,24 @@ export default function Register() {
             <Field label="Organization" hint={`${form.organization.length}/${ORGANIZATION_MAX}`}>
               <Input value={form.organization} onChange={set('organization')} maxLength={ORGANIZATION_MAX} autoComplete="organization" minLength={2} required />
             </Field>
-            <Field label="Note for the administrator (optional)" hint={`${form.note.length}/${NOTE_MAX}`}>
+            <Field label="Highest degree or qualification" hint={`${form.degree.length}/${DEGREE_MAX}`}>
+              <Input value={form.degree} onChange={set('degree')} maxLength={DEGREE_MAX} minLength={2} required placeholder="MSc Computer Science" />
+            </Field>
+            <Field label="Link to your degree certificate" hint="A public https link, for example a Google Drive file shared as 'Anyone with the link'.">
+              <Input value={form.degreeLink} onChange={set('degreeLink')} type="url" maxLength={LINK_MAX} required placeholder="https://drive.google.com/..." />
+            </Field>
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Other proof (optional)</p>
+              <p className="text-sm text-fg-muted">Links only, up to {PROOF_LINKS_MAX}: an ID card, a CV, a staff page. Make sure each link opens without signing in.</p>
+              {form.proofLinks.map((link, i) => (
+                <div key={i} className="flex gap-2">
+                  <Input value={link} onChange={setProof(i)} type="url" maxLength={LINK_MAX} aria-label={`Proof link ${i + 1}`} placeholder="https://" />
+                  {form.proofLinks.length > 1 && <Button type="button" onClick={() => removeProof(i)} aria-label={`Remove proof link ${i + 1}`}>Remove</Button>}
+                </div>
+              ))}
+              {form.proofLinks.length < PROOF_LINKS_MAX && <Button type="button" size="sm" onClick={addProof}>Add another link</Button>}
+            </div>
+            <Field label="About you and your experience (optional)" hint={`${form.note.length}/${NOTE_MAX}`}>
               <Textarea value={form.note} onChange={set('note')} maxLength={NOTE_MAX} rows={3} />
             </Field>
           </>
