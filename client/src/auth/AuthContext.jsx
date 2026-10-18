@@ -81,6 +81,8 @@ export function AuthProvider({ children }) {
 
   async function register(payload) {
     const { data } = await api.post('/auth/register', payload);
+    // With email verification on, signup answers 202 with no session: the user must verify first.
+    if (!data.accessToken) return { pending: true, email: data.email || payload.email };
     tokenRef.current = data.accessToken;
     setAccessToken(data.accessToken);
     invalidate();

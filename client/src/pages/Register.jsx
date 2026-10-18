@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext.jsx';
 import AuthCard from '../components/AuthCard.jsx';
+import CheckInbox from '../components/CheckInbox.jsx';
+import { PASSWORD_HINT } from '../lib/password.js';
 import { Button, ErrorState, Field, Input, Select } from '../components/ui/index.js';
 
 export default function Register() {
@@ -11,6 +13,7 @@ export default function Register() {
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'student' });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState(''); // set once the server asks the user to verify their email
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
@@ -19,7 +22,8 @@ export default function Register() {
     setError('');
     setBusy(true);
     try {
-      await register(form);
+      const result = await register(form);
+      if (result?.pending) { setPendingEmail(result.email); return; }
       toast.success('Account created.');
       navigate('/dashboard');
     } catch (err) {
@@ -31,6 +35,10 @@ export default function Register() {
     }
   }
 
+  if (pendingEmail) {
+    return <CheckInbox email={pendingEmail} onUseDifferentEmail={() => { setPendingEmail(''); setForm({ ...form, email: '' }); }} />;
+  }
+
   return (
     <AuthCard title="Create account" footer={<>Have an account? <Link className="rounded-sm font-medium text-accent-text hover:underline" to="/login">Log in</Link></>}>
       <form className="space-y-4" onSubmit={onSubmit}>
@@ -40,7 +48,7 @@ export default function Register() {
         <Field label="Email">
           <Input value={form.email} onChange={set('email')} type="email" autoComplete="email" placeholder="you@example.com" required />
         </Field>
-        <Field label="Password" hint="At least 6 characters.">
+        <Field label="Password" hint={PASSWORD_HINT}>
           <Input value={form.password} onChange={set('password')} type="password" autoComplete="new-password" minLength={6} required />
         </Field>
         <Field label="Role">

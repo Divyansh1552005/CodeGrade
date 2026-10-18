@@ -8,6 +8,7 @@ import AuthCard, { AuthChallenge } from '../components/AuthCard.jsx';
 const navigate = vi.fn();
 const auth = vi.hoisted(() => ({ login: vi.fn(), register: vi.fn() }));
 vi.mock('react-router-dom', async (orig) => ({ ...(await orig()), useNavigate: () => navigate }));
+vi.mock('../api/client.js', () => ({ api: { get: vi.fn().mockResolvedValue({ data: { emailVerification: false, passwordReset: false } }), post: vi.fn() } }));
 vi.mock('react-hot-toast', () => ({ default: { error: vi.fn(), success: vi.fn() } }));
 vi.mock('../auth/AuthContext.jsx', () => ({ useAuth: () => auth }));
 beforeEach(() => { navigate.mockClear(); auth.login.mockReset(); auth.register.mockReset(); });
@@ -32,7 +33,7 @@ it('registers with the chosen role and goes to the dashboard', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
   await waitFor(() => expect(auth.register).toHaveBeenCalledWith({ name: 'Sam', email: 's@x.com', password: 'secret1', role: 'teacher' }));
   await waitFor(() => expect(navigate).toHaveBeenCalledWith('/dashboard'));
-  expect(screen.getByText('At least 6 characters.')).toBeInTheDocument();
+  expect(screen.getByText('At least 6 characters, at most 72 bytes.')).toBeInTheDocument();
 });
 it('renders provider buttons above the form with a divider, and reserves room for a challenge widget', () => {
   render(<AuthCard title="Log in" providers={<button>Continue with Google</button>}><form><AuthChallenge><div>widget</div></AuthChallenge></form></AuthCard>);

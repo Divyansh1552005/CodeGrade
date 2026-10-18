@@ -11,6 +11,8 @@ vi.mock('react-router-dom', async (orig) => {
   return { ...actual, useNavigate: () => navigate };
 });
 
+vi.mock('../api/client.js', () => ({ api: { get: vi.fn().mockResolvedValue({ data: { emailVerification: false, passwordReset: false } }), post: vi.fn() } }));
+
 vi.mock('../auth/AuthContext.jsx', () => ({
   useAuth: () => ({ login }),
 }));
