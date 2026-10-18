@@ -8,6 +8,9 @@ import ProtectedRoute from './components/ProtectedRoute.jsx';
 const LandingPage = lazy(() => import('./pages/LandingPage.jsx'));
 const Login = lazy(() => import('./pages/Login.jsx'));
 const Register = lazy(() => import('./pages/Register.jsx'));
+const VerifyEmail = lazy(() => import('./pages/VerifyEmail.jsx'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword.jsx'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword.jsx'));
 const Dashboard = lazy(() => import('./pages/Dashboard.jsx'));
 const SubmitCode = lazy(() => import('./pages/SubmitCode.jsx'));
 const DoubtBoard = lazy(() => import('./pages/DoubtBoard.jsx'));
@@ -30,6 +33,9 @@ const routes = [
   { path: '/', element: <LandingPage /> },
   { path: '/login', element: <Login /> },
   { path: '/register', element: <Register /> },
+  { path: '/verify-email', element: <VerifyEmail /> },
+  { path: '/forgot-password', element: <ForgotPassword /> },
+  { path: '/reset-password', element: <ResetPassword /> },
   {
     path: '/dashboard',
     element: (
