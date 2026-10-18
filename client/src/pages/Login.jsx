@@ -5,10 +5,11 @@ import { useAuth } from '../auth/AuthContext.jsx';
 import AuthCard from '../components/AuthCard.jsx';
 import ResendVerification from '../components/ResendVerification.jsx';
 import { useAuthConfig } from '../api/useAuthConfig.js';
+import { homeFor } from '../components/ProtectedRoute.jsx';
 import { Button, ErrorState, Field, Input } from '../components/ui/index.js';
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, notice } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -23,9 +24,9 @@ export default function Login() {
     setUnverified(false);
     setBusy(true);
     try {
-      await login(email, password);
+      const signedIn = await login(email, password);
       toast.success('Welcome back.');
-      navigate('/dashboard');
+      navigate(homeFor(signedIn?.role));
     } catch (err) {
       const message = err.response?.data?.error || 'Login failed. Check your connection and try again.';
       setError(message);
@@ -38,6 +39,12 @@ export default function Login() {
 
   return (
     <AuthCard title="Log in" footer={<>No account? <Link className="rounded-sm font-medium text-accent-text hover:underline" to="/register">Sign up</Link></>}>
+      {notice && (
+        <p role="status" className="mb-4 rounded-sm border border-info-border bg-info-bg px-3 py-2 text-sm text-info">
+          {notice === 'applicant-ended' ? 'Your session ended. If your application was approved, log in again to start using your teacher account.'
+            : notice === 'suspended' ? 'This account is suspended.' : 'Your session ended. Log in again to continue.'}
+        </p>
+      )}
       <form className="space-y-4" onSubmit={onSubmit}>
         <Field label="Email">
           <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" placeholder="you@example.com" required />

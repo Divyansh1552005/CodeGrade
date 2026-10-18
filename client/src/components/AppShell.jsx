@@ -8,6 +8,8 @@ import { useTheme } from '../theme/ThemeContext.jsx';
 import { useCachedQuery } from '../api/useCachedQuery.js';
 import { cn } from '../lib/cn.js';
 import NotificationBell from './NotificationBell.jsx';
+import AdminHeader from './admin/AdminHeader.jsx';
+import ApplicantHeader from './ApplicantHeader.jsx';
 import {
   Avatar, Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Icon, Progress,
 } from './ui/index.js';
@@ -148,6 +150,10 @@ export default function AppShell() {
       </header>
     );
   }
+  // The admin and a teacher applicant get their own plain headers: nothing below runs for them, so they never
+  // call a student or teacher endpoint (notifications, XP, features).
+  if (user.role === 'admin') return <AdminHeader />;
+  if (user.role === 'teacher_applicant') return <ApplicantHeader />;
   return (
     <>
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-56 border-r border-border bg-surface lg:block">

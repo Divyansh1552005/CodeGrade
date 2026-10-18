@@ -2,7 +2,8 @@ import { lazy } from 'react';
 import { createBrowserRouter } from 'react-router-dom';
 import RouteError from './pages/RouteError.jsx';
 import RootLayout from './layouts/RootLayout.jsx';
-import ProtectedRoute from './components/ProtectedRoute.jsx';
+import { Navigate } from 'react-router-dom';
+import ProtectedRoute, { AdminRoute, ApplicantRoute } from './components/ProtectedRoute.jsx';
 
 // Route-level code splitting: each page is its own lazily-loaded chunk.
 const LandingPage = lazy(() => import('./pages/LandingPage.jsx'));
@@ -11,6 +12,11 @@ const Register = lazy(() => import('./pages/Register.jsx'));
 const VerifyEmail = lazy(() => import('./pages/VerifyEmail.jsx'));
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword.jsx'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword.jsx'));
+const AdminLogin = lazy(() => import('./pages/AdminLogin.jsx'));
+const PendingApproval = lazy(() => import('./pages/PendingApproval.jsx'));
+const AdminApplications = lazy(() => import('./pages/admin/Applications.jsx'));
+const AdminUsers = lazy(() => import('./pages/admin/Users.jsx'));
+const AdminAuditLog = lazy(() => import('./pages/admin/AuditLog.jsx'));
 const Dashboard = lazy(() => import('./pages/Dashboard.jsx'));
 const SubmitCode = lazy(() => import('./pages/SubmitCode.jsx'));
 const DoubtBoard = lazy(() => import('./pages/DoubtBoard.jsx'));
@@ -36,6 +42,13 @@ const routes = [
   { path: '/verify-email', element: <VerifyEmail /> },
   { path: '/forgot-password', element: <ForgotPassword /> },
   { path: '/reset-password', element: <ResetPassword /> },
+  // The admin login is linked from nowhere. The rest of /admin shows the normal "Page not found" to anyone else.
+  { path: '/admin/login', element: <AdminLogin /> },
+  { path: '/admin', element: <AdminRoute><Navigate to="/admin/applications" replace /></AdminRoute> },
+  { path: '/admin/applications', element: <AdminRoute><AdminApplications /></AdminRoute> },
+  { path: '/admin/users', element: <AdminRoute><AdminUsers /></AdminRoute> },
+  { path: '/admin/audit-log', element: <AdminRoute><AdminAuditLog /></AdminRoute> },
+  { path: '/pending-approval', element: <ApplicantRoute><PendingApproval /></ApplicantRoute> },
   {
     path: '/dashboard',
     element: (

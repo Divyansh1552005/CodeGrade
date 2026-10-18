@@ -23,15 +23,14 @@ it('shows the server error under the form and re-enables the button after a fail
   await waitFor(() => expect(screen.getByRole('button', { name: 'Log in' })).toBeEnabled());
   expect(navigate).not.toHaveBeenCalled();
 });
-it('registers with the chosen role and goes to the dashboard', async () => {
+it('registers a student and goes to the dashboard', async () => {
   auth.register.mockResolvedValue({});
   render(<MemoryRouter><Register /></MemoryRouter>);
   fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Sam' } });
   fireEvent.change(screen.getByLabelText('Email'), { target: { value: 's@x.com' } });
   fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret1' } });
-  fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'teacher' } });
   fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
-  await waitFor(() => expect(auth.register).toHaveBeenCalledWith({ name: 'Sam', email: 's@x.com', password: 'secret1', role: 'teacher' }));
+  await waitFor(() => expect(auth.register).toHaveBeenCalledWith({ name: 'Sam', email: 's@x.com', password: 'secret1', accountType: 'student' }));
   await waitFor(() => expect(navigate).toHaveBeenCalledWith('/dashboard'));
   expect(screen.getByText('At least 6 characters, at most 72 bytes.')).toBeInTheDocument();
 });

@@ -18,14 +18,16 @@ const bare = axios.create({ baseURL: BASE_URL, withCredentials: true });
 let getToken = () => null;
 let onRefreshed = () => {};
 let onLogout = () => {};
+let onForbidden = () => {};
 
 export function registerTokenAccessor(fn) {
   getToken = fn;
 }
 
-export function setAuthHandlers({ onRefreshed: refreshed, onLogout: logout }) {
+export function setAuthHandlers({ onRefreshed: refreshed, onLogout: logout, onForbidden: forbidden }) {
   if (refreshed) onRefreshed = refreshed;
   if (logout) onLogout = logout;
+  if (forbidden) onForbidden = forbidden;
 }
 
 // --- Request interceptor: attach the current access token as a Bearer. -------
@@ -75,6 +77,10 @@ api.interceptors.response.use(
         return Promise.reject(refreshErr);
       }
     }
+
+    // A 403 is not an expired session, so it never refreshes or logs out here. Known codes tell the app that
+    // the account's state changed (TEACHER_PENDING, ACCOUNT_SUSPENDED, FORBIDDEN_ROLE); it decides what to show.
+    if (status === 403 && typeof error.response?.data?.code === 'string') onForbidden(error.response.data);
 
     return Promise.reject(error);
   }
