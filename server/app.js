@@ -10,6 +10,8 @@ import answerRoutes from './routes/answers.js';
 import leaderboardRoutes from './routes/leaderboard.js';
 import activityRoutes from './routes/activity.js';
 import jobRoutes from './routes/jobs.js';
+import featureRoutes from './routes/features.js';
+import { requestId } from './middleware/requestId.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 /**
@@ -52,6 +54,8 @@ export function createApp() {
   // Behind Render's (or any) reverse proxy — affects req.ip/req.secure.
   app.set('trust proxy', 1);
 
+  app.use(requestId);
+
   // Credentialed CORS so the browser sends/receives the httpOnly refresh cookie.
   app.use(
     cors({
@@ -72,6 +76,7 @@ export function createApp() {
   app.use('/activity', activityRoutes);
   app.use('/leaderboard', leaderboardRoutes);
   app.use('/jobs', jobRoutes);
+  app.use('/features', featureRoutes);
 
   app.use((req, res) => res.status(404).json({ error: 'Not found' }));
   app.use(errorHandler);
