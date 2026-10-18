@@ -7,9 +7,8 @@ import { validate } from '../middleware/validate.js';
 import { httpError } from '../middleware/errorHandler.js';
 import { ensureWork } from '../services/workService.js';
 import { createDoubtSchema } from '../validation/schemas.js';
-import { decodeCursor, encodeCursor, cursorFilter } from '../utils/pagination.js';
-
-const MAX_PAGE_LIMIT = 100;
+import { listDoubts, findVisibleDoubt, listManualAnswerQueue, presentDoubt } from '../services/doubtAccess.js';
+import Problem from '../models/Problem.js';
 
 const router = Router();
 
@@ -24,12 +23,17 @@ router.post(
   validate(createDoubtSchema),
   async (req, res, next) => {
     try {
-      const { title, body } = req.body;
+      const { title, body, problemId, code } = req.body;
+      if (problemId && !(await Problem.exists({ _id: problemId, archived: { $ne: true } }))) {
+        throw httpError(404, 'Problem not found');
+      }
 
       const doubt = await Doubt.create({
         studentId: req.user._id,
         title,
         body,
+        ...(problemId ? { problemId } : {}),
+        ...(code ? { code } : {}),
         aiDraftStatus: 'pending',
       });
 
@@ -46,48 +50,11 @@ router.post(
 // GET /doubts[?mine=1][&limit=20&cursor=...]  — shared board (list), or (with
 // `mine`) just the requesting user's own doubts — used by the profile page.
 // Each doubt is annotated with `hasApprovedAnswer` so the list can render a
-// status badge without N+1 calls.
-// The board is cursor-paginated by default. Callers may choose a smaller or
-// larger page (up to MAX_PAGE_LIMIT), then pass nextCursor to continue.
+// status badge without N+1 calls. What a viewer may see is decided in one place,
+// services/doubtAccess.js: auto-rejected doubts never appear here for anyone.
 router.get('/', requireAuth, async (req, res, next) => {
   try {
-    const filter = req.query.mine ? { studentId: req.user._id } : {};
-
-    let query = Doubt.find(filter).sort({ createdAt: -1, _id: -1 });
-
-    // Keep the profile's legacy own-doubts response intact unless it opts into
-    // pagination. The shared board is always paged to bound its response size.
-    const paginate = !req.query.mine || req.query.limit !== undefined;
-    const requestedLimit = req.query.limit === undefined ? 20 : Number(req.query.limit);
-    const limit = paginate ? Math.min(Math.max(requestedLimit || 20, 1), MAX_PAGE_LIMIT) : null;
-    let nextCursor = null;
-    if (limit) {
-      const cursor = decodeCursor(req.query.cursor);
-      if (cursor) query = query.where(cursorFilter(cursor));
-      query = query.limit(limit + 1);
-    }
-
-    const doubts = await query.populate('studentId', 'name').lean();
-
-    if (limit && doubts.length > limit) {
-      nextCursor = encodeCursor(doubts[limit - 1]);
-      doubts.length = limit;
-    }
-
-    const approvedIds = await Answer.find({
-      doubtId: { $in: doubts.map((d) => d._id) },
-      state: 'approved',
-    }).distinct('doubtId');
-    const approved = new Set(approvedIds.map(String));
-
-    for (const d of doubts) d.hasApprovedAnswer = approved.has(String(d._id));
-
-    const body = { doubts };
-    if (limit) {
-      body.nextCursor = nextCursor;
-      body.hasMore = Boolean(nextCursor);
-    }
-    res.json(body);
+    res.json(await listDoubts({ viewer: req.user, mine: Boolean(req.query.mine), limit: req.query.limit, cursor: req.query.cursor }));
   } catch (err) {
     next(err);
   }
@@ -97,18 +64,10 @@ router.get('/', requireAuth, async (req, res, next) => {
 // a genuine AI failure, or the doubt was judged off-topic/non-programming)
 // that do not yet have any answer, so they need a manual decision. (Declared
 // before the '/:id' route so it isn't captured as an id.)
-router.get('/failed', requireAuth, requireRole('teacher'), async (_req, res, next) => {
+router.get('/failed', requireAuth, requireRole('teacher'), async (req, res, next) => {
   try {
-    const failed = await Doubt.find({ aiDraftStatus: { $in: ['failed', 'irrelevant'] } })
-      .sort({ createdAt: -1 })
-      .populate('studentId', 'name');
-
-    const answeredIds = await Answer.find({
-      doubtId: { $in: failed.map((d) => d._id) },
-    }).distinct('doubtId');
-    const answered = new Set(answeredIds.map(String));
-
-    res.json({ doubts: failed.filter((d) => !answered.has(String(d._id))) });
+    const doubts = await listManualAnswerQueue(req.user);
+    res.json({ doubts: doubts.map((d) => presentDoubt(d, req.user)) });
   } catch (err) {
     next(err);
   }
@@ -117,9 +76,9 @@ router.get('/failed', requireAuth, requireRole('teacher'), async (_req, res, nex
 // GET /doubts/:id
 router.get('/:id', requireAuth, async (req, res, next) => {
   try {
-    const doubt = await Doubt.findById(req.params.id).populate('studentId', 'name');
+    const doubt = await findVisibleDoubt(req.params.id, req.user);
     if (!doubt) throw httpError(404, 'Doubt not found');
-    res.json({ doubt });
+    res.json({ doubt: presentDoubt(doubt, req.user) });
   } catch (err) {
     next(err);
   }
@@ -128,7 +87,7 @@ router.get('/:id', requireAuth, async (req, res, next) => {
 // GET /doubts/:id/answer  — students only ever see an APPROVED answer.
 router.get('/:id/answer', requireAuth, async (req, res, next) => {
   try {
-    const doubt = await Doubt.findById(req.params.id);
+    const doubt = await findVisibleDoubt(req.params.id, req.user);
     if (!doubt) throw httpError(404, 'Doubt not found');
 
     const answer = await Answer.findOne({

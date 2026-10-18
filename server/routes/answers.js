@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import Answer from '../models/Answer.js';
-import Doubt from '../models/Doubt.js';
 import { recordAnswerNotification } from '../services/workService.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roleGuard.js';
@@ -8,6 +7,7 @@ import { validate } from '../middleware/validate.js';
 import { httpError } from '../middleware/errorHandler.js';
 import { InvalidStateTransitionError } from '../models/Answer.js';
 import { createAnswerSchema, reviewAnswerSchema } from '../validation/schemas.js';
+import { findVisibleDoubt, populateVisibleDoubt, withVisibleDoubts } from '../services/doubtAccess.js';
 
 const router = Router();
 
@@ -16,10 +16,11 @@ router.get('/', requireAuth, requireRole('teacher'), async (req, res, next) => {
   try {
     const filter = {};
     if (req.query.state) filter.state = req.query.state;
+    // Answers whose doubt the viewer cannot see (for example an auto-rejected doubt) are dropped.
     const answers = await Answer.find(filter)
       .sort({ createdAt: -1 })
-      .populate({ path: 'doubtId', select: 'title body studentId' });
-    res.json({ answers });
+      .populate(populateVisibleDoubt(req.user));
+    res.json({ answers: withVisibleDoubts(answers, req.user) });
   } catch (err) {
     next(err);
   }
@@ -37,7 +38,7 @@ router.post(
   async (req, res, next) => {
     try {
       const { doubtId, content } = req.body;
-      const doubt = await Doubt.findById(doubtId);
+      const doubt = await findVisibleDoubt(doubtId, req.user);
       if (!doubt) throw httpError(404, 'Doubt not found');
 
       const answer = new Answer({

@@ -76,6 +76,8 @@ export const createSubmissionSchema = z.object({
 export const createDoubtSchema = z.object({
   title: nonEmpty('title').max(LIMITS.doubtTitle),
   body: nonEmpty('body').max(LIMITS.doubtBody),
+  problemId: objectId.optional(),
+  code: z.string().trim().max(LIMITS.doubtCode).optional(),
 });
 
 export const createAnswerSchema = z.object({

@@ -5,6 +5,7 @@
 export const LIMITS = {
   doubtTitle: 200,
   doubtBody: 4000,
+  doubtCode: 4000,
   code: 20000,
 };
 
